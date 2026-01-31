@@ -47,7 +47,7 @@ Focus: Replace 66-line starter page with minimal "Hello World". Validate via lin
   - **Commit**: None (or `fix(home): fix type errors` if fixes needed)
   - _Requirements: FR-5, AC-2.3, NFR-1_
 
-- [ ] 1.4 Manual browser verification
+- [x] 1.4 Manual browser verification
   - **Do**:
     1. Start dev server: `npm run dev`
     2. Open browser to `http://localhost:3000`
