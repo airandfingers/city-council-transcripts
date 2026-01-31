@@ -40,7 +40,7 @@ Focus: Replace 66-line starter page with minimal "Hello World". Validate via lin
   - **Commit**: None (or `fix(home): address lint issues` if fixes needed)
   - _Requirements: FR-6, AC-2.4_
 
-- [ ] 1.3 [VERIFY] Build validation: npm run build
+- [x] 1.3 [VERIFY] Build validation: npm run build
   - **Do**: Run production build to verify TypeScript strict mode compliance
   - **Verify**: `npm run build` exits 0
   - **Done when**: Build completes successfully with no type errors
