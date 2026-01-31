@@ -15,7 +15,7 @@ created: 2026-01-30T00:00:00Z
 
 Focus: Replace 66-line starter page with minimal "Hello World". Validate via lint+build.
 
-- [ ] 1.1 Replace page.tsx with Hello World component
+- [x] 1.1 Replace page.tsx with Hello World component
   - **Do**:
     1. Open `/Users/aarony/city-council-transcripts/app/page.tsx`
     2. Delete all 66 lines (entire file contents)
