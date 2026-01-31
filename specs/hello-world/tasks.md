@@ -62,7 +62,7 @@ Focus: Replace 66-line starter page with minimal "Hello World". Validate via lin
   - _Requirements: AC-1.1, AC-1.2, AC-1.3, US-1_
   - _Design: Implementation Steps 6-8_
 
-- [ ] 1.5 POC Checkpoint
+- [x] 1.5 POC Checkpoint
   - **Do**: Verify all POC success criteria met via quality commands
   - **Done when**: `npm run lint && npm run build` passes with exit 0
   - **Verify**: `npm run lint && npm run build` (chained commands)
