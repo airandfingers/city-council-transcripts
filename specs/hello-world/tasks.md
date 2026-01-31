@@ -33,7 +33,7 @@ Focus: Replace 66-line starter page with minimal "Hello World". Validate via lin
   - _Requirements: FR-1, FR-2, FR-3, FR-4, AC-1.4, AC-2.1, AC-2.2_
   - _Design: Implementation Steps 1-3_
 
-- [ ] 1.2 [VERIFY] Lint validation: npm run lint
+- [x] 1.2 [VERIFY] Lint validation: npm run lint
   - **Do**: Run ESLint to verify no violations
   - **Verify**: `npm run lint` exits 0
   - **Done when**: Zero ESLint errors or warnings
