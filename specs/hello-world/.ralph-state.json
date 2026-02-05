@@ -2,13 +2,15 @@
   "source": "spec",
   "name": "hello-world",
   "basePath": "./specs/hello-world",
-  "phase": "design",
-  "taskIndex": 0,
-  "totalTasks": 0,
+  "phase": "execution",
+  "taskIndex": 6,
+  "totalTasks": 11,
   "taskIteration": 1,
   "maxTaskIterations": 5,
   "globalIteration": 1,
   "maxGlobalIterations": 100,
   "commitSpec": true,
-  "awaitingApproval": true
+  "recoveryMode": false,
+  "maxFixTasksPerOriginal": 3,
+  "fixTaskMap": {}
 }
