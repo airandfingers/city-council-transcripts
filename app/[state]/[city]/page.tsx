@@ -45,9 +45,10 @@ export default async function CityPage({ params }: Props) {
               </p>
               <a
                 href={meeting.transcriptUrl}
+                aria-label={`View full transcript for ${meeting.title}`}
                 className="text-blue-600 dark:text-blue-400 hover:underline"
               >
-                Full transcript
+                View full transcript
               </a>
             </article>
           ))}

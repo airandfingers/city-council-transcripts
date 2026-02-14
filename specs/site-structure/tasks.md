@@ -64,7 +64,7 @@ Focus: Validate end-to-end functionality. Hardcoded values OK, skip tests.
   - **Done when**: Both commands exit 0
   - **Commit**: `chore(quality): pass lint and type check` (if fixes needed)
 
-- [ ] 1.5 Add semantic HTML structure
+- [x] 1.5 Add semantic HTML structure
   - **Do**:
     1. Ensure home page uses `<main>`, `<section>` elements
     2. Ensure city page uses `<main>`, `<section>`, proper `<h1>` heading
