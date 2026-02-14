@@ -173,7 +173,7 @@ After POC validated, clean up code structure.
   - _Requirements: AC-1.1, AC-1.2, AC-1.3, AC-1.5_
   - _Design: Quality Gate Plan_
 
-- [ ] 3.2 Create E2E test for city page content
+- [x] 3.2 Create E2E test for city page content
   - **Do**:
     1. Create `skills/webapp-testing/city_page_test.py`
     2. Test: `/ca/monterey-park` loads with correct title
