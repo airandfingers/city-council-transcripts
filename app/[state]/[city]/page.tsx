@@ -4,6 +4,7 @@ import {
   getMeetingsForCity,
   getStaticCityParams,
 } from "@/app/lib/cityData";
+import MeetingCard from "@/app/components/MeetingCard";
 
 export function generateStaticParams() {
   return getStaticCityParams();
@@ -35,22 +36,7 @@ export default async function CityPage({ params }: Props) {
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
         <div className="flex flex-col gap-4">
           {meetings.map((meeting) => (
-            <article
-              key={meeting.id}
-              className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
-            >
-              <h3 className="text-lg font-medium mb-2">{meeting.title}</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-3">
-                {meeting.summary}
-              </p>
-              <a
-                href={meeting.transcriptUrl}
-                aria-label={`View full transcript for ${meeting.title}`}
-                className="text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                View full transcript
-              </a>
-            </article>
+            <MeetingCard key={meeting.id} meeting={meeting} />
           ))}
         </div>
       </section>

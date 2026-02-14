@@ -126,7 +126,7 @@ After POC validated, clean up code structure.
   - **Commit**: `refactor(components): extract CityCard component`
   - _Design: UI Composition_
 
-- [ ] 2.2 Extract reusable MeetingCard component
+- [x] 2.2 Extract reusable MeetingCard component
   - **Do**:
     1. Create `app/components/MeetingCard.tsx`
     2. Extract meeting card rendering logic from city page
