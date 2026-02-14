@@ -27,7 +27,7 @@ Focus: Validate end-to-end functionality. Hardcoded values OK, skip tests.
   - _Requirements: AC-3.1, AC-3.2, AC-3.3, AC-3.5_
   - _Design: Data Model, Data-Layer API_
 
-- [ ] 1.2 Create home page with city cards
+- [x] 1.2 Create home page with city cards
   - **Do**:
     1. Replace `app/page.tsx` content with city directory layout
     2. Import `getSeedCities` from data layer
