@@ -158,7 +158,7 @@ After POC validated, clean up code structure.
 
 ## Phase 3: Testing
 
-- [ ] 3.1 Create E2E test for home page content and layout
+- [x] 3.1 Create E2E test for home page content and layout
   - **Do**:
     1. Create `skills/webapp-testing/home_page_test.py`
     2. Test: page loads at `/`
