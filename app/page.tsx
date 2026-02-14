@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { getSeedCities } from "@/app/lib/cityData";
+import CityCard from "@/app/components/CityCard";
 
 export default function Home() {
   const cities = getSeedCities();
@@ -13,17 +13,10 @@ export default function Home() {
         <h2 className="text-2xl font-semibold mb-4">City Directory</h2>
         <div className="flex flex-col md:flex-row md:flex-wrap gap-4">
           {cities.map((city) => (
-            <Link
+            <CityCard
               key={`${city.stateCode}-${city.citySlug}`}
-              href={`/${city.stateCode}/${city.citySlug}`}
-              aria-label={`View transcripts for ${city.cityName}, ${city.stateName}`}
-              className="flex-1 md:basis-[calc(50%-0.5rem)] p-6 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors dark:border-gray-700 dark:hover:border-gray-500"
-            >
-              <h3 className="text-xl font-medium mb-2">
-                {city.cityName}, {city.stateName}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">{city.summary}</p>
-            </Link>
+              city={city}
+            />
           ))}
         </div>
       </section>

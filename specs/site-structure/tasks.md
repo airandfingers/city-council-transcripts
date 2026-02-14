@@ -114,7 +114,7 @@ Focus: Validate end-to-end functionality. Hardcoded values OK, skip tests.
 
 After POC validated, clean up code structure.
 
-- [ ] 2.1 Extract reusable CityCard component
+- [x] 2.1 Extract reusable CityCard component
   - **Do**:
     1. Create `app/components/CityCard.tsx`
     2. Extract city card rendering logic from home page
