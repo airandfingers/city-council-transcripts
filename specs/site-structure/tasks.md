@@ -42,7 +42,7 @@ Focus: Validate end-to-end functionality. Hardcoded values OK, skip tests.
   - _Requirements: AC-1.1, AC-1.2, AC-1.3, AC-1.4, AC-1.5_
   - _Design: UI Composition - Home_
 
-- [ ] 1.3 Create dynamic city route with generateStaticParams
+- [x] 1.3 Create dynamic city route with generateStaticParams
   - **Do**:
     1. Create `app/[state]/[city]/page.tsx`
     2. Import data layer functions
