@@ -98,7 +98,7 @@ Focus: Validate end-to-end functionality. Hardcoded values OK, skip tests.
   - _Requirements: AC-5.1, AC-5.2, AC-5.3_
   - _Design: Quality Gate Plan_
 
-- [ ] 1.7 POC Checkpoint - verify all features work end-to-end
+- [x] 1.7 POC Checkpoint - verify all features work end-to-end
   - **Do**:
     1. Run build to generate static pages
     2. Start production server

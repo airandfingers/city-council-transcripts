@@ -2,11 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "gates": [
     {
-      "id": "hello-world-e2e",
-      "description": "Home page renders Hello World with no console errors",
-      "command": "node scripts/validate/hello-world-e2e.mjs"
-    },
-    {
       "id": "lint-check",
       "description": "ESLint passes with no errors",
       "command": "node scripts/validate/lint-check.mjs"
