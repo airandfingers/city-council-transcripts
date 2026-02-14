@@ -58,7 +58,7 @@ Focus: Validate end-to-end functionality. Hardcoded values OK, skip tests.
   - _Requirements: AC-2.1, AC-2.2, AC-2.3, AC-2.4, AC-2.5, AC-2.6, AC-3.2, AC-3.4_
   - _Design: Routing Design, Static Generation Strategy_
 
-- [ ] 1.4 [VERIFY] Quality checkpoint: npm run lint && npx tsc --noEmit
+- [x] 1.4 [VERIFY] Quality checkpoint: npm run lint && npx tsc --noEmit
   - **Do**: Run lint and type check, fix any errors
   - **Verify**: `npm run lint && npx tsc --noEmit`
   - **Done when**: Both commands exit 0
