@@ -77,7 +77,7 @@ Focus: Validate end-to-end functionality. Hardcoded values OK, skip tests.
   - _Requirements: AC-4.1, AC-4.2_
   - _Design: UI Composition_
 
-- [ ] 1.6 Create quality gate scripts for POC validation
+- [x] 1.6 Create quality gate scripts for POC validation
   - **Do**:
     1. Create `scripts/validate/home-layout-content-e2e.mjs` - validates city cards count, content, responsive behavior
     2. Create `scripts/validate/city-page-content-e2e.mjs` - validates city routes, content, meeting cards

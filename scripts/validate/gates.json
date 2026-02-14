@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "gates": [
+    {
+      "id": "hello-world-e2e",
+      "description": "Home page renders Hello World with no console errors",
+      "command": "node scripts/validate/hello-world-e2e.mjs"
+    },
+    {
+      "id": "lint-check",
+      "description": "ESLint passes with no errors",
+      "command": "node scripts/validate/lint-check.mjs"
+    },
+    {
+      "id": "build-check",
+      "description": "Next.js production build succeeds",
+      "command": "node scripts/validate/build-check.mjs"
+    },
+    {
+      "id": "home-layout-content-e2e",
+      "description": "Home page shows city cards with correct content and layout",
+      "command": "node scripts/validate/home-layout-content-e2e.mjs"
+    },
+    {
+      "id": "city-page-content-e2e",
+      "description": "City pages render with correct content and meeting cards",
+      "command": "node scripts/validate/city-page-content-e2e.mjs"
+    },
+    {
+      "id": "routes-not-found-check",
+      "description": "Unknown routes return 404",
+      "command": "node scripts/validate/routes-not-found-check.mjs"
+    }
+  ]
+}
