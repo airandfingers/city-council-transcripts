@@ -28,7 +28,7 @@ const result = spawnSync(
     '--server', 'npm run dev',
     '--port', '3000',
     '--',
-    python, 'skills/webapp-testing/home_page_test.py',
+    python, 'tests/e2e/home_page_test.py',
   ],
   {
     stdio: 'inherit',

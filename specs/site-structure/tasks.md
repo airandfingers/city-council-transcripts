@@ -160,43 +160,43 @@ After POC validated, clean up code structure.
 
 - [x] 3.1 Create E2E test for home page content and layout
   - **Do**:
-    1. Create `skills/webapp-testing/home_page_test.py`
+    1. Create `tests/e2e/home_page_test.py`
     2. Test: page loads at `/`
     3. Test: exactly 2 city cards present
     4. Test: cards contain "Monterey Park" and "Fort Collins"
     5. Test: About section present with title
     6. Test: links navigate to correct city routes
-  - **Files**: `skills/webapp-testing/home_page_test.py`
+  - **Files**: `tests/e2e/home_page_test.py`
   - **Done when**: E2E tests validate home page acceptance criteria
-  - **Verify**: `python3 skills/webapp-testing/scripts/with_server.py --server "npm run dev" --port 3000 -- python3 skills/webapp-testing/home_page_test.py`
+  - **Verify**: `python3 skills/webapp-testing/scripts/with_server.py --server "npm run dev" --port 3000 -- python3 tests/e2e/home_page_test.py`
   - **Commit**: `test(e2e): add home page content and layout tests`
   - _Requirements: AC-1.1, AC-1.2, AC-1.3, AC-1.5_
   - _Design: Quality Gate Plan_
 
 - [x] 3.2 Create E2E test for city page content
   - **Do**:
-    1. Create `skills/webapp-testing/city_page_test.py`
+    1. Create `tests/e2e/city_page_test.py`
     2. Test: `/ca/monterey-park` loads with correct title
     3. Test: `/co/fort-collins` loads with correct title
     4. Test: meeting cards present on each page
     5. Test: "Full transcript" links present
     6. Test: page summary paragraph present
-  - **Files**: `skills/webapp-testing/city_page_test.py`
+  - **Files**: `tests/e2e/city_page_test.py`
   - **Done when**: E2E tests validate city page acceptance criteria
-  - **Verify**: `python3 skills/webapp-testing/scripts/with_server.py --server "npm run dev" --port 3000 -- python3 skills/webapp-testing/city_page_test.py`
+  - **Verify**: `python3 skills/webapp-testing/scripts/with_server.py --server "npm run dev" --port 3000 -- python3 tests/e2e/city_page_test.py`
   - **Commit**: `test(e2e): add city page content tests`
   - _Requirements: AC-2.1, AC-2.2, AC-2.3, AC-2.4, AC-2.5, AC-2.6_
   - _Design: Quality Gate Plan_
 
 - [x] 3.3 Create E2E test for 404 behavior
   - **Do**:
-    1. Create `skills/webapp-testing/not_found_test.py`
+    1. Create `tests/e2e/not_found_test.py`
     2. Test: `/invalid/route` returns 404
     3. Test: `/ca/invalid-city` returns 404
     4. Test: `/xx/monterey-park` returns 404
-  - **Files**: `skills/webapp-testing/not_found_test.py`
+  - **Files**: `tests/e2e/not_found_test.py`
   - **Done when**: E2E tests validate 404 behavior for unknown routes
-  - **Verify**: `python3 skills/webapp-testing/scripts/with_server.py --server "npm run dev" --port 3000 -- python3 skills/webapp-testing/not_found_test.py`
+  - **Verify**: `python3 skills/webapp-testing/scripts/with_server.py --server "npm run dev" --port 3000 -- python3 tests/e2e/not_found_test.py`
   - **Commit**: `test(e2e): add 404 route tests`
   - _Requirements: AC-3.4_
   - _Design: Quality Gate Plan_
