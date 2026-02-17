@@ -207,7 +207,7 @@ After POC validated, clean up code structure.
   - **Done when**: All commands exit 0
   - **Commit**: `chore(quality): pass quality checkpoint` (if fixes needed)
 
-- [ ] 3.5 Update gate scripts to use new E2E tests
+- [x] 3.5 Update gate scripts to use new E2E tests
   - **Do**:
     1. Update `scripts/validate/home-layout-content-e2e.mjs` to run home_page_test.py
     2. Update `scripts/validate/city-page-content-e2e.mjs` to run city_page_test.py
