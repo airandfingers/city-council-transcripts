@@ -279,12 +279,14 @@ After POC validated, clean up code structure.
 ## Notes
 
 **POC shortcuts taken:**
+
 - Lorem ipsum text for city/meeting summaries
 - Hardcoded seed data (2 cities, meetings)
 - Transcript links point to `#`
 - Minimal styling (Flexbox layout only)
 
 **Production TODOs:**
+
 - Replace dummy data with DB-backed functions
 - Add real transcript URLs
 - Implement transcript detail page

@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# City Council Transcripts
 
-## Getting Started
+A Next.js 16 (App Router) application for browsing city council meeting transcripts.
 
-First, run the development server:
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install          # install dependencies
+npm run hooks:install # set up git pre-push hook
+npm run dev          # start dev server at http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## NPM Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script                  | Purpose                                         |
+| ----------------------- | ----------------------------------------------- |
+| `npm run dev`           | Start development server                        |
+| `npm run build`         | Production build                                |
+| `npm run lint`          | ESLint                                          |
+| `npm run typecheck`     | TypeScript type-check (no emit)                 |
+| `npm run test:quick`    | Lint + typecheck                                |
+| `npm run test:gates`    | Run all quality gates (lint, build, E2E)        |
+| `npm run test:prepush`  | Same as `test:gates`; used by the pre-push hook |
+| `npm run hooks:install` | Point git to `.githooks/` for the pre-push hook |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+```
+app/                  # Next.js App Router pages, layouts, components
+  lib/                # Server-only data functions (dummy seed data)
+  components/         # Shared React components
+  [state]/[city]/     # Dynamic city routes
+tests/
+  e2e/                # Playwright E2E test scripts (app-owned)
+scripts/
+  validate/           # Quality-gate wrapper scripts + manifest
+    gates.json        # Gate registry (id → command)
+    run-gates.mjs     # Gate runner (--all or --id <gate>)
+skills/
+  webapp-testing/     # Vendored Anthropic webapp-testing skill (read-only)
+    scripts/          #   with_server.py helper for E2E server lifecycle
+    examples/         #   Reference Playwright patterns
+specs/                # Feature specifications (requirements + design docs)
+.ralph/               # Ralph autonomous agent config
+  PROMPT.md           # Loop behavior and gate-first workflow rules
+  @AGENT.md           # Build/test commands and quality standards
+  @fix_plan.md        # Current task queue
+.githooks/            # Git hooks (pre-push)
+CLAUDE.md             # Claude Code contextual guidance
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Quality Gates
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Every push runs `npm run test:prepush`, which executes all registered gates from `scripts/validate/gates.json`. Gates include lint, build, and Playwright E2E checks.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+To bypass the pre-push hook when needed:
 
-## Deploy on Vercel
+```bash
+git push --no-verify
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development Workflow
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project uses a **gate-first** development pattern:
+
+1. **Specs** define what to build (`specs/<feature>/requirements.md` + `design.md`).
+2. **Quality gates** are written first to encode acceptance criteria as executable pass/fail checks.
+3. **Implementation** follows, iterated until all gates pass.
+4. **`npm run test:gates`** validates the iteration before committing.
+
+For autonomous agent loops (Ralph), see `.ralph/PROMPT.md` for operating rules and `.ralph/@AGENT.md` for full build/test/quality standards.

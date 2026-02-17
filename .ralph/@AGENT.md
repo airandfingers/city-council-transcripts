@@ -3,14 +3,8 @@
 ## Project Setup
 
 ```bash
-# Install dependencies (example for Node.js project)
 npm install
-
-# Or for Python project
-pip install -r requirements.txt
-
-# Or for Rust project
-cargo build
+npm run hooks:install   # optional: enable pre-push gate checks
 ```
 
 ## Running Tests
@@ -19,12 +13,7 @@ cargo build
 # Quick sanity check (lint + typecheck)
 npm run test:quick
 
-# Individual E2E gates
-npm run test:e2e:home
-npm run test:e2e:city
-npm run test:e2e:not-found
-
-# All quality gates
+# All quality gates (lint, build, E2E)
 npm run test:gates
 
 # Pre-push gate bundle (used by git pre-push hook)
@@ -32,30 +21,25 @@ npm run test:prepush
 
 # Install local git hooks (sets core.hooksPath=.githooks)
 npm run hooks:install
-
-# Python
-pytest
-
-# Rust
-cargo test
 ```
+
+### Test file locations
+
+- **E2E tests (app-owned)**: `tests/e2e/*.py` — Playwright scripts run by gate wrappers.
+- **Gate wrappers**: `scripts/validate/*.mjs` — thin Node scripts that start the dev server, run a test, and exit 0/1.
+- **Gate manifest**: `scripts/validate/gates.json` — registry of gate ids and commands.
+- **Skill helper (vendored, read-only)**: `skills/webapp-testing/scripts/with_server.py` — manages server lifecycle for E2E runs.
 
 ## Build Commands
 
 ```bash
-# Production build
 npm run build
-# or
-cargo build --release
 ```
 
 ## Development Server
 
 ```bash
-# Start development server
-npm run dev
-# or
-cargo run
+npm run dev   # http://localhost:3000
 ```
 
 ## Key Learnings

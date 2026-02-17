@@ -51,20 +51,23 @@ If a gate fails, treat it like a CI failure: fix the implementation/tests and re
 
 ## 🧭 Gate-first workflow (preferred for long-running loops)
 
-You (Ralph) are responsible for **writing and maintaining gate scripts**. The human should only need to define/edit *what the gates should verify* (acceptance criteria).
+You (Ralph) are responsible for **writing and maintaining gate scripts**. The human should only need to define/edit _what the gates should verify_ (acceptance criteria).
 
 When starting a new task from the spec, follow this order:
 
 1. **Identify the acceptance criteria** you must prove.
 2. **Check if an existing gate already covers it** (look in `scripts/validate/gates.json`).
 3. If coverage is missing, **create/update a gate first** ("red"):
-  - Add a new script under `scripts/validate/` (or an app-owned Playwright/Python test under `tests/e2e/` plus a small gate wrapper under `scripts/validate/`).
-  - Register/update it in `scripts/validate/gates.json`.
-  - Run `node scripts/validate/run-gates.mjs --id <gate-id>` and confirm it fails for the *right* reason (or passes if the feature already exists).
+
+- Add a new script under `scripts/validate/` (or an app-owned Playwright/Python test under `tests/e2e/` plus a small gate wrapper under `scripts/validate/`).
+- Register/update it in `scripts/validate/gates.json`.
+- Run `node scripts/validate/run-gates.mjs --id <gate-id>` and confirm it fails for the _right_ reason (or passes if the feature already exists).
+
 4. **Implement the feature** ("green").
 5. Run `node scripts/validate/run-gates.mjs --all` and only consider the loop successful if it passes.
 
 If the task is large, it is acceptable (and often better) to split across iterations:
+
 - Iteration A: add/adjust the gate so it reliably checks the requirement (may be failing)
 - Iteration B+: implement until the gate passes
 
