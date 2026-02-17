@@ -188,7 +188,7 @@ After POC validated, clean up code structure.
   - _Requirements: AC-2.1, AC-2.2, AC-2.3, AC-2.4, AC-2.5, AC-2.6_
   - _Design: Quality Gate Plan_
 
-- [ ] 3.3 Create E2E test for 404 behavior
+- [x] 3.3 Create E2E test for 404 behavior
   - **Do**:
     1. Create `skills/webapp-testing/not_found_test.py`
     2. Test: `/invalid/route` returns 404
