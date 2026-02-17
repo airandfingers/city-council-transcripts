@@ -252,7 +252,7 @@ After POC validated, clean up code structure.
   - **Done when**: CI green on all checks
   - **Commit**: `fix(ci): address CI failures` (if fixes needed)
 
-- [ ] 5.2 [VERIFY] AC checklist verification
+- [x] 5.2 [VERIFY] AC checklist verification
   - **Do**:
     1. Read requirements.md
     2. Verify each AC via grep/code inspection:
