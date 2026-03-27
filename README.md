@@ -6,6 +6,9 @@ A Next.js 16 (App Router) application for browsing city council meeting transcri
 
 ```bash
 npm install          # install dependencies
+npm run db:generate  # generate Prisma client
+npm run db:push      # create/update schema in DB
+npm run db:seed      # seed cities/meetings/fixture lines
 npm run hooks:install # set up git pre-push hook
 npm run dev          # start dev server at http://localhost:3000
 ```
@@ -18,6 +21,9 @@ npm run dev          # start dev server at http://localhost:3000
 | `npm run build`         | Production build                                |
 | `npm run lint`          | ESLint                                          |
 | `npm run typecheck`     | TypeScript type-check (no emit)                 |
+| `npm run db:generate`   | Generate Prisma client                          |
+| `npm run db:push`       | Push Prisma schema to database                  |
+| `npm run db:seed`       | Seed database with prototype city/meeting data  |
 | `npm run test:quick`    | Lint + typecheck                                |
 | `npm run test:gates`    | Run all quality gates (lint, build, E2E)        |
 | `npm run test:prepush`  | Same as `test:gates`; used by the pre-push hook |
@@ -27,9 +33,10 @@ npm run dev          # start dev server at http://localhost:3000
 
 ```
 app/                  # Next.js App Router pages, layouts, components
-  lib/                # Server-only data functions (dummy seed data)
+  lib/                # Server-only data functions (Prisma-backed)
   components/         # Shared React components
   [state]/[city]/     # Dynamic city routes
+prisma/               # Prisma schema + seed script + tiny fixtures
 tests/
   e2e/                # Playwright E2E test scripts (app-owned)
 scripts/

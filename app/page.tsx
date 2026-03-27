@@ -1,8 +1,10 @@
-import { getSeedCities } from "@/app/lib/cityData";
+import { getCities } from "@/app/lib/cityData";
 import CityCard from "@/app/components/CityCard";
 
-export default function Home() {
-  const cities = getSeedCities();
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const cities = await getCities();
 
   return (
     <main className="min-h-screen p-8">
@@ -14,7 +16,7 @@ export default function Home() {
         <div className="flex flex-col md:flex-row md:flex-wrap gap-4">
           {cities.map((city) => (
             <CityCard
-              key={`${city.stateCode}-${city.citySlug}`}
+              key={`${city.stateCode}-${city.slug}`}
               city={city}
             />
           ))}

@@ -59,6 +59,11 @@ def test_city_page(page, city_url: str, expected_title: str, expected_city: str)
         # Verify link has aria-label for accessibility
         aria_label = transcript_link.get_attribute('aria-label')
         assert aria_label is not None, f"Meeting card {i+1} transcript link missing aria-label on {city_url}"
+        href = transcript_link.get_attribute('href')
+        assert href is not None, f"Meeting card {i+1} transcript link missing href on {city_url}"
+        assert href.startswith('/transcripts/'), (
+            f"Meeting card {i+1} transcript link href is '{href}', expected '/transcripts/<meeting-slug>'"
+        )
 
     print(f"  {city_url}: All tests passed ({card_count} meeting cards)")
 

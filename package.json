@@ -1,12 +1,17 @@
 {
   "name": "city-council-transcripts",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
     "test": "npm run test:validate",
     "test:gates": "node scripts/validate/run-gates.mjs --all",
     "test:validate": "node scripts/validate/run-gates.mjs --all",
@@ -15,7 +20,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "@prisma/adapter-neon": "^6.19.0",
+    "@prisma/client": "^6.19.0",
+    "dotenv": "^17.2.3",
     "next": "16.1.6",
+    "prisma": "^6.19.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
@@ -27,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model City {
+  id        Int       @id @default(autoincrement())
+  stateCode String    @db.VarChar(2)
+  stateName String    @db.VarChar(100)
+  name      String    @db.VarChar(200)
+  slug      String    @db.VarChar(200)
+  summary   String    @db.Text
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  meetings  Meeting[]
+
+  @@unique([stateCode, slug])
+  @@index([stateCode])
+}
+
+model Meeting {
+  id        Int              @id @default(autoincrement())
+  cityId    Int
+  slug      String           @unique @db.VarChar(500)
+  title     String           @db.VarChar(500)
+  date      DateTime
+  summary   String           @db.Text
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  city      City             @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  lines     TranscriptLine[]
+
+  @@index([cityId])
+  @@index([date])
+}
+
+model TranscriptLine {
+  id                Int      @id @default(autoincrement())
+  meetingId         Int
+  lineIndex         Int
+  startTime         Float
+  endTime           Float
+  speaker           String   @db.VarChar(200)
+  speakerName       String?  @db.VarChar(200)
+  text              String   @db.Text
+  confidence        Float    @default(0.0)
+  globalSpeakerUuid String?  @db.VarChar(36)
+  meeting           Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, lineIndex])
+  @@index([meetingId])
+  @@index([globalSpeakerUuid])
+}

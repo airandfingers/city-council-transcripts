@@ -1,0 +1,41 @@
+{
+  "meeting": {
+    "stateCode": "ca",
+    "citySlug": "monterey-park",
+    "date": "2026-02-13",
+    "title": "City Council Meeting - Friday, Feb 13, 2026",
+    "sourceMeetingKey": "2025-12-17/City_Council__Successor_Agency_1_480s"
+  },
+  "lines": [
+    {
+      "lineIndex": 0,
+      "startTime": 0.0,
+      "endTime": 6.62,
+      "text": "All right. Good evening, everyone. Welcome to tonight's Council meeting. Let's start with",
+      "speaker": "SPEAKER_00",
+      "speakerName": "Elizabeth Yang",
+      "confidence": 0.0,
+      "globalSpeakerUuid": "b9bda7c0-af5a-5c7b-9033-c7c374380522"
+    },
+    {
+      "lineIndex": 1,
+      "startTime": 6.62,
+      "endTime": 12.26,
+      "text": "the land acknowledgement. We would like to acknowledge that the land we inhabit today",
+      "speaker": "KNOWN_b9bda7c0",
+      "speakerName": "Elizabeth Yang",
+      "confidence": 1.0,
+      "globalSpeakerUuid": "b9bda7c0-af5a-5c7b-9033-c7c374380522"
+    },
+    {
+      "lineIndex": 2,
+      "startTime": 12.26,
+      "endTime": 18.78,
+      "text": "was once known as Tovengar, the home of the Gabrily Nile Tomva people. We show our respect",
+      "speaker": "KNOWN_b9bda7c0",
+      "speakerName": "Elizabeth Yang",
+      "confidence": 1.0,
+      "globalSpeakerUuid": "b9bda7c0-af5a-5c7b-9033-c7c374380522"
+    }
+  ]
+}
