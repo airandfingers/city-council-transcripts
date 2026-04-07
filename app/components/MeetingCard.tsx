@@ -12,7 +12,7 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
         {meeting.summary}
       </p>
       <a
-        href={`/transcripts/${meeting.slug}`}
+        href={`/transcripts/${meeting.slug.split("/").map(encodeURIComponent).join("/")}`}
         aria-label={`View full transcript for ${meeting.title}`}
         className="text-blue-600 dark:text-blue-400 hover:underline"
       >

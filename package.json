@@ -12,6 +12,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma db push --force-reset && npm run db:seed",
+    "db:import": "node scripts/import-transcription-export.mjs",
     "test": "npm run test:validate",
     "test:gates": "node scripts/validate/run-gates.mjs --all",
     "test:validate": "node scripts/validate/run-gates.mjs --all",
@@ -30,6 +32,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@inquirer/prompts": "^8.4.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

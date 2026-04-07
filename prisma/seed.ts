@@ -174,8 +174,8 @@ async function seedTranscriptLines() {
 
 async function main() {
   await seedCities();
-  await seedMeetings();
-  await seedTranscriptLines();
+  // await seedMeetings();
+  // await seedTranscriptLines();
 
   const cityCount = await prisma.city.count();
   const meetingCount = await prisma.meeting.count();
