@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import { getCities } from "@/app/lib/cityData";
 import CityCard from "@/app/components/CityCard";
+
+export const metadata: Metadata = {
+  title: "City Council Transcripts",
+};
 
 export const dynamic = "force-dynamic";
 

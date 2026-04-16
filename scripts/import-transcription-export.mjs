@@ -31,7 +31,6 @@ import { mapSegments } from "./lib/map-transcript-segments.mjs";
 
 const TAG = "[import]";
 const BATCH_SIZE = 5000;
-const DEFAULT_SUMMARY = "No summary found";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,6 +78,69 @@ async function insertLinesInBatches(prisma, meetingId, lines) {
   }
 
   return inserted;
+}
+
+/**
+ * Build MeetingSummaryItem rows from the export summary object.
+ *
+ * Flattens the four summary list fields into typed rows with sortOrder.
+ * Returns an empty array if the summary is null/undefined.
+ *
+ * @param {Record<string, unknown> | null | undefined} summary
+ * @returns {Array<{ type: string; text: string; sortOrder: number }>}
+ */
+function buildSummaryItems(summary) {
+  if (!summary) return [];
+
+  const items = [];
+
+  const arrayFields = [
+    { key: "key_decisions", type: "KEY_DECISION" },
+    { key: "action_items", type: "ACTION_ITEM" },
+    { key: "motions_and_votes", type: "MOTION_AND_VOTE" },
+  ];
+
+  for (const { key, type } of arrayFields) {
+    const arr = summary[key];
+    if (Array.isArray(arr)) {
+      for (let i = 0; i < arr.length; i++) {
+        const text = typeof arr[i] === "string" ? arr[i].trim() : "";
+        if (text) {
+          items.push({ type, text, sortOrder: i });
+        }
+      }
+    }
+  }
+
+  const publicComments =
+    typeof summary.public_comments_summary === "string"
+      ? summary.public_comments_summary.trim()
+      : "";
+  if (publicComments) {
+    items.push({ type: "PUBLIC_COMMENT_SUMMARY", text: publicComments, sortOrder: 0 });
+  }
+
+  return items;
+}
+
+/**
+ * Build MeetingDocument rows from the export documents object.
+ *
+ * @param {Record<string, unknown> | null | undefined} documents
+ * @returns {Array<{ title: string; url: string; documentType: string | null; associatedAgendaItem: string | null }>}
+ */
+function buildDocumentRows(documents) {
+  const docs = documents?.documents;
+  if (!Array.isArray(docs)) return [];
+
+  return docs
+    .filter((d) => d.url && d.title)
+    .map((d) => ({
+      title: d.title,
+      url: d.url,
+      documentType: d.document_type ?? null,
+      associatedAgendaItem: d.associated_agenda_item ?? null,
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -212,12 +274,35 @@ async function main() {
           slug,
           title: mtg.title,
           date: meetingDate,
-          summary: DEFAULT_SUMMARY,
+          summary: mtg.summary?.overview ?? null,
+          summaryModel: mtg.summary?.model ?? null,
+          youtubeUrl: mtg.youtube_url ?? null,
+          granicusUrl: mtg.granicus_url ?? null,
+          minutesText: mtg.minutes?.text ?? null,
+          minutesUrl: mtg.minutes?.portal_url ?? null,
         },
       });
 
       log(`  ✔ Created meeting id=${meeting.id}`);
       existingSlugs.add(slug);
+
+      // Insert summary items (key decisions, action items, motions, public comments)
+      const summaryItems = buildSummaryItems(mtg.summary);
+      if (summaryItems.length > 0) {
+        const result = await prisma.meetingSummaryItem.createMany({
+          data: summaryItems.map((item) => ({ ...item, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} summary item(s)`);
+      }
+
+      // Insert meeting documents
+      const documentRows = buildDocumentRows(mtg.documents);
+      if (documentRows.length > 0) {
+        const result = await prisma.meetingDocument.createMany({
+          data: documentRows.map((doc) => ({ ...doc, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} document(s)`);
+      }
 
       // Map and insert transcript lines
       const lines = mapSegments(segments);

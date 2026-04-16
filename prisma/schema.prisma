@@ -24,16 +24,23 @@ model City {
 }
 
 model Meeting {
-  id        Int              @id @default(autoincrement())
-  cityId    Int
-  slug      String           @unique @db.VarChar(500)
-  title     String           @db.VarChar(500)
-  date      DateTime
-  summary   String           @db.Text
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  city      City             @relation(fields: [cityId], references: [id], onDelete: Cascade)
-  lines     TranscriptLine[]
+  id           Int                  @id @default(autoincrement())
+  cityId       Int
+  slug         String               @unique @db.VarChar(500)
+  title        String               @db.VarChar(500)
+  date         DateTime
+  summary      String?              @db.Text
+  summaryModel String?              @db.VarChar(200)
+  youtubeUrl   String?              @db.VarChar(500)
+  granicusUrl  String?              @db.VarChar(500)
+  minutesText  String?              @db.Text
+  minutesUrl   String?              @db.VarChar(500)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  city         City                 @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  lines        TranscriptLine[]
+  summaryItems MeetingSummaryItem[]
+  documents    MeetingDocument[]
 
   @@index([cityId])
   @@index([date])
@@ -55,4 +62,29 @@ model TranscriptLine {
   @@unique([meetingId, lineIndex])
   @@index([meetingId])
   @@index([globalSpeakerUuid])
+}
+
+model MeetingSummaryItem {
+  id        Int     @id @default(autoincrement())
+  meetingId Int
+  type      String  @db.VarChar(100)
+  text      String  @db.Text
+  sortOrder Int
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, type, sortOrder])
+  @@index([meetingId])
+}
+
+model MeetingDocument {
+  id                   Int     @id @default(autoincrement())
+  meetingId            Int
+  title                String  @db.VarChar(500)
+  url                  String  @db.VarChar(1000)
+  documentType         String? @db.VarChar(100)
+  associatedAgendaItem String? @db.Text
+  meeting              Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, url])
+  @@index([meetingId])
 }

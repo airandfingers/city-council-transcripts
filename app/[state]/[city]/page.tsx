@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   getCityByParams,
@@ -10,6 +11,13 @@ export const dynamic = "force-dynamic";
 type Props = {
   params: Promise<{ state: string; city: string }>;
 };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { state, city: citySlug } = await params;
+  const cityData = await getCityByParams(state, citySlug);
+  if (!cityData) return { title: "City Not Found" };
+  return { title: `${cityData.name}, ${cityData.stateName}` };
+}
 
 export default async function CityPage({ params }: Props) {
   const { state, city: citySlug } = await params;
