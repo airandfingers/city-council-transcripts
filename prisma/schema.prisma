@@ -29,18 +29,27 @@ model Meeting {
   slug         String               @unique @db.VarChar(500)
   title        String               @db.VarChar(500)
   date         DateTime
-  summary      String?              @db.Text
-  summaryModel String?              @db.VarChar(200)
-  youtubeUrl   String?              @db.VarChar(500)
-  granicusUrl  String?              @db.VarChar(500)
-  minutesText  String?              @db.Text
-  minutesUrl   String?              @db.VarChar(500)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  city         City                 @relation(fields: [cityId], references: [id], onDelete: Cascade)
-  lines        TranscriptLine[]
-  summaryItems MeetingSummaryItem[]
-  documents    MeetingDocument[]
+  summary                 String?              @db.Text
+  summaryModel             String?              @db.VarChar(200)
+  logline                  String?              @db.Text
+  timelineBullets          Json?
+  youtubeUrl               String?              @db.VarChar(500)
+  granicusUrl              String?              @db.VarChar(500)
+  minutesText              String?              @db.Text
+  minutesUrl               String?              @db.VarChar(500)
+  minutesGeneratedAt       DateTime?
+  minutesTotalItems        Int?
+  minutesAlignedCount      Int?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  city                     City                 @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  lines                    TranscriptLine[]
+  summaryItems             MeetingSummaryItem[]
+  documents                MeetingDocument[]
+  segments                 MeetingSegment[]
+  minutesItems             MinutesItem[]
+  topicSummaries           TopicSummary[]
+  speakerSummaries         SpeakerSummary[]
 
   @@index([cityId])
   @@index([date])
@@ -65,12 +74,22 @@ model TranscriptLine {
 }
 
 model MeetingSummaryItem {
-  id        Int     @id @default(autoincrement())
-  meetingId Int
-  type      String  @db.VarChar(100)
-  text      String  @db.Text
-  sortOrder Int
-  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  id               Int     @id @default(autoincrement())
+  meetingId        Int
+  type             String  @db.VarChar(100)
+  text             String  @db.Text
+  sortOrder        Int
+  startTimeSeconds Float?
+  endTimeSeconds   Float?
+  timecodeLabel    String? @db.VarChar(50)
+  segmentIndex     Int?
+  segmentIndexEnd  Int?
+  linkStatus       String? @db.VarChar(20)
+  confidence       Float?
+  speaker          String? @db.VarChar(200)
+  position         String? @db.VarChar(50)
+  notes            String? @db.Text
+  meeting          Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, type, sortOrder])
   @@index([meetingId])
@@ -86,5 +105,107 @@ model MeetingDocument {
   meeting              Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, url])
+  @@index([meetingId])
+}
+
+model MeetingSegment {
+  id                     Int       @id @default(autoincrement())
+  meetingId              Int
+  itemId                 String    @db.VarChar(100)
+  itemNumber             String    @db.VarChar(50)
+  title                  String    @db.VarChar(500)
+  startTime              Float
+  endTime                Float
+  durationSeconds        Float?
+  skip                   Boolean   @default(false)
+  skipReason             String?   @db.VarChar(100)
+  sortOrder              Int
+  discussionSummary      String?   @db.Text
+  officialAction         String?   @db.Text
+  tags                   Json?
+  speakerPositions       Json?
+  keyQuotes              Json?
+  publicComments         Json?
+  discrepancies          Json?
+  sourcesUsed            Json?
+  sourceMinutesAvailable Boolean?
+  sourceAgendaAvailable  Boolean?
+  provider               String?   @db.VarChar(100)
+  model                  String?   @db.VarChar(200)
+  generatedAt            DateTime?
+  meeting                Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, itemId])
+  @@index([meetingId])
+}
+
+model MinutesItem {
+  id                  Int      @id @default(autoincrement())
+  meetingId           Int
+  itemId              String   @db.VarChar(100)
+  itemNumber          String   @db.VarChar(50)
+  title               String   @db.VarChar(500)
+  startTime           Float
+  endTime             Float
+  durationSeconds     Float?
+  skip                Boolean  @default(false)
+  sortOrder           Int
+  parentItemId        String?  @db.VarChar(100)
+  itemType            String   @db.VarChar(50)
+  alignmentConfidence String?  @db.VarChar(20)
+  alignmentMethod     String?  @db.VarChar(100)
+  agendaItemId        String?  @db.VarChar(50)
+  startTimecode       String?  @db.VarChar(20)
+  endTimecode         String?  @db.VarChar(20)
+  textLineStart       Int?
+  textLineEnd         Int?
+  segmentIndices      Json?
+  meeting             Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, itemId])
+  @@index([meetingId])
+}
+
+model TopicSummary {
+  id               Int       @id @default(autoincrement())
+  meetingId        Int
+  topicId          String    @db.VarChar(100)
+  title            String    @db.VarChar(500)
+  startTime        Float
+  endTime          Float
+  sortOrder        Int
+  summaryText      String?   @db.Text
+  keyPoints        Json?
+  speakers         Json?
+  speakerPositions Json?
+  outcome          String?   @db.Text
+  tags             Json?
+  provider         String?   @db.VarChar(100)
+  model            String?   @db.VarChar(200)
+  generatedAt      DateTime?
+  meeting          Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, topicId])
+  @@index([meetingId])
+}
+
+model SpeakerSummary {
+  id                Int       @id @default(autoincrement())
+  meetingId         Int
+  speakerUuid       String?   @db.VarChar(36)
+  speakerName       String    @db.VarChar(200)
+  segmentCount      Int?
+  speakingTime      Float?
+  sortOrder         Int
+  summaryText       String?   @db.Text
+  keyQuotes         Json?
+  actionsOrMotions  Json?
+  positionsByTopic  Json?
+  provider          String?   @db.VarChar(100)
+  model             String?   @db.VarChar(200)
+  generatedAt       DateTime?
+  meeting           Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, speakerUuid])
   @@index([meetingId])
 }

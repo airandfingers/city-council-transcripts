@@ -1,8 +1,17 @@
 import TabbedPanel from "./TabbedPanel";
+import TimestampLink from "./TimestampLink";
+
+export type Bullet = {
+  text: string;
+  timecodeLabel?: string | null;
+  startTimeSeconds?: number | null;
+  speaker?: string | null;
+  position?: string | null;
+};
 
 export type Topic = {
   label: string;
-  bullets: string[];
+  bullets: Bullet[];
 };
 
 export default function TopicsPanel({
@@ -27,8 +36,24 @@ export default function TopicsPanel({
     label: topic.label,
     content: (
       <ul className="list-disc list-inside space-y-2 text-gray-700 dark:text-gray-300">
-        {topic.bullets.map((bullet, i) => (
-          <li key={i}>{bullet}</li>
+        {topic.bullets.map((b, i) => (
+          <li key={i}>
+            {b.speaker && <span className="font-medium">{b.speaker}: </span>}
+            {b.text}
+            {b.position && (
+              <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                {b.position}
+              </span>
+            )}
+            {b.startTimeSeconds != null && (
+              <span className="ml-1">
+                <TimestampLink
+                  seconds={b.startTimeSeconds}
+                  label={b.timecodeLabel ?? undefined}
+                />
+              </span>
+            )}
+          </li>
         ))}
       </ul>
     ),

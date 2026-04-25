@@ -17,6 +17,8 @@ type VideoSyncContextValue = {
   isPlaying: boolean;
   /** Seek the video to a specific time (seconds). */
   seekTo: (seconds: number) => void;
+  /** Start playback. */
+  play: () => void;
   /** Register the YT.Player instance – called by YouTubePlayer. */
   registerPlayer: (player: YT.Player) => void;
 };
@@ -94,9 +96,16 @@ export default function VideoSyncProvider({
     }
   }, []);
 
+  const play = useCallback(() => {
+    const player = playerRef.current;
+    if (player?.playVideo) {
+      player.playVideo();
+    }
+  }, []);
+
   return (
     <VideoSyncContext.Provider
-      value={{ currentTime, isPlaying, seekTo, registerPlayer }}
+      value={{ currentTime, isPlaying, seekTo, play, registerPlayer }}
     >
       {children}
     </VideoSyncContext.Provider>

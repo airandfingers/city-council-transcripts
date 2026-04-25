@@ -12,10 +12,12 @@ export default function DocumentsPanel({
   minutesText,
   minutesUrl,
   documents,
+  extraTabs,
 }: {
   minutesText: string | null;
   minutesUrl: string | null;
   documents: DocumentItem[];
+  extraTabs?: { label: string; content: React.ReactNode }[];
 }) {
   const tabs: { label: string; content: React.ReactNode }[] = [];
 
@@ -91,6 +93,10 @@ export default function DocumentsPanel({
         </p>
       ),
   });
+
+  if (extraTabs) {
+    tabs.push(...extraTabs);
+  }
 
   return <TabbedPanel tabs={tabs} />;
 }
