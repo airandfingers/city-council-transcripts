@@ -1,13 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-const prisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+// Avoid a global singleton in development so schema updates are reflected
+// immediately by a fresh Prisma client during local iteration.
+const prisma = new PrismaClient();
 
 export default prisma;

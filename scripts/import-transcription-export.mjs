@@ -262,6 +262,23 @@ function nonEmptyJsonArray(arr) {
 }
 
 /**
+ * Parse a meeting-level YouTube offset from known export shapes.
+ * Supports both top-level source_offsets and metadata.source_offsets.
+ *
+ * @param {Record<string, unknown>} mtg
+ * @returns {number | null}
+ */
+function parseYoutubeOffsetSeconds(mtg) {
+  const direct = Number(mtg.source_offsets?.youtube?.offset_seconds);
+  if (Number.isFinite(direct)) return direct;
+
+  const fromMetadata = Number(mtg.metadata?.source_offsets?.youtube?.offset_seconds);
+  if (Number.isFinite(fromMetadata)) return fromMetadata;
+
+  return null;
+}
+
+/**
  * Build TopicSummary rows from the export topic_summaries array.
  *
  * @param {Array<Record<string, unknown>> | null | undefined} topicSummaries
@@ -577,6 +594,7 @@ async function main() {
           logline: mtg.summary?.logline ?? null,
           timelineBullets: nonEmptyJsonArray(mtg.summary?.timeline_bullets),
           youtubeUrl: mtg.youtube_url ?? null,
+          youtubeOffsetSeconds: parseYoutubeOffsetSeconds(mtg),
           granicusUrl: mtg.granicus_url ?? null,
           minutesText: mtg.minutes?.text ?? null,
           minutesUrl: mtg.minutes?.portal_url ?? null,

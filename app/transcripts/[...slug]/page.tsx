@@ -28,8 +28,31 @@ const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT
 function extractYouTubeId(url: string): string | null {
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === "youtu.be") return parsed.pathname.slice(1);
-    return parsed.searchParams.get("v");
+    const hostname = parsed.hostname.replace(/^www\./, "");
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+
+    if (hostname === "youtu.be") {
+      return pathParts[0] ?? null;
+    }
+
+    if (hostname === "youtube.com" || hostname === "m.youtube.com") {
+      const watchId = parsed.searchParams.get("v");
+      if (watchId) return watchId;
+
+      // Support common non-watch URL forms.
+      // Examples: /embed/<id>, /shorts/<id>, /live/<id>, /v/<id>
+      const prefixedPath = ["embed", "shorts", "live", "v"];
+      if (pathParts.length >= 2 && prefixedPath.includes(pathParts[0])) {
+        return pathParts[1] ?? null;
+      }
+
+      // Fallback for uncommon but valid forms where ID is first segment.
+      if (pathParts.length >= 1) {
+        return pathParts[0] ?? null;
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -58,8 +81,24 @@ export default async function TranscriptPage({ params }: Props) {
 
   const meeting = await prisma.meeting.findUnique({
     where: { slug },
-    include: {
-      city: true,
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      logline: true,
+      youtubeUrl: true,
+      youtubeOffsetSeconds: true,
+      granicusUrl: true,
+      minutesText: true,
+      minutesUrl: true,
+      city: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          stateCode: true,
+        },
+      },
       lines: {
         orderBy: { lineIndex: "asc" },
       },
@@ -82,6 +121,18 @@ export default async function TranscriptPage({ params }: Props) {
   if (!meeting) {
     notFound();
   }
+
+  const rawYoutubeOffsetSeconds = (meeting as Record<string, unknown>)
+    .youtubeOffsetSeconds;
+  const videoOffsetSeconds =
+    meeting.youtubeUrl && typeof rawYoutubeOffsetSeconds === "number"
+      ? rawYoutubeOffsetSeconds
+      : 0;
+
+  const applyVideoOffset = (seconds: number): number => {
+    // Clamp to zero to avoid negative seek targets when offsets are negative.
+    return Math.max(0, seconds + videoOffsetSeconds);
+  };
 
   // Group consecutive lines by the same speaker.
   // Use a double newline as separator when there is a gap of 2.5 s+.
@@ -109,15 +160,15 @@ export default async function TranscriptPage({ params }: Props) {
   for (const item of meeting.summaryItems) {
     if (HIDDEN_SUMMARY_TYPES.has(item.type)) continue;
     const list = topicMap.get(item.type) ?? [];
-    // For action items, show only the start time portion of the timecode
-    let label = item.timecodeLabel;
-    if (item.type === "ACTION_ITEM" && label) {
-      label = label.split(/\s*-\s*/)[0];
-    }
+    const startTimeSeconds =
+      item.startTimeSeconds != null
+        ? applyVideoOffset(item.startTimeSeconds)
+        : null;
     list.push({
       text: item.text.replace(/\s*\[minutes\]\s*$/i, ""),
-      timecodeLabel: label,
-      startTimeSeconds: item.startTimeSeconds,
+      // Use auto-formatted labels so rendered timestamps always match adjusted seconds.
+      timecodeLabel: undefined,
+      startTimeSeconds,
       speaker: item.speaker,
       position: item.position,
     });
@@ -128,9 +179,16 @@ export default async function TranscriptPage({ params }: Props) {
     bullets,
   }));
 
+  const segmentsWithOffset = meeting.segments.map((segment) => ({
+    ...segment,
+    startTime: applyVideoOffset(segment.startTime),
+    endTime: applyVideoOffset(segment.endTime),
+  }));
+
   const videoId = meeting.youtubeUrl
     ? extractYouTubeId(meeting.youtubeUrl)
     : null;
+  const hasVideo = Boolean(videoId || meeting.granicusUrl);
 
   return (
     <main className="min-h-screen p-8">
@@ -214,13 +272,28 @@ export default async function TranscriptPage({ params }: Props) {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Transcript */}
-          <TranscriptViewer groupedLines={groupedLines} />
+          <TranscriptViewer
+            groupedLines={groupedLines}
+            offsetSeconds={videoOffsetSeconds}
+          />
 
           {/* Video */}
-          {videoId && (
+          {hasVideo && (
             <section className="lg:col-span-1 min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
-              <YouTubePlayer videoId={videoId} />
+              {videoId ? (
+                <YouTubePlayer videoId={videoId} />
+              ) : (
+                <div className="aspect-video w-full rounded-lg overflow-hidden bg-black/5 dark:bg-white/5">
+                  <iframe
+                    src={meeting.granicusUrl ?? undefined}
+                    title={`${meeting.title} video`}
+                    className="w-full h-full"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )}
             </section>
           )}
 
@@ -238,7 +311,7 @@ export default async function TranscriptPage({ params }: Props) {
                         label: "Agenda",
                         content: (
                           <SegmentsPanel
-                            segments={meeting.segments}
+                            segments={segmentsWithOffset}
                           />
                         ),
                       },

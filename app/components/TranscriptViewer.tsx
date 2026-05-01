@@ -19,12 +19,19 @@ import {
  */
 export default function TranscriptViewer({
   groupedLines,
+  offsetSeconds = 0,
 }: {
   groupedLines: GroupedLine[];
+  offsetSeconds?: number;
 }) {
   const { currentTime, seekTo } = useVideoSync();
   const router = useRouter();
   const pathname = usePathname();
+
+  const applyOffset = useCallback(
+    (seconds: number) => Math.max(0, seconds + offsetSeconds),
+    [offsetSeconds],
+  );
 
   // --- Refs for DOM elements ---
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,7 +84,7 @@ export default function TranscriptViewer({
 
     // Find the active group
     const activeIndex = groupedLines.findIndex(
-      (g) => currentTime >= g.startTime && currentTime < g.endTime,
+      (g) => currentTime >= applyOffset(g.startTime) && currentTime < applyOffset(g.endTime),
     );
     if (activeIndex === -1) return;
 
@@ -86,16 +93,21 @@ export default function TranscriptViewer({
     if (!card) return;
 
     // Proportional progress through this group's time range
-    const duration = group.endTime - group.startTime;
+    const start = applyOffset(group.startTime);
+    const end = applyOffset(group.endTime);
+    const duration = end - start;
     const progress = duration > 0
-      ? Math.min(Math.max((currentTime - group.startTime) / duration, 0), 1)
+      ? Math.min(Math.max((currentTime - start) / duration, 0), 1)
       : 0;
 
     // We want the scroll position so that the relevant part of the
     // card is in view.  For a tall card we scroll proportionally
     // through it, but we bias early: only start scrolling within the
     // card once the top would leave the viewport.
-    const cardTop = card.offsetTop;
+    const cardTop =
+      card.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop;
     const cardHeight = card.offsetHeight;
     const viewHeight = container.clientHeight;
 
@@ -125,7 +137,7 @@ export default function TranscriptViewer({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [currentTime, autoScroll, groupedLines]);
+  }, [currentTime, autoScroll, groupedLines, applyOffset]);
 
   // When user re-enables auto-scroll, jump immediately
   const handleAutoScrollToggle = useCallback(
@@ -166,8 +178,10 @@ export default function TranscriptViewer({
           </p>
         ) : (
           groupedLines.map((group) => {
+            const adjustedStart = applyOffset(group.startTime);
+            const adjustedEnd = applyOffset(group.endTime);
             const isActive =
-              currentTime >= group.startTime && currentTime < group.endTime;
+              currentTime >= adjustedStart && currentTime < adjustedEnd;
 
             return (
               <article
@@ -189,20 +203,20 @@ export default function TranscriptViewer({
                   <span className="mx-2">•</span>
                   <button
                     type="button"
-                    onClick={() => handleTimestampClick(group.startTime)}
+                    onClick={() => handleTimestampClick(adjustedStart)}
                     className="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                    title={`Seek to ${formatTimestamp(group.startTime)}`}
+                    title={`Seek to ${formatTimestamp(adjustedStart)}`}
                   >
-                    {formatTimestamp(group.startTime)}
+                    {formatTimestamp(adjustedStart)}
                   </button>
                   <span> - </span>
                   <button
                     type="button"
-                    onClick={() => handleTimestampClick(group.endTime)}
+                    onClick={() => handleTimestampClick(adjustedEnd)}
                     className="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                    title={`Seek to ${formatTimestamp(group.endTime)}`}
+                    title={`Seek to ${formatTimestamp(adjustedEnd)}`}
                   >
-                    {formatTimestamp(group.endTime)}
+                    {formatTimestamp(adjustedEnd)}
                   </button>
                 </div>
                 <div className="text-gray-900 dark:text-gray-100 space-y-3">

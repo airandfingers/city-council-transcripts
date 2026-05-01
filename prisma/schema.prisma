@@ -34,6 +34,7 @@ model Meeting {
   logline                  String?              @db.Text
   timelineBullets          Json?
   youtubeUrl               String?              @db.VarChar(500)
+  youtubeOffsetSeconds     Float?
   granicusUrl              String?              @db.VarChar(500)
   minutesText              String?              @db.Text
   minutesUrl               String?              @db.VarChar(500)
