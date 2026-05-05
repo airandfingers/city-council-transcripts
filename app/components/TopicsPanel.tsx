@@ -59,5 +59,13 @@ export default function TopicsPanel({
     ),
   }));
 
-  return <TabbedPanel tabs={tabs} heading={heading} />;
+  return (
+    <TabbedPanel
+      tabs={tabs}
+      heading={heading}
+      className="h-full min-h-0 flex flex-col"
+      contentClassName="flex-1 min-h-0"
+      panelClassName="h-full min-h-0 overflow-y-auto pr-1"
+    />
+  );
 }

@@ -28,31 +28,8 @@ const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT
 function extractYouTubeId(url: string): string | null {
   try {
     const parsed = new URL(url);
-    const hostname = parsed.hostname.replace(/^www\./, "");
-    const pathParts = parsed.pathname.split("/").filter(Boolean);
-
-    if (hostname === "youtu.be") {
-      return pathParts[0] ?? null;
-    }
-
-    if (hostname === "youtube.com" || hostname === "m.youtube.com") {
-      const watchId = parsed.searchParams.get("v");
-      if (watchId) return watchId;
-
-      // Support common non-watch URL forms.
-      // Examples: /embed/<id>, /shorts/<id>, /live/<id>, /v/<id>
-      const prefixedPath = ["embed", "shorts", "live", "v"];
-      if (pathParts.length >= 2 && prefixedPath.includes(pathParts[0])) {
-        return pathParts[1] ?? null;
-      }
-
-      // Fallback for uncommon but valid forms where ID is first segment.
-      if (pathParts.length >= 1) {
-        return pathParts[0] ?? null;
-      }
-    }
-
-    return null;
+    if (parsed.hostname === "youtu.be") return parsed.pathname.slice(1);
+    return parsed.searchParams.get("v");
   } catch {
     return null;
   }
@@ -81,24 +58,8 @@ export default async function TranscriptPage({ params }: Props) {
 
   const meeting = await prisma.meeting.findUnique({
     where: { slug },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      logline: true,
-      youtubeUrl: true,
-      youtubeOffsetSeconds: true,
-      granicusUrl: true,
-      minutesText: true,
-      minutesUrl: true,
-      city: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          stateCode: true,
-        },
-      },
+    include: {
+      city: true,
       lines: {
         orderBy: { lineIndex: "asc" },
       },
@@ -121,18 +82,6 @@ export default async function TranscriptPage({ params }: Props) {
   if (!meeting) {
     notFound();
   }
-
-  const rawYoutubeOffsetSeconds = (meeting as Record<string, unknown>)
-    .youtubeOffsetSeconds;
-  const videoOffsetSeconds =
-    meeting.youtubeUrl && typeof rawYoutubeOffsetSeconds === "number"
-      ? rawYoutubeOffsetSeconds
-      : 0;
-
-  const applyVideoOffset = (seconds: number): number => {
-    // Clamp to zero to avoid negative seek targets when offsets are negative.
-    return Math.max(0, seconds + videoOffsetSeconds);
-  };
 
   // Group consecutive lines by the same speaker.
   // Use a double newline as separator when there is a gap of 2.5 s+.
@@ -160,15 +109,15 @@ export default async function TranscriptPage({ params }: Props) {
   for (const item of meeting.summaryItems) {
     if (HIDDEN_SUMMARY_TYPES.has(item.type)) continue;
     const list = topicMap.get(item.type) ?? [];
-    const startTimeSeconds =
-      item.startTimeSeconds != null
-        ? applyVideoOffset(item.startTimeSeconds)
-        : null;
+    // For action items, show only the start time portion of the timecode
+    let label = item.timecodeLabel;
+    if (item.type === "ACTION_ITEM" && label) {
+      label = label.split(/\s*-\s*/)[0];
+    }
     list.push({
       text: item.text.replace(/\s*\[minutes\]\s*$/i, ""),
-      // Use auto-formatted labels so rendered timestamps always match adjusted seconds.
-      timecodeLabel: undefined,
-      startTimeSeconds,
+      timecodeLabel: label,
+      startTimeSeconds: item.startTimeSeconds,
       speaker: item.speaker,
       position: item.position,
     });
@@ -179,16 +128,9 @@ export default async function TranscriptPage({ params }: Props) {
     bullets,
   }));
 
-  const segmentsWithOffset = meeting.segments.map((segment) => ({
-    ...segment,
-    startTime: applyVideoOffset(segment.startTime),
-    endTime: applyVideoOffset(segment.endTime),
-  }));
-
   const videoId = meeting.youtubeUrl
     ? extractYouTubeId(meeting.youtubeUrl)
     : null;
-  const hasVideo = Boolean(videoId || meeting.granicusUrl);
 
   return (
     <main className="min-h-screen p-8">
@@ -252,138 +194,80 @@ export default async function TranscriptPage({ params }: Props) {
 
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-        <section className="p-6">
-          <h2 className="text-2xl font-semibold mb-4">Logline</h2>
-          {meeting.logline ? (
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              {meeting.logline}
-            </p>
-          ) : (
-            <p className="text-gray-500 dark:text-gray-400">
-              No logline available for this meeting yet.
-            </p>
-          )}
+        <section className="p-6 flex flex-col max-h-[360px] min-h-0">
+          <h2 className="text-2xl font-semibold mb-4 shrink-0">Logline</h2>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {meeting.logline ? (
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                {meeting.logline}
+              </p>
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">
+                No logline available for this meeting yet.
+              </p>
+            )}
+          </div>
         </section>
 
-        <section className="p-6">
-          <TopicsPanel topics={topics} heading="" />
+        <section className="p-6 flex flex-col max-h-[360px] min-h-0">
+          <div className="min-h-0 flex-1">
+            <TopicsPanel topics={topics} heading="" />
+          </div>
         </section>
       </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Transcript */}
-          <TranscriptViewer
-            groupedLines={groupedLines}
-            offsetSeconds={videoOffsetSeconds}
-          />
+          <TranscriptViewer groupedLines={groupedLines} />
 
           {/* Video */}
-          {hasVideo && (
+          {videoId && (
             <section className="lg:col-span-1 min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
-              {videoId ? (
-                <YouTubePlayer videoId={videoId} />
-              ) : (
-                <div className="aspect-video w-full rounded-lg overflow-hidden bg-black/5 dark:bg-white/5">
-                  <iframe
-                    src={meeting.granicusUrl ?? undefined}
-                    title={`${meeting.title} video`}
-                    className="w-full h-full"
-                    allow="autoplay; fullscreen; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              )}
+              <YouTubePlayer videoId={videoId} />
             </section>
           )}
 
           {/* Minutes & Documents */}
-          <section className="lg:col-span-1">
+          <section className="lg:col-span-1 flex flex-col max-h-[750px] min-h-0">
             <h2 className="text-2xl font-semibold mb-4">Reference</h2>
-            <DocumentsPanel
-              minutesText={meeting.minutesText}
-              minutesUrl={meeting.minutesUrl}
-              documents={meeting.documents}
-              extraTabs={[
-                ...(meeting.segments.length > 0
-                  ? [
-                      {
-                        label: "Agenda",
-                        content: (
-                          <SegmentsPanel
-                            segments={segmentsWithOffset}
-                          />
-                        ),
-                      },
-                    ]
-                  : []),
-                ...(meeting.speakerSummaries.length > 0
-                  ? [
-                      {
-                        label: "Speakers",
-                        content: (
-                          <SpeakerSummariesPanel
-                            speakers={meeting.speakerSummaries}
-                          />
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
+            <div className="min-h-0 flex-1">
+              <DocumentsPanel
+                minutesText={meeting.minutesText}
+                minutesUrl={meeting.minutesUrl}
+                documents={meeting.documents}
+                extraTabs={[
+                  ...(meeting.segments.length > 0
+                    ? [
+                        {
+                          label: "Agenda",
+                          content: (
+                            <SegmentsPanel
+                              segments={meeting.segments}
+                            />
+                          ),
+                        },
+                      ]
+                    : []),
+                  ...(meeting.speakerSummaries.length > 0
+                    ? [
+                        {
+                          label: "Speakers",
+                          content: (
+                            <SpeakerSummariesPanel
+                              speakers={meeting.speakerSummaries}
+                            />
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </div>
           </section>
         </div>
       </VideoSyncProvider>
 
-      {/* Topic Summaries */}
-      {meeting.topicSummaries.length > 0 && (
-        <section className="mt-10">
-          <h2 className="text-2xl font-semibold mb-4">Topic Summaries</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {meeting.topicSummaries.map((topic) => {
-              const keyPoints = Array.isArray(topic.keyPoints)
-                ? (topic.keyPoints as string[])
-                : [];
-              const speakerList = Array.isArray(topic.speakers)
-                ? (topic.speakers as (string | { name: string })[])
-                : [];
-              const speakerNames = speakerList.map((s) =>
-                typeof s === "string" ? s : s.name,
-              );
-              return (
-                <div
-                  key={topic.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
-                >
-                  <h3 className="font-semibold mb-2">{topic.title}</h3>
-                  {topic.summaryText && (
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                      {topic.summaryText}
-                    </p>
-                  )}
-                  {keyPoints.length > 0 && (
-                    <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-2">
-                      {keyPoints.map((kp, i) => (
-                        <li key={i}>{kp}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {topic.outcome && (
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                      Outcome: {topic.outcome}
-                    </p>
-                  )}
-                  {speakerNames.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      Speakers: {speakerNames.join(", ")}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
 
     </main>
   );

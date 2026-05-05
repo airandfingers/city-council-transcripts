@@ -98,5 +98,12 @@ export default function DocumentsPanel({
     tabs.push(...extraTabs);
   }
 
-  return <TabbedPanel tabs={tabs} />;
+  return (
+    <TabbedPanel
+      tabs={tabs}
+      className="h-full min-h-0 flex flex-col"
+      contentClassName="flex-1 min-h-0"
+      panelClassName="h-full min-h-0 overflow-y-auto pr-1"
+    />
+  );
 }

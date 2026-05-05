@@ -7,7 +7,7 @@ type SeedMeeting = {
   citySlug: string;
   title: string;
   date: string;
-  summary?: string;
+  summary: string;
 };
 
 type TranscriptFixture = {
@@ -121,14 +121,14 @@ async function seedMeetings() {
         cityId: city.id,
         date,
         title: meeting.title,
-        summary: meeting.summary ?? null,
+        summary: meeting.summary,
       },
       create: {
         cityId: city.id,
         slug,
         date,
         title: meeting.title,
-        summary: meeting.summary ?? null,
+        summary: meeting.summary,
       },
     });
   }
