@@ -4,14 +4,33 @@ A Next.js 16 (App Router) application for browsing city council meeting transcri
 
 ## Quick Start
 
+### 1. Start the local database
+
+```bash
+docker compose up -d postgres   # start Postgres 16 on localhost:5432
+```
+
+Copy `.env.example` to `.env` and uncomment the local Docker block (or keep
+the pre-existing `.env` if you already have one pointing at the Docker instance).
+
+### 2. Install and seed
+
 ```bash
 npm install          # install dependencies
 npm run db:generate  # generate Prisma client
-npm run db:push      # create/update schema in DB
+npm run db:push      # push schema to local DB
 npm run db:seed      # seed cities/meetings/fixture lines
-npm run hooks:install # set up git pre-push hook
+```
+
+### 3. Run
+
+```bash
 npm run dev          # start dev server at http://localhost:3000
 ```
+
+The default Docker credentials are `postgresql://ccc:ccc@localhost:5432/ccc_dev`
+and match the commented-out block in `.env.example`. For production, replace the
+`DATABASE_URL` / `DIRECT_URL` values with your Neon connection strings.
 
 ## NPM Scripts
 
