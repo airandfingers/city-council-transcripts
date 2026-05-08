@@ -91,3 +91,11 @@ Import from project root using `@/` alias:
 ```typescript
 import Component from "@/app/components/Component"
 ```
+
+## Security
+
+Before committing each iteration, check and improve security:
+- Never commit secrets, API keys, or credentials — use environment variables
+- Validate and sanitize all user inputs at API route boundaries before processing
+- Avoid `dangerouslySetInnerHTML` with any user-controlled content; use Next.js `<Image>` for images
+- Keep dependencies up to date; run `npm audit` before shipping
