@@ -222,14 +222,14 @@ export default async function TranscriptPage({ params }: Props) {
 
           {/* Video */}
           {videoId && (
-            <section className="lg:col-span-1 min-w-0">
+            <section className="order-1 lg:order-2 lg:col-span-1 min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
               <YouTubePlayer videoId={videoId} />
             </section>
           )}
 
           {/* Minutes & Documents */}
-          <section className="lg:col-span-1 flex flex-col max-h-[750px] min-h-0">
+          <section className="order-3 lg:col-span-1 flex flex-col max-h-[750px] min-h-0">
             <h2 className="text-2xl font-semibold mb-4">Reference</h2>
             <div className="min-h-0 flex-1">
               <DocumentsPanel
