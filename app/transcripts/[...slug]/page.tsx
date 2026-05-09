@@ -186,16 +186,9 @@ export default async function TranscriptPage({ params }: Props) {
         )}
       </div>
 
-      {meeting.logline && (
-        <p className="text-lg text-gray-600 dark:text-gray-400 mb-6 -mt-4">
-          {meeting.logline}
-        </p>
-      )}
-
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
         <section className="p-6 flex flex-col max-h-[360px] min-h-0">
-          <h2 className="text-2xl font-semibold mb-4 shrink-0">Logline</h2>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {meeting.logline ? (
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
