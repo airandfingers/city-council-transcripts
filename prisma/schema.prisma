@@ -9,15 +9,17 @@ datasource db {
 }
 
 model City {
-  id        Int       @id @default(autoincrement())
-  stateCode String    @db.VarChar(2)
-  stateName String    @db.VarChar(100)
-  name      String    @db.VarChar(200)
-  slug      String    @db.VarChar(200)
-  summary   String    @db.Text
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  meetings  Meeting[]
+  id            Int            @id @default(autoincrement())
+  stateCode     String         @db.VarChar(2)
+  stateName     String         @db.VarChar(100)
+  name          String         @db.VarChar(200)
+  slug          String         @db.VarChar(200)
+  summary       String         @db.Text
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  meetings      Meeting[]
+  subscriptions Subscription[]
+  interestAreas InterestArea[]
 
   @@unique([stateCode, slug])
   @@index([stateCode])
@@ -35,6 +37,7 @@ model Meeting {
   timelineBullets          Json?
   youtubeUrl               String?              @db.VarChar(500)
   youtubeOffsetSeconds     Float?
+  youtubeOffsetModel       Json?
   granicusUrl              String?              @db.VarChar(500)
   minutesText              String?              @db.Text
   minutesUrl               String?              @db.VarChar(500)
@@ -51,6 +54,7 @@ model Meeting {
   minutesItems             MinutesItem[]
   topicSummaries           TopicSummary[]
   speakerSummaries         SpeakerSummary[]
+  interestAreaStatuses     InterestAreaMeetingStatus[]
 
   @@index([cityId])
   @@index([date])
@@ -209,4 +213,88 @@ model SpeakerSummary {
 
   @@unique([meetingId, speakerUuid])
   @@index([meetingId])
+}
+
+model InterestArea {
+  id                 Int                         @id @default(autoincrement())
+  cityId             Int
+  slug               String                      @db.VarChar(200)
+  name               String                      @db.VarChar(500)
+  description        String?                     @db.Text
+  source             String?                     @db.VarChar(50)
+  statusSummary      String?                     @db.Text
+  meetingsDiscussed  Int?
+  totalMeetings      Int?
+  mostRecentActivity String?                     @db.VarChar(500)
+  generatedAt        DateTime?
+  runId              String?                     @db.VarChar(100)
+  sortOrder          Int                         @default(0)
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  city               City                        @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  meetingStatuses    InterestAreaMeetingStatus[]
+  subscriptions      Subscription[]
+
+  @@unique([cityId, slug])
+  @@index([cityId])
+}
+
+model InterestAreaMeetingStatus {
+  id             Int          @id @default(autoincrement())
+  interestAreaId Int
+  meetingId      Int
+  discussed      Boolean
+  summary        String?      @db.Text
+  confidence     Float?
+  runId          String?      @db.VarChar(100)
+  interestArea   InterestArea @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
+  meeting        Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([interestAreaId, meetingId])
+  @@index([meetingId])
+}
+
+enum SubscriptionKind {
+  SITE_UPDATES
+  CITY_COVERAGE_REQUEST
+  CITY_UPDATES
+  TOPIC_IN_CITY_UPDATES
+  TOPIC_IN_CITY_COVERAGE_REQUEST
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  UNSUBSCRIBED
+}
+
+model Subscriber {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique @db.VarChar(320)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                 Int                @id @default(autoincrement())
+  subscriberId       Int
+  subscriber         Subscriber         @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  kind               SubscriptionKind
+  cityId             Int?
+  city               City?              @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  requestedCityName  String?            @db.VarChar(200)
+  interestAreaId     Int?
+  interestArea       InterestArea?      @relation(fields: [interestAreaId], references: [id], onDelete: SetNull)
+  requestedTopicName String?            @db.VarChar(200)
+  status             SubscriptionStatus @default(PENDING)
+  confirmToken       String             @unique @db.VarChar(64)
+  unsubscribeToken   String             @unique @db.VarChar(64)
+  confirmedAt        DateTime?
+  unsubscribedAt     DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([subscriberId, kind, cityId, requestedCityName, interestAreaId, requestedTopicName])
+  @@index([kind, cityId, interestAreaId, status])
 }

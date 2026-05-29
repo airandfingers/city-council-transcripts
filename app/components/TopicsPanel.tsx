@@ -1,5 +1,6 @@
 import TabbedPanel from "./TabbedPanel";
 import TimestampLink from "./TimestampLink";
+import type { OffsetModel } from "@/app/lib/offset";
 
 export type Bullet = {
   text: string;
@@ -17,9 +18,11 @@ export type Topic = {
 export default function TopicsPanel({
   topics: items,
   heading = "Topics Discussed",
+  offsetModel = null,
 }: {
   topics?: Topic[];
   heading?: string;
+  offsetModel?: OffsetModel | null;
 } = {}) {
   if (!items || items.length === 0) {
     return (
@@ -50,6 +53,7 @@ export default function TopicsPanel({
                 <TimestampLink
                   seconds={b.startTimeSeconds}
                   label={b.timecodeLabel ?? undefined}
+                  offsetModel={offsetModel}
                 />
               </span>
             )}

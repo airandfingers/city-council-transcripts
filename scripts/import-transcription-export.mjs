@@ -21,7 +21,7 @@ import "dotenv/config";
 import { readFile, access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { select, input, confirm } from "@inquirer/prompts";
+import { select, input } from "@inquirer/prompts";
 import { parseMeetingKey } from "./lib/parse-meeting-key.mjs";
 import { mapSegments } from "./lib/map-transcript-segments.mjs";
 
@@ -31,7 +31,6 @@ import { mapSegments } from "./lib/map-transcript-segments.mjs";
 
 const TAG = "[import]";
 const BATCH_SIZE = 5000;
-const DEFAULT_SUMMARY = "No summary found";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,6 +78,401 @@ async function insertLinesInBatches(prisma, meetingId, lines) {
   }
 
   return inserted;
+}
+
+/**
+ * Build MeetingSummaryItem rows from the export summary object.
+ *
+ * Prefers structured_* arrays (with timestamps) over plain-text arrays.
+ * Falls back to plain-text arrays if structured versions are missing.
+ *
+ * @param {Record<string, unknown> | null | undefined} summary
+ * @returns {Array<Record<string, unknown>>}
+ */
+function buildSummaryItems(summary) {
+  if (!summary) return [];
+
+  const items = [];
+
+  // --- Key Decisions ---
+  const structuredKD = Array.isArray(summary.structured_key_decisions)
+    ? summary.structured_key_decisions
+    : null;
+  if (structuredKD) {
+    for (let i = 0; i < structuredKD.length; i++) {
+      const d = structuredKD[i];
+      const text = typeof d.text === "string" ? d.text.trim() : "";
+      if (!text) continue;
+      items.push({
+        type: "KEY_DECISION",
+        text,
+        sortOrder: i,
+        startTimeSeconds: d.start_time_seconds ?? null,
+        endTimeSeconds: d.end_time_seconds ?? null,
+        timecodeLabel: d.timecode_label ?? null,
+        segmentIndex: d.segment_index ?? d.segment_indices?.start_index ?? null,
+        segmentIndexEnd: d.segment_indices?.end_index ?? null,
+        linkStatus: d.link_status ?? null,
+        confidence: d.confidence ?? null,
+        notes: d.notes ?? null,
+      });
+    }
+  } else if (Array.isArray(summary.key_decisions)) {
+    for (let i = 0; i < summary.key_decisions.length; i++) {
+      const text = typeof summary.key_decisions[i] === "string" ? summary.key_decisions[i].trim() : "";
+      if (text) items.push({ type: "KEY_DECISION", text, sortOrder: i });
+    }
+  }
+
+  // --- Action Items ---
+  const structuredAI = Array.isArray(summary.structured_action_items)
+    ? summary.structured_action_items
+    : null;
+  if (structuredAI) {
+    for (let i = 0; i < structuredAI.length; i++) {
+      const d = structuredAI[i];
+      const text = typeof d.text === "string" ? d.text.trim() : "";
+      if (!text) continue;
+      items.push({
+        type: "ACTION_ITEM",
+        text,
+        sortOrder: i,
+        startTimeSeconds: d.start_time_seconds ?? null,
+        endTimeSeconds: d.end_time_seconds ?? null,
+        timecodeLabel: d.timecode_label ?? null,
+        segmentIndex: d.segment_index ?? d.segment_indices?.start_index ?? null,
+        segmentIndexEnd: d.segment_indices?.end_index ?? null,
+        linkStatus: d.link_status ?? null,
+        confidence: d.confidence ?? null,
+        notes: d.notes ?? null,
+      });
+    }
+  } else if (Array.isArray(summary.action_items)) {
+    for (let i = 0; i < summary.action_items.length; i++) {
+      const text = typeof summary.action_items[i] === "string" ? summary.action_items[i].trim() : "";
+      if (text) items.push({ type: "ACTION_ITEM", text, sortOrder: i });
+    }
+  }
+
+  // --- Motions and Votes (no structured version yet, plain-text only) ---
+  if (Array.isArray(summary.motions_and_votes)) {
+    for (let i = 0; i < summary.motions_and_votes.length; i++) {
+      const text = typeof summary.motions_and_votes[i] === "string" ? summary.motions_and_votes[i].trim() : "";
+      if (text) items.push({ type: "MOTION_AND_VOTE", text, sortOrder: i });
+    }
+  }
+
+  // --- Public Comments (individual structured entries) ---
+  const structuredPC = Array.isArray(summary.structured_public_comments)
+    ? summary.structured_public_comments
+    : null;
+  if (structuredPC) {
+    for (let i = 0; i < structuredPC.length; i++) {
+      const d = structuredPC[i];
+      const text = typeof d.summary === "string" ? d.summary.trim() : "";
+      if (!text) continue;
+      items.push({
+        type: "PUBLIC_COMMENT",
+        text,
+        sortOrder: i,
+        speaker: d.speaker ?? null,
+        position: d.position ?? null,
+        startTimeSeconds: d.start_time_seconds ?? null,
+        endTimeSeconds: d.end_time_seconds ?? null,
+        timecodeLabel: d.timecode_label ?? null,
+        segmentIndex: d.segment_index ?? null,
+        linkStatus: d.link_status ?? null,
+        confidence: d.confidence ?? null,
+      });
+    }
+  } else if (Array.isArray(summary.public_comments)) {
+    for (let i = 0; i < summary.public_comments.length; i++) {
+      const d = summary.public_comments[i];
+      const text = typeof d.summary === "string" ? d.summary.trim() : (typeof d === "string" ? d.trim() : "");
+      if (!text) continue;
+      items.push({
+        type: "PUBLIC_COMMENT",
+        text,
+        sortOrder: i,
+        speaker: d.speaker ?? null,
+        position: d.position ?? null,
+      });
+    }
+  }
+
+  // --- Public Comment Summary (aggregate narrative) ---
+  const publicCommentsSummary =
+    typeof summary.public_comments_summary === "string"
+      ? summary.public_comments_summary.trim()
+      : "";
+  if (publicCommentsSummary) {
+    items.push({ type: "PUBLIC_COMMENT_SUMMARY", text: publicCommentsSummary, sortOrder: 0 });
+  }
+
+  // --- Timeline Bullets ---
+  if (Array.isArray(summary.timeline_bullets)) {
+    for (let i = 0; i < summary.timeline_bullets.length; i++) {
+      const d = summary.timeline_bullets[i];
+      const text = typeof d.text === "string" ? d.text.trim() : "";
+      if (!text) continue;
+      items.push({
+        type: "TIMELINE_BULLET",
+        text,
+        sortOrder: i,
+        startTimeSeconds: d.start_time_seconds ?? null,
+        endTimeSeconds: d.end_time_seconds ?? null,
+        timecodeLabel: d.timecode_label ?? null,
+        segmentIndex: d.segment_index ?? null,
+        linkStatus: d.link_status ?? null,
+        confidence: d.confidence ?? null,
+      });
+    }
+  }
+
+  return items;
+}
+
+/**
+ * Build MeetingDocument rows from the export documents object.
+ *
+ * @param {Record<string, unknown> | null | undefined} documents
+ * @returns {Array<{ title: string; url: string; documentType: string | null; associatedAgendaItem: string | null }>}
+ */
+function buildDocumentRows(documents) {
+  const docs = documents?.documents;
+  if (!Array.isArray(docs)) return [];
+
+  return docs
+    .filter((d) => d.url && d.title)
+    .map((d) => ({
+      title: d.title,
+      url: d.url,
+      documentType: d.document_type ?? null,
+      associatedAgendaItem: d.associated_agenda_item ?? null,
+    }));
+}
+
+/**
+ * Return the array as a Json value if non-empty, or undefined to omit.
+ * @param {unknown} arr
+ * @returns {unknown[] | undefined}
+ */
+function nonEmptyJsonArray(arr) {
+  return Array.isArray(arr) && arr.length > 0 ? arr : undefined;
+}
+
+/**
+ * Build TopicSummary rows from the export topic_summaries array.
+ *
+ * @param {Array<Record<string, unknown>> | null | undefined} topicSummaries
+ * @returns {Array<Record<string, unknown>>}
+ */
+function buildTopicSummaryRows(topicSummaries) {
+  if (!Array.isArray(topicSummaries) || topicSummaries.length === 0) return [];
+
+  const seenIds = new Set();
+
+  return topicSummaries.map((t, i) => {
+    let topicId = t.topic_id ?? `topic_${i}`;
+    if (seenIds.has(topicId)) {
+      topicId = `${topicId}_${i}`;
+    }
+    seenIds.add(topicId);
+
+    return {
+      topicId,
+      title: t.topic_title ?? "",
+      startTime: Number(t.start_time ?? 0),
+      endTime: Number(t.end_time ?? 0),
+      sortOrder: i,
+      summaryText: t.summary_text || null,
+      keyPoints: nonEmptyJsonArray(t.key_points),
+      speakers: nonEmptyJsonArray(t.speakers),
+      speakerPositions: nonEmptyJsonArray(t.speaker_positions),
+      outcome: t.outcome || null,
+      tags: nonEmptyJsonArray(t.tags),
+      provider: t.provider ?? null,
+      model: t.model ?? null,
+      generatedAt: t.generated_at ? new Date(t.generated_at) : null,
+    };
+  });
+}
+
+/**
+ * Build SpeakerSummary rows from the export speaker_summaries object.
+ *
+ * @param {Record<string, unknown> | null | undefined} speakerSummaries
+ * @returns {Array<Record<string, unknown>>}
+ */
+function buildSpeakerSummaryRows(speakerSummaries) {
+  const speakers = speakerSummaries?.speakers;
+  if (!Array.isArray(speakers) || speakers.length === 0) return [];
+
+  const seenUuids = new Set();
+
+  return speakers.map((s, i) => {
+    let speakerUuid = s.speaker_uuid ?? null;
+    if (speakerUuid && seenUuids.has(speakerUuid)) {
+      speakerUuid = `${speakerUuid}_${i}`;
+    }
+    if (speakerUuid) seenUuids.add(speakerUuid);
+
+    return {
+      speakerUuid,
+      speakerName: s.speaker_name ?? "UNKNOWN",
+      segmentCount: s.segment_count ?? null,
+      speakingTime: s.speaking_time_seconds ?? null,
+      sortOrder: i,
+      summaryText: s.summary_text || null,
+      keyQuotes: nonEmptyJsonArray(s.key_quotes),
+      actionsOrMotions: nonEmptyJsonArray(s.actions_or_motions),
+      positionsByTopic: nonEmptyJsonArray(s.positions_by_topic),
+      provider: s.provider ?? null,
+      model: s.model ?? null,
+      generatedAt: s.generated_at ? new Date(s.generated_at) : null,
+    };
+  });
+}
+
+/**
+ * Build MeetingSegment rows from the export section_summaries object.
+ *
+ * @param {Record<string, unknown> | null | undefined} sectionSummaries
+ * @returns {Array<Record<string, unknown>>}
+ */
+function buildSegmentRows(sectionSummaries) {
+  const sections = sectionSummaries?.sections;
+  if (!Array.isArray(sections)) return [];
+
+  const seenIds = new Set();
+
+  return sections.map((s, i) => {
+    const startTime = Array.isArray(s.time_range) ? Number(s.time_range[0]) : 0;
+    const endTime = Array.isArray(s.time_range) ? Number(s.time_range[1]) : 0;
+
+    let itemId = s.agenda_item_id ?? `section_${i}`;
+    if (seenIds.has(itemId)) {
+      itemId = `${itemId}_${i}`;
+    }
+    seenIds.add(itemId);
+
+    return {
+      itemId,
+      itemNumber: s.agenda_item_number ?? "",
+      title: s.agenda_item_title ?? "",
+      startTime,
+      endTime,
+      durationSeconds: s.duration_seconds ?? null,
+      skip: s.skip ?? startTime === endTime,
+      skipReason: s.skip_reason ?? null,
+      sortOrder: i,
+      discussionSummary: s.discussion_summary || null,
+      officialAction: s.official_action || null,
+      tags: nonEmptyJsonArray(s.tags),
+      speakerPositions: nonEmptyJsonArray(s.speaker_positions),
+      keyQuotes: nonEmptyJsonArray(s.key_quotes),
+      publicComments: nonEmptyJsonArray(s.public_comments),
+      discrepancies: nonEmptyJsonArray(s.discrepancies),
+      sourcesUsed: nonEmptyJsonArray(s.sources_used),
+      sourceMinutesAvailable: s.source_minutes_available ?? null,
+      sourceAgendaAvailable: s.source_agenda_available ?? null,
+      provider: s.provider ?? null,
+      model: s.model ?? null,
+      generatedAt: s.generated_at ? new Date(s.generated_at) : null,
+    };
+  });
+}
+
+/**
+ * Build MinutesItem rows from the export minutes_timestamps object.
+ *
+ * @param {Record<string, unknown> | null | undefined} minutesTimestamps
+ * @returns {Array<Record<string, unknown>>}
+ */
+function buildMinutesItemRows(minutesTimestamps) {
+  const items = minutesTimestamps?.items;
+  if (!Array.isArray(items)) return [];
+
+  const seenIds = new Set();
+
+  return items.map((item, i) => {
+    const startTime = Number(item.start_time_seconds ?? 0);
+    const endTime = Number(item.end_time_seconds ?? 0);
+
+    let itemId = item.item_id ?? `item_${i}`;
+    if (seenIds.has(itemId)) {
+      itemId = `${itemId}_${i}`;
+    }
+    seenIds.add(itemId);
+
+    return {
+      itemId,
+      itemNumber: item.item_number ?? "",
+      title: item.title ?? "",
+      startTime,
+      endTime,
+      durationSeconds: item.duration_seconds ?? null,
+      skip: startTime === endTime,
+      sortOrder: i,
+      parentItemId: item.parent_item_id ?? null,
+      itemType: item.item_type ?? "unknown",
+      alignmentConfidence: item.alignment_confidence ?? null,
+      alignmentMethod: item.alignment_method ?? null,
+      agendaItemId: item.agenda_item_id ?? null,
+      startTimecode: item.start_timecode ?? null,
+      endTimecode: item.end_timecode ?? null,
+      textLineStart: item.text_line_start ?? null,
+      textLineEnd: item.text_line_end ?? null,
+      segmentIndices:
+        Array.isArray(item.segment_indices) && item.segment_indices.length > 0
+          ? item.segment_indices
+          : typeof item.segment_indices === "object" && item.segment_indices !== null
+            ? item.segment_indices
+            : undefined,
+    };
+  });
+}
+
+/**
+ * Locate the raw `source_offsets.youtube` entry inside a meeting record.
+ * Handles both flat and nested-under-`metadata` shapes.
+ *
+ * @param {Record<string, unknown>} mtg
+ * @returns {Record<string, unknown> | null}
+ */
+function findYoutubeOffsetEntry(mtg) {
+  const entry =
+    mtg.source_offsets?.youtube ??
+    mtg.metadata?.source_offsets?.youtube ??
+    null;
+  return entry && typeof entry === "object" ? entry : null;
+}
+
+/**
+ * Parse the legacy scalar offset (back-compat fallback).
+ *
+ * @param {Record<string, unknown>} mtg
+ * @returns {number | null}
+ */
+function parseYoutubeOffsetScalar(mtg) {
+  const entry = findYoutubeOffsetEntry(mtg);
+  const offset = entry?.offset_seconds;
+  return typeof offset === "number" ? offset : null;
+}
+
+/**
+ * Parse the piecewise-linear offset model. See OFFSET_CALIBRATION.md §2.
+ * Returns null for legacy scalar-only entries or failed calibrations.
+ *
+ * @param {Record<string, unknown>} mtg
+ * @returns {Record<string, unknown> | null}
+ */
+function parseYoutubeOffsetModel(mtg) {
+  const entry = findYoutubeOffsetEntry(mtg);
+  if (!entry) return null;
+  if (entry.model !== "piecewise_linear") return null;
+  if (!Array.isArray(entry.segments) || entry.segments.length === 0) return null;
+  return entry;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +546,7 @@ async function main() {
     let meetingsImported = 0;
     let meetingsSkipped = 0;
     let totalLinesInserted = 0;
+    let importAllMeetings = false;
 
     for (let i = 0; i < data.meetings.length; i++) {
       const mtg = data.meetings[i];
@@ -161,14 +556,12 @@ async function main() {
       log("");
       log(`${num} ${slug}`);
 
-      // Skip: empty segments or bad transcript_count
+      // Skip: empty segments (transcript_segments is the source of truth;
+      // transcript_count can be stale/desynced in older exports).
       const segments = mtg.transcript_segments ?? [];
-      const transcriptCount = mtg.transcript_count ?? 0;
 
-      if (segments.length === 0 || transcriptCount <= 0) {
-        warn(
-          `Skipping — ${segments.length === 0 ? "no transcript segments" : `transcript_count=${transcriptCount}`}`,
-        );
+      if (segments.length === 0) {
+        warn(`Skipping — no transcript segments`);
         meetingsSkipped++;
         continue;
       }
@@ -184,26 +577,45 @@ async function main() {
       const { date: parsedDate } = parseMeetingKey(slug);
       const dateDefault = parsedDate ?? "";
 
-      const dateStr = await input({
-        message: `  Meeting date (YYYY-MM-DD):`,
-        default: dateDefault,
-        validate: (val) =>
-          /^\d{4}-\d{2}-\d{2}$/.test(val) || "Must be YYYY-MM-DD format",
-      });
+      let dateStr;
+      if (importAllMeetings) {
+        if (!parsedDate) {
+          warn(`Skipping — cannot parse date from slug in all-mode`);
+          meetingsSkipped++;
+          continue;
+        }
+        dateStr = parsedDate;
+        log(`  Auto-importing (all): ${dateStr}, ${segments.length} segments`);
+      } else {
+        dateStr = await input({
+          message: `  Meeting date (YYYY-MM-DD):`,
+          default: dateDefault,
+          validate: (val) =>
+            /^\d{4}-\d{2}-\d{2}$/.test(val) || "Must be YYYY-MM-DD format",
+        });
+
+        const choice = await select({
+          message: `  Import "${mtg.title}" (${dateStr}, ${segments.length} segments)?`,
+          choices: [
+            { name: "Yes", value: "yes" },
+            { name: "No", value: "no" },
+            { name: "All (yes to this and all remaining meetings)", value: "all" },
+          ],
+          default: "yes",
+        });
+
+        if (choice === "no") {
+          warn(`Skipping — user declined`);
+          meetingsSkipped++;
+          continue;
+        }
+        if (choice === "all") {
+          importAllMeetings = true;
+          log(`  → all-mode enabled for remaining meetings`);
+        }
+      }
 
       const meetingDate = new Date(`${dateStr}T00:00:00.000Z`);
-
-      // Confirm import
-      const shouldImport = await confirm({
-        message: `  Import "${mtg.title}" (${dateStr}, ${segments.length} segments)?`,
-        default: true,
-      });
-
-      if (!shouldImport) {
-        warn(`Skipping — user declined`);
-        meetingsSkipped++;
-        continue;
-      }
 
       // Create meeting
       const meeting = await prisma.meeting.create({
@@ -212,12 +624,80 @@ async function main() {
           slug,
           title: mtg.title,
           date: meetingDate,
-          summary: DEFAULT_SUMMARY,
+          summary: mtg.summary?.overview ?? null,
+          summaryModel: mtg.summary?.model ?? null,
+          logline: mtg.summary?.logline ?? null,
+          timelineBullets: nonEmptyJsonArray(mtg.summary?.timeline_bullets),
+          youtubeUrl: mtg.youtube_url ?? null,
+          youtubeOffsetSeconds: parseYoutubeOffsetScalar(mtg),
+          youtubeOffsetModel: parseYoutubeOffsetModel(mtg),
+          granicusUrl: mtg.granicus_url ?? null,
+          minutesText: mtg.minutes?.text ?? null,
+          minutesUrl: mtg.minutes?.portal_url ?? null,
+          minutesGeneratedAt: mtg.minutes_timestamps?.generated_at
+            ? new Date(mtg.minutes_timestamps.generated_at)
+            : null,
+          minutesTotalItems: mtg.minutes_timestamps?.total_items ?? null,
+          minutesAlignedCount: mtg.minutes_timestamps?.aligned_count ?? null,
         },
       });
 
       log(`  ✔ Created meeting id=${meeting.id}`);
       existingSlugs.add(slug);
+
+      // Insert summary items (key decisions, action items, motions, public comments)
+      const summaryItems = buildSummaryItems(mtg.summary);
+      if (summaryItems.length > 0) {
+        const result = await prisma.meetingSummaryItem.createMany({
+          data: summaryItems.map((item) => ({ ...item, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} summary item(s)`);
+      }
+
+      // Insert meeting documents
+      const documentRows = buildDocumentRows(mtg.documents);
+      if (documentRows.length > 0) {
+        const result = await prisma.meetingDocument.createMany({
+          data: documentRows.map((doc) => ({ ...doc, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} document(s)`);
+      }
+
+      // Insert meeting segments (from section_summaries)
+      const segmentRows = buildSegmentRows(mtg.section_summaries);
+      if (segmentRows.length > 0) {
+        const result = await prisma.meetingSegment.createMany({
+          data: segmentRows.map((row) => ({ ...row, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} segment(s)`);
+      }
+
+      // Insert minutes items (from minutes_timestamps)
+      const minutesItemRows = buildMinutesItemRows(mtg.minutes_timestamps);
+      if (minutesItemRows.length > 0) {
+        const result = await prisma.minutesItem.createMany({
+          data: minutesItemRows.map((row) => ({ ...row, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} minutes item(s)`);
+      }
+
+      // Insert topic summaries
+      const topicRows = buildTopicSummaryRows(mtg.topic_summaries);
+      if (topicRows.length > 0) {
+        const result = await prisma.topicSummary.createMany({
+          data: topicRows.map((row) => ({ ...row, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} topic summary(ies)`);
+      }
+
+      // Insert speaker summaries
+      const speakerRows = buildSpeakerSummaryRows(mtg.speaker_summaries);
+      if (speakerRows.length > 0) {
+        const result = await prisma.speakerSummary.createMany({
+          data: speakerRows.map((row) => ({ ...row, meetingId: meeting.id })),
+        });
+        log(`  ✔ Inserted ${result.count} speaker summary(ies)`);
+      }
 
       // Map and insert transcript lines
       const lines = mapSegments(segments);
@@ -233,14 +713,151 @@ async function main() {
       meetingsImported++;
     }
 
+    // -- Interest Areas --------------------------------------------------------
+
+    const interestAreasBlock = data.interest_areas;
+    const areas = Array.isArray(interestAreasBlock?.areas) ? interestAreasBlock.areas : [];
+
+    let areasImported = 0;
+    let areasSkipped = 0;
+    let totalAreaStatuses = 0;
+
+    if (areas.length > 0) {
+      log("");
+      log(`Found ${areas.length} interest area(s) in export`);
+
+      const generatedAt = interestAreasBlock.generated_at
+        ? new Date(interestAreasBlock.generated_at)
+        : null;
+      const topRunId = interestAreasBlock.run_id ?? null;
+
+      // Build meeting_key -> meetingId map for linking per-meeting statuses
+      const meetingMap = new Map(
+        (await prisma.meeting.findMany({
+          where: { cityId },
+          select: { id: true, slug: true },
+        })).map((m) => [m.slug, m.id]),
+      );
+
+      let importAllAreas = false;
+
+      for (let i = 0; i < areas.length; i++) {
+        const area = areas[i];
+        const num = `[${i + 1}/${areas.length}]`;
+
+        log("");
+        log(`${num} ${area.id} — "${area.name}" (${area.source ?? "?"})`);
+
+        if (!area.id || !area.name) {
+          warn(`Skipping — missing id or name`);
+          areasSkipped++;
+          continue;
+        }
+
+        let shouldImport;
+        if (importAllAreas) {
+          shouldImport = true;
+          log(`  Auto-importing (all)`);
+        } else {
+          const choice = await select({
+            message: `  Import this interest area?`,
+            choices: [
+              { name: "Yes", value: "yes" },
+              { name: "No", value: "no" },
+              { name: "All (yes to this and all remaining areas)", value: "all" },
+            ],
+            default: "yes",
+          });
+
+          if (choice === "no") {
+            warn(`Skipping — user declined`);
+            areasSkipped++;
+            continue;
+          }
+          if (choice === "all") {
+            importAllAreas = true;
+            log(`  → all-mode enabled for remaining interest areas`);
+          }
+          shouldImport = true;
+        }
+
+        if (!shouldImport) continue;
+
+        const areaData = {
+          name: area.name,
+          description: area.description ?? null,
+          source: area.source ?? null,
+          statusSummary: area.status_summary ?? null,
+          meetingsDiscussed:
+            typeof area.meetings_discussed === "number" ? area.meetings_discussed : null,
+          totalMeetings:
+            typeof area.total_meetings === "number" ? area.total_meetings : null,
+          mostRecentActivity: area.most_recent_activity ?? null,
+          generatedAt,
+          runId: topRunId,
+          sortOrder: i,
+        };
+
+        const ia = await prisma.interestArea.upsert({
+          where: { cityId_slug: { cityId, slug: area.id } },
+          create: { cityId, slug: area.id, ...areaData },
+          update: areaData,
+        });
+
+        // Build per-meeting statuses, skipping meetings not present in DB
+        const perMeeting = area.per_meeting ?? {};
+        const statusRows = [];
+        let missingMeetings = 0;
+
+        for (const [meetingKey, status] of Object.entries(perMeeting)) {
+          const meetingId = meetingMap.get(meetingKey);
+          if (!meetingId) {
+            missingMeetings++;
+            continue;
+          }
+          statusRows.push({
+            interestAreaId: ia.id,
+            meetingId,
+            discussed: !!status.discussed,
+            summary: typeof status.summary === "string" && status.summary.trim()
+              ? status.summary.trim()
+              : null,
+            confidence: typeof status.confidence === "number" ? status.confidence : null,
+            runId: status.run_id ?? null,
+          });
+        }
+
+        // Replace existing statuses for this area
+        await prisma.interestAreaMeetingStatus.deleteMany({
+          where: { interestAreaId: ia.id },
+        });
+        if (statusRows.length > 0) {
+          await prisma.interestAreaMeetingStatus.createMany({ data: statusRows });
+        }
+
+        log(
+          `  ✔ Upserted interest area id=${ia.id} (${statusRows.length} meeting status(es)` +
+            (missingMeetings > 0 ? `, ${missingMeetings} skipped: meeting not in DB` : "") +
+            `)`,
+        );
+        areasImported++;
+        totalAreaStatuses += statusRows.length;
+      }
+    }
+
     // -- Summary ---------------------------------------------------------------
 
     log("");
     log("═══════════════════════════════════════════════");
     log(`  Import complete for ${city.name}, ${city.stateName}`);
-    log(`  Meetings imported: ${meetingsImported}`);
-    log(`  Meetings skipped:  ${meetingsSkipped}`);
-    log(`  Transcript lines:  ${totalLinesInserted}`);
+    log(`  Meetings imported:        ${meetingsImported}`);
+    log(`  Meetings skipped:         ${meetingsSkipped}`);
+    log(`  Transcript lines:         ${totalLinesInserted}`);
+    if (areas.length > 0) {
+      log(`  Interest areas imported:  ${areasImported}`);
+      log(`  Interest areas skipped:   ${areasSkipped}`);
+      log(`  Interest-area statuses:   ${totalAreaStatuses}`);
+    }
     log("═══════════════════════════════════════════════");
   } catch (error) {
     // @inquirer/prompts throws ExitPromptError on Ctrl-C

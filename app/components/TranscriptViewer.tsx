@@ -8,6 +8,7 @@ import {
   displayName,
   type GroupedLine,
 } from "@/app/lib/transcript";
+import { applyOffset, type OffsetModel } from "@/app/lib/offset";
 
 /**
  * Client component that renders grouped transcript lines with:
@@ -19,18 +20,31 @@ import {
  */
 export default function TranscriptViewer({
   groupedLines,
-  offsetSeconds = 0,
+  offsetModel = null,
 }: {
   groupedLines: GroupedLine[];
-  offsetSeconds?: number;
+  offsetModel?: OffsetModel | null;
 }) {
   const { currentTime, seekTo } = useVideoSync();
   const router = useRouter();
   const pathname = usePathname();
 
-  const applyOffset = useCallback(
-    (seconds: number) => Math.max(0, seconds + offsetSeconds),
-    [offsetSeconds],
+  // Map a reference (transcript / granicus) timestamp to target (youtube)
+  // time. Returns null when the ref time falls inside an unmapped gap; in
+  // that case callers fall back to the raw ref time (display) or skip the
+  // group (sync logic).
+  const mapToTarget = useCallback(
+    (seconds: number): number | null => {
+      const t = applyOffset(offsetModel, seconds);
+      return t == null ? null : Math.max(0, t);
+    },
+    [offsetModel],
+  );
+
+  // Display fallback: raw seconds when there's no valid mapping.
+  const displayTarget = useCallback(
+    (seconds: number) => mapToTarget(seconds) ?? Math.max(0, seconds),
+    [mapToTarget],
   );
 
   // --- Refs for DOM elements ---
@@ -82,10 +96,14 @@ export default function TranscriptViewer({
     const container = containerRef.current;
     if (!container) return;
 
-    // Find the active group
-    const activeIndex = groupedLines.findIndex(
-      (g) => currentTime >= applyOffset(g.startTime) && currentTime < applyOffset(g.endTime),
-    );
+    // Find the active group. Groups whose start or end falls in a gap are
+    // skipped — we can't reliably place currentTime inside them.
+    const activeIndex = groupedLines.findIndex((g) => {
+      const start = mapToTarget(g.startTime);
+      const end = mapToTarget(g.endTime);
+      if (start == null || end == null) return false;
+      return currentTime >= start && currentTime < end;
+    });
     if (activeIndex === -1) return;
 
     const group = groupedLines[activeIndex];
@@ -93,8 +111,9 @@ export default function TranscriptViewer({
     if (!card) return;
 
     // Proportional progress through this group's time range
-    const start = applyOffset(group.startTime);
-    const end = applyOffset(group.endTime);
+    const start = mapToTarget(group.startTime);
+    const end = mapToTarget(group.endTime);
+    if (start == null || end == null) return;
     const duration = end - start;
     const progress = duration > 0
       ? Math.min(Math.max((currentTime - start) / duration, 0), 1)
@@ -137,7 +156,7 @@ export default function TranscriptViewer({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [currentTime, autoScroll, groupedLines, applyOffset]);
+  }, [currentTime, autoScroll, groupedLines, mapToTarget]);
 
   // When user re-enables auto-scroll, jump immediately
   const handleAutoScrollToggle = useCallback(
@@ -178,10 +197,15 @@ export default function TranscriptViewer({
           </p>
         ) : (
           groupedLines.map((group) => {
-            const adjustedStart = applyOffset(group.startTime);
-            const adjustedEnd = applyOffset(group.endTime);
+            const mappedStart = mapToTarget(group.startTime);
+            const mappedEnd = mapToTarget(group.endTime);
+            const adjustedStart = mappedStart ?? displayTarget(group.startTime);
+            const adjustedEnd = mappedEnd ?? displayTarget(group.endTime);
+            const inGap = mappedStart == null || mappedEnd == null;
             const isActive =
-              currentTime >= adjustedStart && currentTime < adjustedEnd;
+              !inGap &&
+              currentTime >= adjustedStart &&
+              currentTime < adjustedEnd;
 
             return (
               <article
@@ -205,16 +229,25 @@ export default function TranscriptViewer({
                     type="button"
                     onClick={() => handleTimestampClick(adjustedStart)}
                     className="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                    title={`Seek to ${formatTimestamp(adjustedStart)}`}
+                    title={
+                      inGap
+                        ? `Approximate — outside calibrated range (≈ ${formatTimestamp(adjustedStart)})`
+                        : `Seek to ${formatTimestamp(adjustedStart)}`
+                    }
                   >
                     {formatTimestamp(adjustedStart)}
+                    {inGap && <span className="text-gray-400">~</span>}
                   </button>
                   <span> - </span>
                   <button
                     type="button"
                     onClick={() => handleTimestampClick(adjustedEnd)}
                     className="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                    title={`Seek to ${formatTimestamp(adjustedEnd)}`}
+                    title={
+                      inGap
+                        ? `Approximate — outside calibrated range (≈ ${formatTimestamp(adjustedEnd)})`
+                        : `Seek to ${formatTimestamp(adjustedEnd)}`
+                    }
                   >
                     {formatTimestamp(adjustedEnd)}
                   </button>

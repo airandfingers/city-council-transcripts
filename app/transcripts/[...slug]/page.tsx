@@ -11,7 +11,9 @@ import TranscriptViewer from "@/app/components/TranscriptViewer";
 import EditableTitle from "@/app/components/EditableTitle";
 import SegmentsPanel from "@/app/components/SegmentsPanel";
 import SpeakerSummariesPanel from "@/app/components/SpeakerSummariesPanel";
+import AIDisclaimer from "@/app/components/AIDisclaimer";
 import type { GroupedLine } from "@/app/lib/transcript";
+import { resolveOffsetModel } from "@/app/lib/offset";
 
 const SUMMARY_TYPE_LABELS: Record<string, string> = {
   KEY_DECISION: "Key Decisions",
@@ -109,28 +111,34 @@ export default async function TranscriptPage({ params }: Props) {
   for (const item of meeting.summaryItems) {
     if (HIDDEN_SUMMARY_TYPES.has(item.type)) continue;
     const list = topicMap.get(item.type) ?? [];
-    // For action items, show only the start time portion of the timecode
-    let label = item.timecodeLabel;
-    if (item.type === "ACTION_ITEM" && label) {
-      label = label.split(/\s*-\s*/)[0];
-    }
     list.push({
       text: item.text.replace(/\s*\[minutes\]\s*$/i, ""),
-      timecodeLabel: label,
       startTimeSeconds: item.startTimeSeconds,
       speaker: item.speaker,
       position: item.position,
     });
     topicMap.set(item.type, list);
   }
-  const topics: Topic[] = Array.from(topicMap.entries()).map(([type, bullets]) => ({
-    label: SUMMARY_TYPE_LABELS[type] ?? type,
-    bullets,
-  }));
+  const TOPIC_TAB_ORDER = ["KEY_DECISION", "MOTION_AND_VOTE", "PUBLIC_COMMENT", "ACTION_ITEM"];
+  const topics: Topic[] = Array.from(topicMap.entries())
+    .sort(([a], [b]) => {
+      const ai = TOPIC_TAB_ORDER.indexOf(a);
+      const bi = TOPIC_TAB_ORDER.indexOf(b);
+      return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+    })
+    .map(([type, bullets]) => ({
+      label: SUMMARY_TYPE_LABELS[type] ?? type,
+      bullets,
+    }));
 
   const videoId = meeting.youtubeUrl
     ? extractYouTubeId(meeting.youtubeUrl)
     : null;
+
+  const offsetModel = resolveOffsetModel(
+    meeting.youtubeOffsetModel,
+    meeting.youtubeOffsetSeconds,
+  );
 
   return (
     <main className="min-h-screen p-8">
@@ -186,6 +194,8 @@ export default async function TranscriptPage({ params }: Props) {
         )}
       </div>
 
+      <AIDisclaimer variant="inline" className="mb-6" />
+
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
         <section className="p-6 flex flex-col max-h-[360px] min-h-0">
@@ -204,14 +214,14 @@ export default async function TranscriptPage({ params }: Props) {
 
         <section className="p-6 flex flex-col max-h-[360px] min-h-0">
           <div className="min-h-0 flex-1">
-            <TopicsPanel topics={topics} heading="" />
+            <TopicsPanel topics={topics} heading="" offsetModel={offsetModel} />
           </div>
         </section>
       </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Transcript */}
-          <TranscriptViewer groupedLines={groupedLines} />
+          <TranscriptViewer groupedLines={groupedLines} offsetModel={offsetModel} />
 
           {/* Video */}
           {videoId && (
@@ -237,6 +247,7 @@ export default async function TranscriptPage({ params }: Props) {
                           content: (
                             <SegmentsPanel
                               segments={meeting.segments}
+                              offsetModel={offsetModel}
                             />
                           ),
                         },
@@ -261,7 +272,7 @@ export default async function TranscriptPage({ params }: Props) {
         </div>
       </VideoSyncProvider>
 
-
+      <AIDisclaimer />
     </main>
   );
 }

@@ -9,6 +9,29 @@ import type { City, Meeting, TranscriptLine } from "@prisma/client";
 
 export type { City, Meeting, TranscriptLine };
 
+export type InterestAreaMeetingEntry = {
+  meetingId: number;
+  slug: string;
+  title: string;
+  date: Date;
+  summary: string | null;
+  confidence: number | null;
+};
+
+export type InterestAreaWithMeetings = {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  source: string | null;
+  statusSummary: string | null;
+  meetingsDiscussed: number | null;
+  totalMeetings: number | null;
+  mostRecentActivity: string | null;
+  generatedAt: Date | null;
+  meetings: InterestAreaMeetingEntry[];
+};
+
 /**
  * Validates that a string is a valid slug format.
  * Valid slugs contain only lowercase letters, numbers, and hyphens.
@@ -107,6 +130,58 @@ export function getMeetingsForCity(
     },
     orderBy: [{ date: "desc" }, { id: "desc" }],
   });
+}
+
+/**
+ * Returns interest areas for a city, each with the meetings where it was
+ * discussed (sorted most-recent-first).
+ */
+export async function getInterestAreasForCity(
+  stateCode: string,
+  citySlug: string,
+): Promise<InterestAreaWithMeetings[]> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
+    return [];
+  }
+
+  const areas = await prisma.interestArea.findMany({
+    where: {
+      city: { stateCode, slug: citySlug },
+    },
+    include: {
+      meetingStatuses: {
+        where: { discussed: true },
+        include: {
+          meeting: {
+            select: { id: true, slug: true, title: true, date: true },
+          },
+        },
+        orderBy: { meeting: { date: "desc" } },
+      },
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+
+  return areas.map((a) => ({
+    id: a.id,
+    slug: a.slug,
+    name: a.name,
+    description: a.description,
+    source: a.source,
+    statusSummary: a.statusSummary,
+    meetingsDiscussed: a.meetingsDiscussed,
+    totalMeetings: a.totalMeetings,
+    mostRecentActivity: a.mostRecentActivity,
+    generatedAt: a.generatedAt,
+    meetings: a.meetingStatuses.map((s) => ({
+      meetingId: s.meeting.id,
+      slug: s.meeting.slug,
+      title: s.meeting.title,
+      date: s.meeting.date,
+      summary: s.summary,
+      confidence: s.confidence,
+    })),
+  }));
 }
 
 /**

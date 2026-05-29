@@ -1,6 +1,7 @@
 "use client";
 
 import { useVideoSync } from "./VideoSyncProvider";
+import { applyOffset, type OffsetModel } from "@/app/lib/offset";
 
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -15,15 +16,23 @@ export default function TimestampLink({
   seconds,
   label,
   className,
+  offsetModel = null,
 }: {
   seconds: number;
   label?: string;
   className?: string;
+  offsetModel?: OffsetModel | null;
 }) {
   const { seekTo, play } = useVideoSync();
 
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
+  // `seconds` is in reference (transcript / granicus) time; convert to
+  // target (youtube) time before seeking or building the URL.
+  const mapped = applyOffset(offsetModel, seconds);
+  const targetSeconds = mapped == null ? Math.max(0, seconds) : Math.max(0, mapped);
+  const inGap = mapped == null && offsetModel != null;
+
+  const m = Math.floor(targetSeconds / 60);
+  const s = Math.floor(targetSeconds % 60);
   const href = `?t=${m}m${s}s`;
 
   return (
@@ -33,18 +42,17 @@ export default function TimestampLink({
         className ??
         "text-xs text-blue-500 dark:text-blue-400 hover:underline"
       }
+      title={inGap ? "Approximate — outside calibrated range" : undefined}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        seekTo(seconds);
+        seekTo(targetSeconds);
         play();
-        // Update URL without reload
         window.history.replaceState(null, "", href);
-        // Scroll video into view
         document.getElementById("video")?.scrollIntoView({ behavior: "smooth", block: "center" });
       }}
     >
-      {label ?? formatTime(seconds)}
+      {label ?? formatTime(targetSeconds)}
     </a>
   );
 }

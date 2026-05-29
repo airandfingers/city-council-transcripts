@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   getCityByParams,
+  getInterestAreasForCity,
   getMeetingsForCity,
 } from "@/app/lib/cityData";
 import MeetingCard from "@/app/components/MeetingCard";
+import InterestAreaCard from "@/app/components/InterestAreaCard";
+import SubscribeForm from "@/app/components/SubscribeForm";
+import AIDisclaimer from "@/app/components/AIDisclaimer";
 
 export const dynamic = "force-dynamic";
 
@@ -27,15 +31,53 @@ export default async function CityPage({ params }: Props) {
     notFound();
   }
 
-  const meetings = await getMeetingsForCity(state, citySlug);
+  const [meetings, interestAreas] = await Promise.all([
+    getMeetingsForCity(state, citySlug),
+    getInterestAreasForCity(state, citySlug),
+  ]);
 
   return (
     <main className="p-8">
-      <h1 className="text-3xl font-bold mb-4">
-        {cityData.name}, {cityData.stateName}
-      </h1>
+      <div className="flex flex-col md:flex-row md:items-start gap-4 mb-8">
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold mb-4">
+            {cityData.name}, {cityData.stateName}
+          </h1>
+          <p className="text-gray-700 dark:text-gray-300">{cityData.summary}</p>
+        </div>
+        <div className="w-full md:w-72 md:flex-shrink-0">
+          <SubscribeForm
+            kind="CITY_UPDATES"
+            cityId={cityData.id}
+            cityName={cityData.name}
+          />
+        </div>
+      </div>
 
-      <p className="mb-8 text-gray-700 dark:text-gray-300">{cityData.summary}</p>
+      {interestAreas.length > 0 && (
+        <section className="mb-12">
+          <h2 className="text-2xl font-semibold mb-4">Interest Areas</h2>
+          <div className="flex flex-col gap-4">
+            {interestAreas.map((area) => (
+              <InterestAreaCard
+                key={area.id}
+                area={area}
+                cityId={cityData.id}
+              />
+            ))}
+          </div>
+
+          <div className="mt-6">
+            <p className="text-base font-medium mb-2">
+              Want us to track a different topic in {cityData.name}? Request it.
+            </p>
+            <SubscribeForm
+              kind="TOPIC_IN_CITY_COVERAGE_REQUEST"
+              cityId={cityData.id}
+            />
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
@@ -60,6 +102,8 @@ export default async function CityPage({ params }: Props) {
           <a href="/topics/m7b" className="text-blue-600 dark:text-blue-400 hover:underline">M7b · Brief + Action (mobile)</a>
         </div>
       </section>
+
+      <AIDisclaimer />
     </main>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import TimestampLink from "./TimestampLink";
+import type { OffsetModel } from "@/app/lib/offset";
 
 type Segment = {
   id: number;
@@ -24,8 +25,10 @@ const MISC_PATTERN = /off[\s-]?agenda|miscellaneous\s+discussion/i;
 
 export default function SegmentsPanel({
   segments,
+  offsetModel = null,
 }: {
   segments: Segment[];
+  offsetModel?: OffsetModel | null;
 }) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -69,7 +72,7 @@ export default function SegmentsPanel({
                 {seg.itemNumber}
               </span>
               <span className="font-medium flex-1">{seg.title}</span>
-              <TimestampLink seconds={seg.startTime} className="text-xs text-blue-500 dark:text-blue-400 hover:underline shrink-0" />
+              <TimestampLink seconds={seg.startTime} offsetModel={offsetModel} className="text-xs text-blue-500 dark:text-blue-400 hover:underline shrink-0" />
               <span
                 className={`text-xs transition-transform ${open ? "rotate-90" : ""}`}
               >
