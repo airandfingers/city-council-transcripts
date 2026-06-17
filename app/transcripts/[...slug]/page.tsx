@@ -12,18 +12,22 @@ import EditableTitle from "@/app/components/EditableTitle";
 import SegmentsPanel from "@/app/components/SegmentsPanel";
 import SpeakerSummariesPanel from "@/app/components/SpeakerSummariesPanel";
 import type { GroupedLine } from "@/app/lib/transcript";
-
-const SUMMARY_TYPE_LABELS: Record<string, string> = {
-  KEY_DECISION: "Key Decisions",
-  ACTION_ITEM: "Action Items",
-  MOTION_AND_VOTE: "Motions & Votes",
-  PUBLIC_COMMENT: "Public Comments",
-  PUBLIC_COMMENT_SUMMARY: "Public Comment Summary",
-  TIMELINE_BULLET: "Timeline",
-};
+import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT_SUMMARY"]);
+
+/**
+ * Display order for the TLDR tabs — decisions and votes lead because
+ * they're what most visitors actually came for; PoC feedback was to put
+ * "the main takeaway" at the top rather than make people page through.
+ */
+const SUMMARY_TYPE_ORDER = [
+  "KEY_DECISION",
+  "MOTION_AND_VOTE",
+  "ACTION_ITEM",
+  "PUBLIC_COMMENT",
+];
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -123,10 +127,21 @@ export default async function TranscriptPage({ params }: Props) {
     });
     topicMap.set(item.type, list);
   }
-  const topics: Topic[] = Array.from(topicMap.entries()).map(([type, bullets]) => ({
-    label: SUMMARY_TYPE_LABELS[type] ?? type,
-    bullets,
-  }));
+  const topics: Topic[] = Array.from(topicMap.entries())
+    .map(([type, bullets]) => ({
+      type,
+      label: summaryTypeLabel(type),
+      description: summaryTypeDescription(type),
+      bullets,
+    }))
+    .sort((a, b) => {
+      const ai = SUMMARY_TYPE_ORDER.indexOf(a.type);
+      const bi = SUMMARY_TYPE_ORDER.indexOf(b.type);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
 
   const videoId = meeting.youtubeUrl
     ? extractYouTubeId(meeting.youtubeUrl)
@@ -135,9 +150,6 @@ export default async function TranscriptPage({ params }: Props) {
   return (
     <main className="min-h-screen p-8">
       <div className="flex items-center gap-3 mb-8 flex-wrap">
-        {/* Logo placeholder */}
-        <div className="w-9 h-9 bg-gray-200 dark:bg-gray-700 rounded shrink-0" aria-hidden="true" />
-
         {/* City breadcrumb */}
         <Link
           href={`/${meeting.city.stateCode}/${meeting.city.slug}`}
@@ -186,23 +198,19 @@ export default async function TranscriptPage({ params }: Props) {
         )}
       </div>
 
-      {meeting.logline && (
-        <p className="text-lg text-gray-600 dark:text-gray-400 mb-6 -mt-4">
-          {meeting.logline}
-        </p>
-      )}
-
+      {/* TLDR: the main takeaway leads, ahead of the full transcript.
+          PoC feedback: "we always want to put the TLDR at the top." */}
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
         <section className="p-6">
-          <h2 className="text-2xl font-semibold mb-4">Logline</h2>
+          <h2 className="text-2xl font-semibold mb-4">TL;DR</h2>
           {meeting.logline ? (
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
               {meeting.logline}
             </p>
           ) : (
             <p className="text-gray-500 dark:text-gray-400">
-              No logline available for this meeting yet.
+              No summary available for this meeting yet.
             </p>
           )}
         </section>
@@ -213,8 +221,18 @@ export default async function TranscriptPage({ params }: Props) {
       </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Transcript */}
-          <TranscriptViewer groupedLines={groupedLines} />
+          {/* Full transcript: kept as a reference, not the first thing
+              people read. Collapsed by default — "the transcript is
+              good proof of what happened, but no one is going to read
+              the whole thing." */}
+          <details className="lg:col-span-1 group">
+            <summary className="cursor-pointer text-2xl font-semibold mb-4 list-none flex items-center gap-2">
+              <span aria-hidden="true" className="text-base text-gray-400 group-open:rotate-90 transition-transform inline-block">▶</span>
+              Full Transcript
+              <span className="text-sm font-normal text-gray-500 dark:text-gray-400">(reference)</span>
+            </summary>
+            <TranscriptViewer groupedLines={groupedLines} />
+          </details>
 
           {/* Video */}
           {videoId && (
@@ -247,7 +265,9 @@ export default async function TranscriptPage({ params }: Props) {
                 ...(meeting.speakerSummaries.length > 0
                   ? [
                       {
-                        label: "Speakers",
+                        label: "Council Members & Votes",
+                        description:
+                          "Who spoke, what they proposed or voted on, and where they stood on each topic.",
                         content: (
                           <SpeakerSummariesPanel
                             speakers={meeting.speakerSummaries}

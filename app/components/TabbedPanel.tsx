@@ -5,6 +5,9 @@ import { type ReactNode, useState } from "react";
 export type Tab = {
   label: string;
   content: ReactNode;
+  /** Plain-language explanation shown as a tooltip on the tab label,
+   *  for civic terms (e.g. "motion") that aren't self-explanatory. */
+  description?: string;
 };
 
 export default function TabbedPanel({
@@ -28,6 +31,7 @@ export default function TabbedPanel({
           <button
             key={tab.label}
             onClick={() => setActiveTab(index)}
+            title={tab.description}
             className={`cursor-pointer px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
               activeTab === index
                 ? "border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"

@@ -14,7 +14,7 @@
     "db:push:local": "prisma db push --config prisma.config.docker.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
-    "db:import": "node scripts/import-transcription-export.mjs",
+    "db:import": "tsx scripts/import-transcription-export.mjs",
     "db:contract": "node scripts/generate-contract.mjs",
     "test": "npm run test:validate",
     "test:gates": "node scripts/validate/run-gates.mjs --all",

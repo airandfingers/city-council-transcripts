@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
+import SiteHeader from "@/app/components/SiteHeader";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,6 +33,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${newsreader.variable} antialiased`}
       >
+        <SiteHeader />
         {children}
       </body>
     </html>

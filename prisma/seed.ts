@@ -39,7 +39,7 @@ const cities = [
     name: "Monterey Park",
     slug: "monterey-park",
     summary:
-      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+      "Monterey Park's City Council sets local policy on budgets, housing, public safety, and development. Browse recent meetings below for plain-language summaries of what was discussed and decided, with full transcripts and video for anyone who wants to dig deeper.",
   },
   {
     stateCode: "co",
@@ -47,7 +47,7 @@ const cities = [
     name: "Fort Collins",
     slug: "fort-collins",
     summary:
-      "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris. Duis aute irure dolor in reprehenderit in voluptate velit.",
+      "Fort Collins' City Council sets local policy on budgets, housing, public safety, and development. Browse recent meetings below for plain-language summaries of what was discussed and decided, with full transcripts and video for anyone who wants to dig deeper.",
   },
 ] as const;
 
@@ -174,8 +174,8 @@ async function seedTranscriptLines() {
 
 async function main() {
   await seedCities();
-  // await seedMeetings();
-  // await seedTranscriptLines();
+  await seedMeetings();
+  await seedTranscriptLines();
 
   const cityCount = await prisma.city.count();
   const meetingCount = await prisma.meeting.count();

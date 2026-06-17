@@ -4,7 +4,7 @@ import {
   getCityByParams,
   getMeetingsForCity,
 } from "@/app/lib/cityData";
-import MeetingCard from "@/app/components/MeetingCard";
+import MeetingFilter from "@/app/components/MeetingFilter";
 
 export const dynamic = "force-dynamic";
 
@@ -31,19 +31,19 @@ export default async function CityPage({ params }: Props) {
 
   return (
     <main className="p-8">
-      <h1 className="text-3xl font-bold mb-4">
+      <h1 className="text-3xl font-bold mb-1">
         {cityData.name}, {cityData.stateName}
       </h1>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        City Council meetings for {cityData.name} — plain-language summaries
+        plus full transcripts and video.
+      </p>
 
       <p className="mb-8 text-gray-700 dark:text-gray-300">{cityData.summary}</p>
 
       <section>
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
-        <div className="flex flex-col gap-4">
-          {meetings.map((meeting) => (
-            <MeetingCard key={meeting.slug} meeting={meeting} />
-          ))}
-        </div>
+        <MeetingFilter meetings={meetings} />
       </section>
     </main>
   );

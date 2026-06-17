@@ -12,6 +12,8 @@ export type Bullet = {
 export type Topic = {
   label: string;
   bullets: Bullet[];
+  /** Plain-language explanation shown as a tooltip on the tab. */
+  description?: string;
 };
 
 export default function TopicsPanel({
@@ -34,6 +36,7 @@ export default function TopicsPanel({
 
   const tabs = items.map((topic) => ({
     label: topic.label,
+    description: topic.description,
     content: (
       <ul className="list-disc list-inside space-y-2 text-gray-700 dark:text-gray-300">
         {topic.bullets.map((b, i) => (

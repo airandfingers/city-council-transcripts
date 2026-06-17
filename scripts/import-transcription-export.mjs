@@ -24,6 +24,7 @@ import { PrismaClient } from "@prisma/client";
 import { select, input, confirm } from "@inquirer/prompts";
 import { parseMeetingKey } from "./lib/parse-meeting-key.mjs";
 import { mapSegments } from "./lib/map-transcript-segments.mjs";
+import { buildMeetingSlug } from "../app/lib/meetingSlug.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -516,10 +517,17 @@ async function main() {
     for (let i = 0; i < data.meetings.length; i++) {
       const mtg = data.meetings[i];
       const num = `[${i + 1}/${data.meetings.length}]`;
-      const slug = mtg.meeting_key;
+      // meeting_key is the raw source filename (e.g.
+      // "2025-12-17/City_Council__Successor_Agency_1_800s") — it must
+      // never become the public URL slug. PoC feedback: "being
+      // consistent on how [meetings are] named... don't use a
+      // filename, you could use a date." The real slug is built the
+      // same deterministic way as prisma/seed.ts, from city + date +
+      // title, once we know the confirmed meeting date below.
+      const sourceKey = mtg.meeting_key;
 
       log("");
-      log(`${num} ${slug}`);
+      log(`${num} ${sourceKey}`);
 
       // Skip: empty segments or bad transcript_count
       const segments = mtg.transcript_segments ?? [];
@@ -533,15 +541,8 @@ async function main() {
         continue;
       }
 
-      // Skip: duplicate slug
-      if (existingSlugs.has(slug)) {
-        warn(`Skipping — slug already exists in DB`);
-        meetingsSkipped++;
-        continue;
-      }
-
       // Parse date from meeting_key
-      const { date: parsedDate } = parseMeetingKey(slug);
+      const { date: parsedDate } = parseMeetingKey(sourceKey);
       const dateDefault = parsedDate ?? "";
 
       const dateStr = await input({
@@ -552,6 +553,21 @@ async function main() {
       });
 
       const meetingDate = new Date(`${dateStr}T00:00:00.000Z`);
+
+      // Build the public slug deterministically (same scheme as
+      // prisma/seed.ts), not from the raw source filename.
+      const slug = buildMeetingSlug({
+        citySlug: city.slug,
+        date: meetingDate,
+        title: mtg.title,
+      });
+
+      // Skip: duplicate slug (already imported in a previous run)
+      if (existingSlugs.has(slug)) {
+        warn(`Skipping — slug already exists in DB (${slug})`);
+        meetingsSkipped++;
+        continue;
+      }
 
       // Confirm import
       const shouldImport = await confirm({
