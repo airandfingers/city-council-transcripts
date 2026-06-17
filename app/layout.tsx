@@ -16,8 +16,8 @@ const newsreader = Newsreader({
 
 export const metadata: Metadata = {
   title: {
-    template: "OpenCities - %s",
-    default: "OpenCities",
+    template: "Counciloris - %s",
+    default: "Counciloris",
   },
   description:
     "Browse transcripts from city council meetings to stay informed about decisions that affect your community.",

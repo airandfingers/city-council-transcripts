@@ -45,7 +45,7 @@ export default async function Home() {
       <section id="about">
         <h2 className="text-2xl font-semibold mb-4">About</h2>
         <p className="text-gray-600 dark:text-gray-400 max-w-2xl">
-          OpenCities gives you easy access to local government meeting
+          Counciloris gives you easy access to local government meeting
           records, with the real data straight from the source — not
           secondhand coverage. Read a short summary of any meeting, see how
           council members voted, or dig into the full transcript and video
