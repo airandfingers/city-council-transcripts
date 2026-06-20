@@ -21,9 +21,10 @@ import "dotenv/config";
 import { readFile, access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { select, input } from "@inquirer/prompts";
+import { select, input, confirm } from "@inquirer/prompts";
 import { parseMeetingKey } from "./lib/parse-meeting-key.mjs";
 import { mapSegments } from "./lib/map-transcript-segments.mjs";
+import { buildMeetingSlug } from "../app/lib/meetingSlug.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -280,21 +281,21 @@ function buildTopicSummaryRows(topicSummaries) {
     seenIds.add(topicId);
 
     return {
-      topicId,
-      title: t.topic_title ?? "",
-      startTime: Number(t.start_time ?? 0),
-      endTime: Number(t.end_time ?? 0),
-      sortOrder: i,
-      summaryText: t.summary_text || null,
-      keyPoints: nonEmptyJsonArray(t.key_points),
-      speakers: nonEmptyJsonArray(t.speakers),
-      speakerPositions: nonEmptyJsonArray(t.speaker_positions),
-      outcome: t.outcome || null,
-      tags: nonEmptyJsonArray(t.tags),
-      provider: t.provider ?? null,
-      model: t.model ?? null,
-      generatedAt: t.generated_at ? new Date(t.generated_at) : null,
-    };
+    topicId,
+    title: t.topic_title ?? "",
+    startTime: Number(t.start_time ?? 0),
+    endTime: Number(t.end_time ?? 0),
+    sortOrder: i,
+    summaryText: t.summary_text || null,
+    keyPoints: nonEmptyJsonArray(t.key_points),
+    speakers: nonEmptyJsonArray(t.speakers),
+    speakerPositions: nonEmptyJsonArray(t.speaker_positions),
+    outcome: t.outcome || null,
+    tags: nonEmptyJsonArray(t.tags),
+    provider: t.provider ?? null,
+    model: t.model ?? null,
+    generatedAt: t.generated_at ? new Date(t.generated_at) : null,
+  };
   });
 }
 
@@ -318,24 +319,28 @@ function buildSpeakerSummaryRows(speakerSummaries) {
     if (speakerUuid) seenUuids.add(speakerUuid);
 
     return {
-      speakerUuid,
-      speakerName: s.speaker_name ?? "UNKNOWN",
-      segmentCount: s.segment_count ?? null,
-      speakingTime: s.speaking_time_seconds ?? null,
-      sortOrder: i,
-      summaryText: s.summary_text || null,
-      keyQuotes: nonEmptyJsonArray(s.key_quotes),
-      actionsOrMotions: nonEmptyJsonArray(s.actions_or_motions),
-      positionsByTopic: nonEmptyJsonArray(s.positions_by_topic),
-      provider: s.provider ?? null,
-      model: s.model ?? null,
-      generatedAt: s.generated_at ? new Date(s.generated_at) : null,
-    };
+    speakerUuid,
+    speakerName: s.speaker_name ?? "UNKNOWN",
+    segmentCount: s.segment_count ?? null,
+    speakingTime: s.speaking_time_seconds ?? null,
+    sortOrder: i,
+    summaryText: s.summary_text || null,
+    keyQuotes: nonEmptyJsonArray(s.key_quotes),
+    actionsOrMotions: nonEmptyJsonArray(s.actions_or_motions),
+    positionsByTopic: nonEmptyJsonArray(s.positions_by_topic),
+    provider: s.provider ?? null,
+    model: s.model ?? null,
+    generatedAt: s.generated_at ? new Date(s.generated_at) : null,
+  };
   });
 }
 
 /**
  * Build MeetingSegment rows from the export section_summaries object.
+ *
+ * Each section in section_summaries.sections[] becomes a row.
+ * Uses the explicit `skip` flag from v1.4.0 exports, falling back to
+ * time_range comparison for older exports.
  *
  * @param {Record<string, unknown> | null | undefined} sectionSummaries
  * @returns {Array<Record<string, unknown>>}
@@ -344,6 +349,7 @@ function buildSegmentRows(sectionSummaries) {
   const sections = sectionSummaries?.sections;
   if (!Array.isArray(sections)) return [];
 
+  // Track seen itemIds to deduplicate (some exports have duplicate agenda_item_ids)
   const seenIds = new Set();
 
   return sections.map((s, i) => {
@@ -385,6 +391,9 @@ function buildSegmentRows(sectionSummaries) {
 
 /**
  * Build MinutesItem rows from the export minutes_timestamps object.
+ *
+ * Each item in minutes_timestamps.items[] becomes a row.
+ * Uses the same skip logic as segments (start === end means skipped).
  *
  * @param {Record<string, unknown> | null | undefined} minutesTimestamps
  * @returns {Array<Record<string, unknown>>}
@@ -437,8 +446,8 @@ function buildMinutesItemRows(minutesTimestamps) {
  * Locate the raw `source_offsets.youtube` entry inside a meeting record.
  * Handles both flat and nested-under-`metadata` shapes.
  *
- * @param {Record<string, unknown>} mtg
- * @returns {Record<string, unknown> | null}
+ * @param {Record<string, any>} mtg
+ * @returns {Record<string, any> | null}
  */
 function findYoutubeOffsetEntry(mtg) {
   const entry =
@@ -451,7 +460,7 @@ function findYoutubeOffsetEntry(mtg) {
 /**
  * Parse the legacy scalar offset (back-compat fallback).
  *
- * @param {Record<string, unknown>} mtg
+ * @param {Record<string, any>} mtg
  * @returns {number | null}
  */
 function parseYoutubeOffsetScalar(mtg) {
@@ -464,8 +473,8 @@ function parseYoutubeOffsetScalar(mtg) {
  * Parse the piecewise-linear offset model. See OFFSET_CALIBRATION.md §2.
  * Returns null for legacy scalar-only entries or failed calibrations.
  *
- * @param {Record<string, unknown>} mtg
- * @returns {Record<string, unknown> | null}
+ * @param {Record<string, any>} mtg
+ * @returns {Record<string, any> | null}
  */
 function parseYoutubeOffsetModel(mtg) {
   const entry = findYoutubeOffsetEntry(mtg);
@@ -546,76 +555,73 @@ async function main() {
     let meetingsImported = 0;
     let meetingsSkipped = 0;
     let totalLinesInserted = 0;
-    let importAllMeetings = false;
 
     for (let i = 0; i < data.meetings.length; i++) {
       const mtg = data.meetings[i];
       const num = `[${i + 1}/${data.meetings.length}]`;
-      const slug = mtg.meeting_key;
+      // meeting_key is the raw source filename (e.g.
+      // "2025-12-17/City_Council__Successor_Agency_1_800s") — it must
+      // never become the public URL slug. PoC feedback: "being
+      // consistent on how [meetings are] named... don't use a
+      // filename, you could use a date." The real slug is built the
+      // same deterministic way as prisma/seed.ts, from city + date +
+      // title, once we know the confirmed meeting date below.
+      const sourceKey = mtg.meeting_key;
 
       log("");
-      log(`${num} ${slug}`);
+      log(`${num} ${sourceKey}`);
 
-      // Skip: empty segments (transcript_segments is the source of truth;
-      // transcript_count can be stale/desynced in older exports).
+      // Skip: empty segments or bad transcript_count
       const segments = mtg.transcript_segments ?? [];
+      const transcriptCount = mtg.transcript_count ?? 0;
 
-      if (segments.length === 0) {
-        warn(`Skipping — no transcript segments`);
-        meetingsSkipped++;
-        continue;
-      }
-
-      // Skip: duplicate slug
-      if (existingSlugs.has(slug)) {
-        warn(`Skipping — slug already exists in DB`);
+      if (segments.length === 0 || transcriptCount <= 0) {
+        warn(
+          `Skipping — ${segments.length === 0 ? "no transcript segments" : `transcript_count=${transcriptCount}`}`,
+        );
         meetingsSkipped++;
         continue;
       }
 
       // Parse date from meeting_key
-      const { date: parsedDate } = parseMeetingKey(slug);
+      const { date: parsedDate } = parseMeetingKey(sourceKey);
       const dateDefault = parsedDate ?? "";
 
-      let dateStr;
-      if (importAllMeetings) {
-        if (!parsedDate) {
-          warn(`Skipping — cannot parse date from slug in all-mode`);
-          meetingsSkipped++;
-          continue;
-        }
-        dateStr = parsedDate;
-        log(`  Auto-importing (all): ${dateStr}, ${segments.length} segments`);
-      } else {
-        dateStr = await input({
-          message: `  Meeting date (YYYY-MM-DD):`,
-          default: dateDefault,
-          validate: (val) =>
-            /^\d{4}-\d{2}-\d{2}$/.test(val) || "Must be YYYY-MM-DD format",
-        });
-
-        const choice = await select({
-          message: `  Import "${mtg.title}" (${dateStr}, ${segments.length} segments)?`,
-          choices: [
-            { name: "Yes", value: "yes" },
-            { name: "No", value: "no" },
-            { name: "All (yes to this and all remaining meetings)", value: "all" },
-          ],
-          default: "yes",
-        });
-
-        if (choice === "no") {
-          warn(`Skipping — user declined`);
-          meetingsSkipped++;
-          continue;
-        }
-        if (choice === "all") {
-          importAllMeetings = true;
-          log(`  → all-mode enabled for remaining meetings`);
-        }
-      }
+      const dateStr = await input({
+        message: `  Meeting date (YYYY-MM-DD):`,
+        default: dateDefault,
+        validate: (val) =>
+          /^\d{4}-\d{2}-\d{2}$/.test(val) || "Must be YYYY-MM-DD format",
+      });
 
       const meetingDate = new Date(`${dateStr}T00:00:00.000Z`);
+
+      // Build the public slug deterministically (same scheme as
+      // prisma/seed.ts), not from the raw source filename.
+      const slug = buildMeetingSlug({
+        citySlug: city.slug,
+        date: meetingDate,
+        title: mtg.title,
+      });
+
+      // Skip: duplicate slug (already imported in a previous run)
+      if (existingSlugs.has(slug)) {
+        warn(`Skipping — slug already exists in DB (${slug})`);
+        meetingsSkipped++;
+        continue;
+      }
+
+      // Confirm import
+      const shouldImport = await confirm({
+        message: `  Import "${mtg.title}" (${dateStr}, ${segments.length} segments)?`,
+        default: true,
+      });
+
+      if (!shouldImport) {
+        warn(`Skipping — user declined`);
+        meetingsSkipped++;
+        continue;
+      }
 
       // Create meeting
       const meeting = await prisma.meeting.create({
@@ -629,9 +635,9 @@ async function main() {
           logline: mtg.summary?.logline ?? null,
           timelineBullets: nonEmptyJsonArray(mtg.summary?.timeline_bullets),
           youtubeUrl: mtg.youtube_url ?? null,
+          granicusUrl: mtg.granicus_url ?? null,
           youtubeOffsetSeconds: parseYoutubeOffsetScalar(mtg),
           youtubeOffsetModel: parseYoutubeOffsetModel(mtg),
-          granicusUrl: mtg.granicus_url ?? null,
           minutesText: mtg.minutes?.text ?? null,
           minutesUrl: mtg.minutes?.portal_url ?? null,
           minutesGeneratedAt: mtg.minutes_timestamps?.generated_at
@@ -713,151 +719,14 @@ async function main() {
       meetingsImported++;
     }
 
-    // -- Interest Areas --------------------------------------------------------
-
-    const interestAreasBlock = data.interest_areas;
-    const areas = Array.isArray(interestAreasBlock?.areas) ? interestAreasBlock.areas : [];
-
-    let areasImported = 0;
-    let areasSkipped = 0;
-    let totalAreaStatuses = 0;
-
-    if (areas.length > 0) {
-      log("");
-      log(`Found ${areas.length} interest area(s) in export`);
-
-      const generatedAt = interestAreasBlock.generated_at
-        ? new Date(interestAreasBlock.generated_at)
-        : null;
-      const topRunId = interestAreasBlock.run_id ?? null;
-
-      // Build meeting_key -> meetingId map for linking per-meeting statuses
-      const meetingMap = new Map(
-        (await prisma.meeting.findMany({
-          where: { cityId },
-          select: { id: true, slug: true },
-        })).map((m) => [m.slug, m.id]),
-      );
-
-      let importAllAreas = false;
-
-      for (let i = 0; i < areas.length; i++) {
-        const area = areas[i];
-        const num = `[${i + 1}/${areas.length}]`;
-
-        log("");
-        log(`${num} ${area.id} — "${area.name}" (${area.source ?? "?"})`);
-
-        if (!area.id || !area.name) {
-          warn(`Skipping — missing id or name`);
-          areasSkipped++;
-          continue;
-        }
-
-        let shouldImport;
-        if (importAllAreas) {
-          shouldImport = true;
-          log(`  Auto-importing (all)`);
-        } else {
-          const choice = await select({
-            message: `  Import this interest area?`,
-            choices: [
-              { name: "Yes", value: "yes" },
-              { name: "No", value: "no" },
-              { name: "All (yes to this and all remaining areas)", value: "all" },
-            ],
-            default: "yes",
-          });
-
-          if (choice === "no") {
-            warn(`Skipping — user declined`);
-            areasSkipped++;
-            continue;
-          }
-          if (choice === "all") {
-            importAllAreas = true;
-            log(`  → all-mode enabled for remaining interest areas`);
-          }
-          shouldImport = true;
-        }
-
-        if (!shouldImport) continue;
-
-        const areaData = {
-          name: area.name,
-          description: area.description ?? null,
-          source: area.source ?? null,
-          statusSummary: area.status_summary ?? null,
-          meetingsDiscussed:
-            typeof area.meetings_discussed === "number" ? area.meetings_discussed : null,
-          totalMeetings:
-            typeof area.total_meetings === "number" ? area.total_meetings : null,
-          mostRecentActivity: area.most_recent_activity ?? null,
-          generatedAt,
-          runId: topRunId,
-          sortOrder: i,
-        };
-
-        const ia = await prisma.interestArea.upsert({
-          where: { cityId_slug: { cityId, slug: area.id } },
-          create: { cityId, slug: area.id, ...areaData },
-          update: areaData,
-        });
-
-        // Build per-meeting statuses, skipping meetings not present in DB
-        const perMeeting = area.per_meeting ?? {};
-        const statusRows = [];
-        let missingMeetings = 0;
-
-        for (const [meetingKey, status] of Object.entries(perMeeting)) {
-          const meetingId = meetingMap.get(meetingKey);
-          if (!meetingId) {
-            missingMeetings++;
-            continue;
-          }
-          statusRows.push({
-            interestAreaId: ia.id,
-            meetingId,
-            discussed: !!status.discussed,
-            summary: typeof status.summary === "string" && status.summary.trim()
-              ? status.summary.trim()
-              : null,
-            confidence: typeof status.confidence === "number" ? status.confidence : null,
-            runId: status.run_id ?? null,
-          });
-        }
-
-        // Replace existing statuses for this area
-        await prisma.interestAreaMeetingStatus.deleteMany({
-          where: { interestAreaId: ia.id },
-        });
-        if (statusRows.length > 0) {
-          await prisma.interestAreaMeetingStatus.createMany({ data: statusRows });
-        }
-
-        log(
-          `  ✔ Upserted interest area id=${ia.id} (${statusRows.length} meeting status(es)` +
-            (missingMeetings > 0 ? `, ${missingMeetings} skipped: meeting not in DB` : "") +
-            `)`,
-        );
-        areasImported++;
-        totalAreaStatuses += statusRows.length;
-      }
-    }
-
     // -- Summary ---------------------------------------------------------------
 
     log("");
     log("═══════════════════════════════════════════════");
     log(`  Import complete for ${city.name}, ${city.stateName}`);
-    log(`  Meetings imported:        ${meetingsImported}`);
-    log(`  Meetings skipped:         ${meetingsSkipped}`);
-    log(`  Transcript lines:         ${totalLinesInserted}`);
-    if (areas.length > 0) {
-      log(`  Interest areas imported:  ${areasImported}`);
-      log(`  Interest areas skipped:   ${areasSkipped}`);
-      log(`  Interest-area statuses:   ${totalAreaStatuses}`);
-    }
+    log(`  Meetings imported: ${meetingsImported}`);
+    log(`  Meetings skipped:  ${meetingsSkipped}`);
+    log(`  Transcript lines:  ${totalLinesInserted}`);
     log("═══════════════════════════════════════════════");
   } catch (error) {
     // @inquirer/prompts throws ExitPromptError on Ctrl-C

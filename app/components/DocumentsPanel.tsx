@@ -1,4 +1,4 @@
-import TabbedPanel from "./TabbedPanel";
+import TabbedPanel, { type Tab } from "./TabbedPanel";
 
 type DocumentItem = {
   id: number;
@@ -17,9 +17,9 @@ export default function DocumentsPanel({
   minutesText: string | null;
   minutesUrl: string | null;
   documents: DocumentItem[];
-  extraTabs?: { label: string; content: React.ReactNode }[];
+  extraTabs?: Tab[];
 }) {
-  const tabs: { label: string; content: React.ReactNode }[] = [];
+  const tabs: Tab[] = [];
 
   tabs.push({
     label: "Minutes",

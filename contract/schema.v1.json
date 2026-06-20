@@ -1,0 +1,610 @@
+{
+  "contract_version": "1.0",
+  "contract_major": 1,
+  "generated_at": "2026-06-13T01:05:43.203Z",
+  "description": "Publisher contract for city-council-transcripts. External publishers (e.g. city-council-transcriber) must fetch the current contract, project their data onto it (dropping surplus fields), validate, and then write directly to Neon. See CONTRACT.md for versioning rules.",
+  "versioning_summary": "Publishers always target the CURRENT contract (no version pinning). New columns are additive/nullable so older publisher data still writes. Publishers project richer data DOWN to what the current schema supports. A contract_major bump signals a breaking change requiring publisher updates.",
+  "write_order": [
+    "City",
+    "Meeting",
+    "TranscriptLine",
+    "MeetingSummaryItem",
+    "MeetingDocument",
+    "MeetingSegment",
+    "MinutesItem",
+    "TopicSummary",
+    "SpeakerSummary"
+  ],
+  "tables": {
+    "City": {
+      "description": "A municipality. Must exist before meetings can be written.",
+      "upsert_keys": [
+        [
+          "stateCode",
+          "slug"
+        ]
+      ],
+      "columns": {
+        "stateCode": {
+          "type": "string",
+          "required": true
+        },
+        "stateName": {
+          "type": "string",
+          "required": true
+        },
+        "name": {
+          "type": "string",
+          "required": true
+        },
+        "slug": {
+          "type": "string",
+          "required": true
+        },
+        "summary": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    "Meeting": {
+      "description": "A single council meeting session, child of City.",
+      "upsert_keys": [
+        [
+          "slug"
+        ]
+      ],
+      "columns": {
+        "cityId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "slug": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "date": {
+          "type": "datetime",
+          "required": true
+        },
+        "summary": {
+          "type": "string",
+          "required": false
+        },
+        "summaryModel": {
+          "type": "string",
+          "required": false
+        },
+        "logline": {
+          "type": "string",
+          "required": false
+        },
+        "timelineBullets": {
+          "type": "json",
+          "required": false
+        },
+        "youtubeUrl": {
+          "type": "string",
+          "required": false
+        },
+        "granicusUrl": {
+          "type": "string",
+          "required": false
+        },
+        "minutesText": {
+          "type": "string",
+          "required": false
+        },
+        "minutesUrl": {
+          "type": "string",
+          "required": false
+        },
+        "minutesGeneratedAt": {
+          "type": "datetime",
+          "required": false
+        },
+        "minutesTotalItems": {
+          "type": "integer",
+          "required": false
+        },
+        "minutesAlignedCount": {
+          "type": "integer",
+          "required": false
+        }
+      }
+    },
+    "TranscriptLine": {
+      "description": "One timestamped speaker turn in the meeting transcript.",
+      "upsert_keys": [
+        [
+          "meetingId",
+          "lineIndex"
+        ]
+      ],
+      "columns": {
+        "meetingId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "lineIndex": {
+          "type": "integer",
+          "required": true
+        },
+        "startTime": {
+          "type": "float",
+          "required": true
+        },
+        "endTime": {
+          "type": "float",
+          "required": true
+        },
+        "speaker": {
+          "type": "string",
+          "required": true
+        },
+        "speakerName": {
+          "type": "string",
+          "required": false
+        },
+        "text": {
+          "type": "string",
+          "required": true
+        },
+        "confidence": {
+          "type": "float",
+          "required": false,
+          "default": 0
+        },
+        "globalSpeakerUuid": {
+          "type": "string",
+          "required": false
+        }
+      }
+    },
+    "MeetingSummaryItem": {
+      "description": "A typed summary bullet (KEY_DECISION, ACTION_ITEM, etc.).",
+      "upsert_keys": [
+        [
+          "meetingId",
+          "type",
+          "sortOrder"
+        ]
+      ],
+      "columns": {
+        "meetingId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "type": {
+          "type": "string",
+          "required": true
+        },
+        "text": {
+          "type": "string",
+          "required": true
+        },
+        "sortOrder": {
+          "type": "integer",
+          "required": true
+        },
+        "startTimeSeconds": {
+          "type": "float",
+          "required": false
+        },
+        "endTimeSeconds": {
+          "type": "float",
+          "required": false
+        },
+        "timecodeLabel": {
+          "type": "string",
+          "required": false
+        },
+        "segmentIndex": {
+          "type": "integer",
+          "required": false
+        },
+        "segmentIndexEnd": {
+          "type": "integer",
+          "required": false
+        },
+        "linkStatus": {
+          "type": "string",
+          "required": false
+        },
+        "confidence": {
+          "type": "float",
+          "required": false
+        },
+        "speaker": {
+          "type": "string",
+          "required": false
+        },
+        "position": {
+          "type": "string",
+          "required": false
+        },
+        "notes": {
+          "type": "string",
+          "required": false
+        }
+      }
+    },
+    "MeetingDocument": {
+      "description": "An agenda packet doc, staff report, or attachment.",
+      "upsert_keys": [
+        [
+          "meetingId",
+          "url"
+        ]
+      ],
+      "columns": {
+        "meetingId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "url": {
+          "type": "string",
+          "required": true
+        },
+        "documentType": {
+          "type": "string",
+          "required": false
+        },
+        "associatedAgendaItem": {
+          "type": "string",
+          "required": false
+        }
+      }
+    },
+    "MeetingSegment": {
+      "description": "An agenda-item section with AI-generated discussion summary.",
+      "upsert_keys": [
+        [
+          "meetingId",
+          "itemId"
+        ]
+      ],
+      "columns": {
+        "meetingId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "itemId": {
+          "type": "string",
+          "required": true
+        },
+        "itemNumber": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "startTime": {
+          "type": "float",
+          "required": true
+        },
+        "endTime": {
+          "type": "float",
+          "required": true
+        },
+        "durationSeconds": {
+          "type": "float",
+          "required": false
+        },
+        "skip": {
+          "type": "boolean",
+          "required": false,
+          "default": false
+        },
+        "skipReason": {
+          "type": "string",
+          "required": false
+        },
+        "sortOrder": {
+          "type": "integer",
+          "required": true
+        },
+        "discussionSummary": {
+          "type": "string",
+          "required": false
+        },
+        "officialAction": {
+          "type": "string",
+          "required": false
+        },
+        "tags": {
+          "type": "json",
+          "required": false
+        },
+        "speakerPositions": {
+          "type": "json",
+          "required": false
+        },
+        "keyQuotes": {
+          "type": "json",
+          "required": false
+        },
+        "publicComments": {
+          "type": "json",
+          "required": false
+        },
+        "discrepancies": {
+          "type": "json",
+          "required": false
+        },
+        "sourcesUsed": {
+          "type": "json",
+          "required": false
+        },
+        "sourceMinutesAvailable": {
+          "type": "boolean",
+          "required": false
+        },
+        "sourceAgendaAvailable": {
+          "type": "boolean",
+          "required": false
+        },
+        "provider": {
+          "type": "string",
+          "required": false
+        },
+        "model": {
+          "type": "string",
+          "required": false
+        },
+        "generatedAt": {
+          "type": "datetime",
+          "required": false
+        }
+      }
+    },
+    "MinutesItem": {
+      "description": "An official minutes item aligned to a transcript timestamp.",
+      "upsert_keys": [
+        [
+          "meetingId",
+          "itemId"
+        ]
+      ],
+      "columns": {
+        "meetingId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "itemId": {
+          "type": "string",
+          "required": true
+        },
+        "itemNumber": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "startTime": {
+          "type": "float",
+          "required": true
+        },
+        "endTime": {
+          "type": "float",
+          "required": true
+        },
+        "durationSeconds": {
+          "type": "float",
+          "required": false
+        },
+        "skip": {
+          "type": "boolean",
+          "required": false,
+          "default": false
+        },
+        "sortOrder": {
+          "type": "integer",
+          "required": true
+        },
+        "parentItemId": {
+          "type": "string",
+          "required": false
+        },
+        "itemType": {
+          "type": "string",
+          "required": true
+        },
+        "alignmentConfidence": {
+          "type": "string",
+          "required": false
+        },
+        "alignmentMethod": {
+          "type": "string",
+          "required": false
+        },
+        "agendaItemId": {
+          "type": "string",
+          "required": false
+        },
+        "startTimecode": {
+          "type": "string",
+          "required": false
+        },
+        "endTimecode": {
+          "type": "string",
+          "required": false
+        },
+        "textLineStart": {
+          "type": "integer",
+          "required": false
+        },
+        "textLineEnd": {
+          "type": "integer",
+          "required": false
+        },
+        "segmentIndices": {
+          "type": "json",
+          "required": false
+        }
+      }
+    },
+    "TopicSummary": {
+      "description": "An AI-generated topic-level summary with speakers and positions.",
+      "upsert_keys": [
+        [
+          "meetingId",
+          "topicId"
+        ]
+      ],
+      "columns": {
+        "meetingId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "topicId": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "startTime": {
+          "type": "float",
+          "required": true
+        },
+        "endTime": {
+          "type": "float",
+          "required": true
+        },
+        "sortOrder": {
+          "type": "integer",
+          "required": true
+        },
+        "summaryText": {
+          "type": "string",
+          "required": false
+        },
+        "keyPoints": {
+          "type": "json",
+          "required": false
+        },
+        "speakers": {
+          "type": "json",
+          "required": false
+        },
+        "speakerPositions": {
+          "type": "json",
+          "required": false
+        },
+        "outcome": {
+          "type": "string",
+          "required": false
+        },
+        "tags": {
+          "type": "json",
+          "required": false
+        },
+        "provider": {
+          "type": "string",
+          "required": false
+        },
+        "model": {
+          "type": "string",
+          "required": false
+        },
+        "generatedAt": {
+          "type": "datetime",
+          "required": false
+        }
+      }
+    },
+    "SpeakerSummary": {
+      "description": "An AI-generated per-speaker rollup of the meeting.",
+      "upsert_keys": [
+        [
+          "meetingId",
+          "speakerUuid"
+        ]
+      ],
+      "columns": {
+        "meetingId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "speakerUuid": {
+          "type": "string",
+          "required": false
+        },
+        "speakerName": {
+          "type": "string",
+          "required": true
+        },
+        "segmentCount": {
+          "type": "integer",
+          "required": false
+        },
+        "speakingTime": {
+          "type": "float",
+          "required": false
+        },
+        "sortOrder": {
+          "type": "integer",
+          "required": true
+        },
+        "summaryText": {
+          "type": "string",
+          "required": false
+        },
+        "keyQuotes": {
+          "type": "json",
+          "required": false
+        },
+        "actionsOrMotions": {
+          "type": "json",
+          "required": false
+        },
+        "positionsByTopic": {
+          "type": "json",
+          "required": false
+        },
+        "provider": {
+          "type": "string",
+          "required": false
+        },
+        "model": {
+          "type": "string",
+          "required": false
+        },
+        "generatedAt": {
+          "type": "datetime",
+          "required": false
+        }
+      }
+    }
+  }
+}
