@@ -1,6 +1,7 @@
 import prisma from "@/app/lib/prisma";
 import { unsubscribe } from "@/app/actions/unsubscribe";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
+import RequestManageLinkForm from "@/app/components/RequestManageLinkForm";
 
 type Search = Promise<{ token?: string }>;
 
@@ -17,9 +18,10 @@ export default async function SubscriptionsPage({
     return (
       <main className="mx-auto max-w-xl p-8">
         <h1 className="text-2xl font-semibold">Manage subscriptions</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="mt-2 mb-6 text-sm text-gray-600">
           This page requires the access link from one of your subscription emails.
         </p>
+        <RequestManageLinkForm />
       </main>
     );
   }
@@ -33,9 +35,10 @@ export default async function SubscriptionsPage({
     return (
       <main className="mx-auto max-w-xl p-8">
         <h1 className="text-2xl font-semibold">Link not recognized</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="mt-2 mb-6 text-sm text-gray-600">
           This management link is invalid or expired.
         </p>
+        <RequestManageLinkForm />
       </main>
     );
   }
