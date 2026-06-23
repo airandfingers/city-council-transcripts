@@ -35,6 +35,11 @@ if (selected.length === 0) {
 }
 
 for (const gate of selected) {
+  if (gate?.deprecated) {
+    console.log(`\n[gates] SKIP ${gate.id}: deprecated`);
+    continue;
+  }
+
   if (!gate?.command || typeof gate.command !== 'string') {
     console.error(`[gates] Invalid gate command for id=${gate?.id ?? 'unknown'}`);
     process.exit(2);

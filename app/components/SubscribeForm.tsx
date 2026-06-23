@@ -3,43 +3,28 @@
 import { useState, useTransition } from "react";
 import { subscribe, type SubscribeInputType } from "@/app/actions/subscribe";
 
-export type SubscribeFormProps =
-  | {
-      kind: "SITE_UPDATES";
-      ctaLabel?: string;
-      className?: string;
-      compact?: boolean;
-    }
-  | {
-      kind: "CITY_COVERAGE_REQUEST";
-      ctaLabel?: string;
-      className?: string;
-      compact?: boolean;
-    }
-  | {
-      kind: "CITY_UPDATES";
-      cityId: number;
-      cityName: string;
-      ctaLabel?: string;
-      className?: string;
-      compact?: boolean;
-    }
-  | {
-      kind: "TOPIC_IN_CITY_UPDATES";
-      cityId: number;
-      interestAreaId: number;
-      topicName: string;
-      ctaLabel?: string;
-      className?: string;
-      compact?: boolean;
-    }
-  | {
-      kind: "TOPIC_IN_CITY_COVERAGE_REQUEST";
-      cityId: number;
-      ctaLabel?: string;
-      className?: string;
-      compact?: boolean;
-    };
+type SubscribeFormCommon = {
+  ctaLabel?: string;
+  className?: string;
+  compact?: boolean;
+  /** Drop the card chrome (border/background/padding) so the form can be
+   *  embedded inside another container. */
+  bare?: boolean;
+};
+
+export type SubscribeFormProps = SubscribeFormCommon &
+  (
+    | { kind: "SITE_UPDATES" }
+    | { kind: "CITY_COVERAGE_REQUEST" }
+    | { kind: "CITY_UPDATES"; cityId: number; cityName: string }
+    | {
+        kind: "TOPIC_IN_CITY_UPDATES";
+        cityId: number;
+        interestAreaId: number;
+        topicName: string;
+      }
+    | { kind: "TOPIC_IN_CITY_COVERAGE_REQUEST"; cityId: number }
+  );
 
 type Status = "idle" | "submitting" | "success" | "error";
 
@@ -56,7 +41,7 @@ function defaultCta(kind: SubscribeFormProps["kind"]): string {
 function defaultPrompt(props: SubscribeFormProps): string {
   switch (props.kind) {
     case "SITE_UPDATES":
-      return "Get general site updates by email.";
+      return "Get Counciloris updates by email.";
     case "CITY_UPDATES":
       return `Get updates about ${props.cityName}.`;
     case "TOPIC_IN_CITY_UPDATES":
@@ -135,7 +120,9 @@ export default function SubscribeForm(props: SubscribeFormProps) {
     });
   };
 
-  const baseClasses = "rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900";
+  const baseClasses = props.bare
+    ? ""
+    : "rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900";
   const className = `${baseClasses} ${props.className ?? ""}`.trim();
 
   if (status === "success") {
