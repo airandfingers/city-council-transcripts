@@ -32,7 +32,21 @@ export default function TabbedPanel({
       {heading && (
         <h2 className="text-2xl font-semibold mb-4">{heading}</h2>
       )}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4 overflow-x-auto shrink-0">
+      {/* Small screens: a dropdown avoids horizontal tab scrolling. */}
+      <select
+        className="md:hidden w-full mb-4 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200"
+        value={activeTab}
+        onChange={(e) => setActiveTab(Number(e.target.value))}
+        aria-label={heading || "Select tab"}
+      >
+        {tabs.map((tab, index) => (
+          <option key={tab.label} value={index}>
+            {tab.label}
+          </option>
+        ))}
+      </select>
+      {/* Larger screens: the standard tab row. */}
+      <div className="hidden md:flex border-b border-gray-200 dark:border-gray-700 mb-4 overflow-x-auto shrink-0">
         {tabs.map((tab, index) => (
           <button
             key={tab.label}

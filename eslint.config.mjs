@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Python virtual environment (contains Playwright driver with JS files):
     ".venv/**",
+    // Claude Code working dir (worktrees contain separate project checkouts):
+    ".claude/**",
   ]),
 ]);
 

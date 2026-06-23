@@ -70,9 +70,9 @@ export default function TopicsPanel({
     <TabbedPanel
       tabs={tabs}
       heading={heading}
-      className="h-full min-h-0 flex flex-col"
-      contentClassName="flex-1 min-h-0"
-      panelClassName="h-full min-h-0 overflow-y-auto pr-1"
+      // Fixed-height, scrollable content on desktop so the TL;DR stays compact;
+      // natural height on mobile where vertical space is cheaper.
+      contentClassName="md:h-[220px] md:overflow-y-auto pr-1"
     />
   );
 }
