@@ -15,52 +15,65 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-[800px]">
-        <h1 className="text-3xl font-bold mb-6">City Council Transcripts</h1>
-
-        <section className="mb-10">
-          <SubscribeForm kind="SITE_UPDATES" />
-        </section>
-
-        <section className="mb-12">
-          <h2 className="text-2xl font-semibold mb-4">City Directory</h2>
-          <div className="flex flex-col gap-4">
-            {cities.map((city) => (
-              <div
-                key={`${city.stateCode}-${city.slug}`}
-                className="flex flex-col md:flex-row gap-4 items-stretch"
-              >
-                <CityCard city={city} className="flex-1" />
-                <div className="w-full md:w-72 md:flex-shrink-0">
-                  <SubscribeForm
-                    kind="CITY_UPDATES"
-                    cityId={city.id}
-                    cityName={city.name}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6">
-            <p className="text-base font-medium mb-2">
-              Don&apos;t see your city? Request that we tackle it next!
-            </p>
-            <SubscribeForm kind="CITY_COVERAGE_REQUEST" />
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">About</h2>
+      {/* Hero + site-updates form. On desktop they share a row, with the
+          form's top padding aligning its text to the hero paragraph; on
+          mobile the form stacks below the hero. Addresses PoC feedback that
+          the homepage "felt flat" with "no call to action." */}
+      <section className="mb-12 flex flex-col gap-6 md:flex-row md:items-start md:gap-10">
+        <div className="max-w-2xl">
+          <h1 className="text-3xl font-bold mb-3">
+            See what your city council actually decided
+          </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            City Council Transcripts provides easy access to local government
-            meeting records. Browse transcripts from city council meetings to stay
-            informed about decisions that affect your community.
+            Plain-language summaries of local government meetings — what was
+            discussed, what was decided, and how each council member voted.
+            No jargon, no digging through hours of video. Pick a city below to
+            get started.
           </p>
-        </section>
+        </div>
+        <div className="w-full md:w-80 md:shrink-0 md:ml-auto">
+          <SubscribeForm kind="SITE_UPDATES" />
+        </div>
+      </section>
 
-        <AIDisclaimer />
-      </div>
+      {/* City directory: equal-width cards in a grid. The "request a city"
+          form sits in the grid as just another card. */}
+      <section className="mb-12">
+        <h2 className="text-2xl font-semibold mb-4">Choose a city</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {cities.map((city) => (
+            <CityCard
+              key={`${city.stateCode}-${city.slug}`}
+              city={city}
+            />
+          ))}
+
+          {/* Request coverage for a city we don't have yet */}
+          <div className="flex flex-col h-full rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <h3 className="text-xl font-medium mb-2">Don&apos;t see your city?</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Request that we tackle it next!
+            </p>
+            <div className="mt-auto">
+              <SubscribeForm kind="CITY_COVERAGE_REQUEST" bare />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* About Section */}
+      <section id="about">
+        <h2 className="text-2xl font-semibold mb-4">About</h2>
+        <p className="text-gray-600 dark:text-gray-400 max-w-2xl">
+          Counciloris gives you easy access to local government meeting
+          records, with the real data straight from the source — not
+          secondhand coverage. Read a short summary of any meeting, see how
+          council members voted, or dig into the full transcript and video
+          for proof of exactly what was said.
+        </p>
+      </section>
+
+      <AIDisclaimer />
     </main>
   );
 }

@@ -1,4 +1,4 @@
-import TabbedPanel from "./TabbedPanel";
+import TabbedPanel, { type Tab } from "./TabbedPanel";
 
 type DocumentItem = {
   id: number;
@@ -17,9 +17,44 @@ export default function DocumentsPanel({
   minutesText: string | null;
   minutesUrl: string | null;
   documents: DocumentItem[];
-  extraTabs?: { label: string; content: React.ReactNode }[];
+  extraTabs?: Tab[];
 }) {
-  const tabs: { label: string; content: React.ReactNode }[] = [];
+  const tabs: Tab[] = [];
+
+  tabs.push({
+    label: "Documents",
+    content:
+      documents.length > 0 ? (
+        <ul className="space-y-3">
+          {documents.map((doc) => (
+            <li key={doc.id}>
+              <a
+                href={doc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+              >
+                {doc.title} ↗
+              </a>
+              {doc.documentType && (
+                <span className="ml-2 inline-block text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                  {doc.documentType}
+                </span>
+              )}
+              {doc.associatedAgendaItem && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  {doc.associatedAgendaItem}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-gray-500 dark:text-gray-400">
+          No documents are available for this meeting yet.
+        </p>
+      ),
+  });
 
   tabs.push({
     label: "Minutes",
@@ -57,41 +92,6 @@ export default function DocumentsPanel({
         )}
       </p>
     ),
-  });
-
-  tabs.push({
-    label: "Documents",
-    content:
-      documents.length > 0 ? (
-        <ul className="space-y-3">
-          {documents.map((doc) => (
-            <li key={doc.id}>
-              <a
-                href={doc.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-              >
-                {doc.title} ↗
-              </a>
-              {doc.documentType && (
-                <span className="ml-2 inline-block text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                  {doc.documentType}
-                </span>
-              )}
-              {doc.associatedAgendaItem && (
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  {doc.associatedAgendaItem}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-gray-500 dark:text-gray-400">
-          No documents are available for this meeting yet.
-        </p>
-      ),
   });
 
   if (extraTabs) {

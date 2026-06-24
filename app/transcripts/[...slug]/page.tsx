@@ -13,19 +13,23 @@ import SegmentsPanel from "@/app/components/SegmentsPanel";
 import SpeakerSummariesPanel from "@/app/components/SpeakerSummariesPanel";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import type { GroupedLine } from "@/app/lib/transcript";
+import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
-
-const SUMMARY_TYPE_LABELS: Record<string, string> = {
-  KEY_DECISION: "Key Decisions",
-  ACTION_ITEM: "Action Items",
-  MOTION_AND_VOTE: "Motions & Votes",
-  PUBLIC_COMMENT: "Public Comments",
-  PUBLIC_COMMENT_SUMMARY: "Public Comment Summary",
-  TIMELINE_BULLET: "Timeline",
-};
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT_SUMMARY"]);
+
+/**
+ * Display order for the TLDR tabs — decisions and votes lead because
+ * they're what most visitors actually came for; PoC feedback was to put
+ * "the main takeaway" at the top rather than make people page through.
+ */
+const SUMMARY_TYPE_ORDER = [
+  "KEY_DECISION",
+  "MOTION_AND_VOTE",
+  "ACTION_ITEM",
+  "PUBLIC_COMMENT",
+];
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -111,30 +115,42 @@ export default async function TranscriptPage({ params }: Props) {
   for (const item of meeting.summaryItems) {
     if (HIDDEN_SUMMARY_TYPES.has(item.type)) continue;
     const list = topicMap.get(item.type) ?? [];
+    // For action items, show only the start time portion of the timecode
+    let label = item.timecodeLabel;
+    if (item.type === "ACTION_ITEM" && label) {
+      label = label.split(/\s*-\s*/)[0];
+    }
     list.push({
       text: item.text.replace(/\s*\[minutes\]\s*$/i, ""),
+      timecodeLabel: label,
       startTimeSeconds: item.startTimeSeconds,
       speaker: item.speaker,
       position: item.position,
     });
     topicMap.set(item.type, list);
   }
-  const TOPIC_TAB_ORDER = ["KEY_DECISION", "MOTION_AND_VOTE", "PUBLIC_COMMENT", "ACTION_ITEM"];
   const topics: Topic[] = Array.from(topicMap.entries())
-    .sort(([a], [b]) => {
-      const ai = TOPIC_TAB_ORDER.indexOf(a);
-      const bi = TOPIC_TAB_ORDER.indexOf(b);
-      return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
-    })
     .map(([type, bullets]) => ({
-      label: SUMMARY_TYPE_LABELS[type] ?? type,
+      type,
+      label: summaryTypeLabel(type),
+      description: summaryTypeDescription(type),
       bullets,
-    }));
+    }))
+    .sort((a, b) => {
+      const ai = SUMMARY_TYPE_ORDER.indexOf(a.type);
+      const bi = SUMMARY_TYPE_ORDER.indexOf(b.type);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
 
   const videoId = meeting.youtubeUrl
     ? extractYouTubeId(meeting.youtubeUrl)
     : null;
 
+  // Maps transcript/reference timestamps onto the YouTube recording so the
+  // timestamp links seek to the right spot in the video.
   const offsetModel = resolveOffsetModel(
     meeting.youtubeOffsetModel,
     meeting.youtubeOffsetSeconds,
@@ -143,9 +159,6 @@ export default async function TranscriptPage({ params }: Props) {
   return (
     <main className="min-h-screen p-8">
       <div className="flex items-center gap-3 mb-8 flex-wrap">
-        {/* Logo placeholder */}
-        <div className="w-9 h-9 bg-gray-200 dark:bg-gray-700 rounded shrink-0" aria-hidden="true" />
-
         {/* City breadcrumb */}
         <Link
           href={`/${meeting.city.stateCode}/${meeting.city.slug}`}
@@ -194,83 +207,139 @@ export default async function TranscriptPage({ params }: Props) {
         )}
       </div>
 
-      <AIDisclaimer variant="inline" className="mb-6" />
-
+      {/* TLDR: the main takeaway leads, ahead of the full transcript.
+          PoC feedback: "we always want to put the TLDR at the top." */}
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-        <section className="p-6 flex flex-col max-h-[360px] min-h-0">
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            {meeting.logline ? (
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                {meeting.logline}
-              </p>
-            ) : (
-              <p className="text-gray-500 dark:text-gray-400">
-                No logline available for this meeting yet.
-              </p>
-            )}
-          </div>
+        <section className="p-6">
+          <h2 className="text-2xl font-semibold mb-4">TL;DR</h2>
+          {meeting.logline ? (
+            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+              {meeting.logline}
+            </p>
+          ) : (
+            <p className="text-gray-500 dark:text-gray-400">
+              No summary available for this meeting yet.
+            </p>
+          )}
         </section>
 
-        <section className="p-6 flex flex-col max-h-[360px] min-h-0">
-          <div className="min-h-0 flex-1">
-            <TopicsPanel topics={topics} heading="" offsetModel={offsetModel} />
-          </div>
+        <section className="p-6">
+          <TopicsPanel topics={topics} heading="" offsetModel={offsetModel} />
         </section>
       </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Transcript */}
-          <TranscriptViewer groupedLines={groupedLines} offsetModel={offsetModel} />
+          {/* Full transcript: kept as a reference, not the first thing
+              people read. Collapsed by default — "the transcript is
+              good proof of what happened, but no one is going to read
+              the whole thing." */}
+          <details className="lg:col-span-1 group">
+            <summary className="cursor-pointer font-display text-2xl font-semibold mb-4 list-none flex items-center gap-2">
+              <span aria-hidden="true" className="text-base text-gray-400 group-open:rotate-90 transition-transform inline-block">▶</span>
+              Transcript
+            </summary>
+            <TranscriptViewer groupedLines={groupedLines} offsetModel={offsetModel} />
+          </details>
 
           {/* Video */}
           {videoId && (
-            <section className="order-1 lg:order-2 lg:col-span-1 min-w-0">
+            <section className="lg:col-span-1 min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
               <YouTubePlayer videoId={videoId} />
             </section>
           )}
 
           {/* Minutes & Documents */}
-          <section className="order-3 lg:col-span-1 flex flex-col max-h-[750px] min-h-0">
+          <section className="lg:col-span-1">
             <h2 className="text-2xl font-semibold mb-4">Reference</h2>
-            <div className="min-h-0 flex-1">
-              <DocumentsPanel
-                minutesText={meeting.minutesText}
-                minutesUrl={meeting.minutesUrl}
-                documents={meeting.documents}
-                extraTabs={[
-                  ...(meeting.segments.length > 0
-                    ? [
-                        {
-                          label: "Agenda",
-                          content: (
-                            <SegmentsPanel
-                              segments={meeting.segments}
-                              offsetModel={offsetModel}
-                            />
-                          ),
-                        },
-                      ]
-                    : []),
-                  ...(meeting.speakerSummaries.length > 0
-                    ? [
-                        {
-                          label: "Speakers",
-                          content: (
-                            <SpeakerSummariesPanel
-                              speakers={meeting.speakerSummaries}
-                            />
-                          ),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </div>
+            <DocumentsPanel
+              minutesText={meeting.minutesText}
+              minutesUrl={meeting.minutesUrl}
+              documents={meeting.documents}
+              extraTabs={[
+                ...(meeting.segments.length > 0
+                  ? [
+                      {
+                        label: "Agenda",
+                        content: (
+                          <SegmentsPanel
+                            segments={meeting.segments}
+                            offsetModel={offsetModel}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+                ...(meeting.speakerSummaries.length > 0
+                  ? [
+                      {
+                        label: "Council Members & Votes",
+                        description:
+                          "Who spoke, what they proposed or voted on, and where they stood on each topic.",
+                        content: (
+                          <SpeakerSummariesPanel
+                            speakers={meeting.speakerSummaries}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </section>
         </div>
       </VideoSyncProvider>
+
+      {/* Topic Summaries */}
+      {meeting.topicSummaries.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-2xl font-semibold mb-4">Topic Summaries</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {meeting.topicSummaries.map((topic) => {
+              const keyPoints = Array.isArray(topic.keyPoints)
+                ? (topic.keyPoints as string[])
+                : [];
+              const speakerList = Array.isArray(topic.speakers)
+                ? (topic.speakers as (string | { name: string })[])
+                : [];
+              const speakerNames = speakerList.map((s) =>
+                typeof s === "string" ? s : s.name,
+              );
+              return (
+                <div
+                  key={topic.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                >
+                  <h3 className="font-semibold mb-2">{topic.title}</h3>
+                  {topic.summaryText && (
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                      {topic.summaryText}
+                    </p>
+                  )}
+                  {keyPoints.length > 0 && (
+                    <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-2">
+                      {keyPoints.map((kp, i) => (
+                        <li key={i}>{kp}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {topic.outcome && (
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                      Outcome: {topic.outcome}
+                    </p>
+                  )}
+                  {speakerNames.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Speakers: {speakerNames.join(", ")}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <AIDisclaimer />
     </main>

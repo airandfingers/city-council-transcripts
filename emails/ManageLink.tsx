@@ -10,23 +10,24 @@ import {
 } from "@react-email/components";
 
 type Props = {
-  confirmUrl: string;
-  description: string;
   manageUrl: string;
 };
 
-export function ConfirmSubscription({ confirmUrl, description, manageUrl }: Props) {
+export function ManageLink({ manageUrl }: Props) {
   return (
     <Html>
       <Head />
-      <Preview>Confirm your subscription to City Council Transcripts</Preview>
+      <Preview>Your subscription management link</Preview>
       <Body style={{ fontFamily: "system-ui, sans-serif", backgroundColor: "#f6f6f6", padding: "24px" }}>
         <Container style={{ backgroundColor: "#ffffff", padding: "32px", borderRadius: "8px", maxWidth: "560px" }}>
-          <Heading style={{ fontSize: "20px", marginTop: 0 }}>Confirm your subscription</Heading>
-          <Text>You requested: {description}</Text>
-          <Text>Click the button below to confirm. If you didn&apos;t request this, you can ignore this email.</Text>
+          <Heading style={{ fontSize: "20px", marginTop: 0 }}>Manage your subscriptions</Heading>
+          <Text>
+            You requested a link to manage your subscriptions to City Council
+            Transcripts. Click the button below to view and update your
+            preferences.
+          </Text>
           <Button
-            href={confirmUrl}
+            href={manageUrl}
             style={{
               backgroundColor: "#111827",
               color: "#ffffff",
@@ -36,16 +37,13 @@ export function ConfirmSubscription({ confirmUrl, description, manageUrl }: Prop
               display: "inline-block",
             }}
           >
-            Confirm subscription
+            Manage subscriptions
           </Button>
           <Text style={{ fontSize: "12px", color: "#6b7280", marginTop: "24px" }}>
-            Or paste this link into your browser: {confirmUrl}
+            Or paste this link into your browser: {manageUrl}
           </Text>
-          <Text style={{ fontSize: "12px", color: "#6b7280", marginTop: "24px" }}>
-            Manage all your subscriptions:{" "}
-            <a href={manageUrl} style={{ color: "#6b7280" }}>
-              {manageUrl}
-            </a>
+          <Text style={{ fontSize: "12px", color: "#6b7280" }}>
+            If you didn&apos;t request this, you can ignore this email.
           </Text>
         </Container>
       </Body>
@@ -53,4 +51,4 @@ export function ConfirmSubscription({ confirmUrl, description, manageUrl }: Prop
   );
 }
 
-export default ConfirmSubscription;
+export default ManageLink;

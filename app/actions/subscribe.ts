@@ -197,11 +197,12 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
   });
 
   let confirmToken: string;
+  let unsubscribeToken: string;
   let status: "PENDING" | "ACTIVE" | "UNSUBSCRIBED";
 
   if (!existing) {
     confirmToken = generateToken();
-    const unsubscribeToken = generateToken();
+    unsubscribeToken = generateToken();
     await prisma.subscription.create({
       data: {
         subscriberId: subscriber.id,
@@ -218,7 +219,7 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
     status = "PENDING";
   } else if (existing.status === "UNSUBSCRIBED") {
     confirmToken = generateToken();
-    const unsubscribeToken = generateToken();
+    unsubscribeToken = generateToken();
     await prisma.subscription.update({
       where: { id: existing.id },
       data: {
@@ -232,6 +233,7 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
     status = "PENDING";
   } else {
     confirmToken = existing.confirmToken;
+    unsubscribeToken = existing.unsubscribeToken;
     status = existing.status as "PENDING" | "ACTIVE";
   }
 
@@ -240,6 +242,7 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
       await sendConfirmationEmail({
         to: data.email,
         confirmToken,
+        unsubscribeToken,
         description: describeKind(
           data.kind,
           cityName,

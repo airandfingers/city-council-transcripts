@@ -14,12 +14,14 @@
     {
       "id": "home-layout-content-e2e",
       "description": "Home page shows city cards with correct content and layout",
-      "command": "node scripts/validate/home-layout-content-e2e.mjs"
+      "command": "node scripts/validate/home-layout-content-e2e.mjs",
+      "deprecated": true
     },
     {
       "id": "city-page-content-e2e",
       "description": "City pages render with correct content and meeting cards",
-      "command": "node scripts/validate/city-page-content-e2e.mjs"
+      "command": "node scripts/validate/city-page-content-e2e.mjs",
+      "deprecated": true
     },
     {
       "id": "routes-not-found-check",

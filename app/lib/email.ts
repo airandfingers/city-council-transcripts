@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { ConfirmSubscription } from "@/emails/ConfirmSubscription";
+import { ManageLink } from "@/emails/ManageLink";
 
 let _resend: Resend | null = null;
 
@@ -23,22 +24,47 @@ function getSiteUrl(): string {
   return url.replace(/\/$/, "");
 }
 
+export function buildManageUrl(unsubscribeToken: string): string {
+  return `${getSiteUrl()}/subscriptions?token=${encodeURIComponent(unsubscribeToken)}`;
+}
+
 export type ConfirmEmailParams = {
   to: string;
   confirmToken: string;
   description: string;
+  unsubscribeToken: string;
 };
 
 export async function sendConfirmationEmail({
   to,
   confirmToken,
   description,
+  unsubscribeToken,
 }: ConfirmEmailParams) {
   const confirmUrl = `${getSiteUrl()}/confirm/${encodeURIComponent(confirmToken)}`;
+  const manageUrl = buildManageUrl(unsubscribeToken);
   await getResend().emails.send({
     from: getFromAddress(),
     to,
     subject: "Confirm your subscription",
-    react: ConfirmSubscription({ confirmUrl, description }),
+    react: ConfirmSubscription({ confirmUrl, description, manageUrl }),
+  });
+}
+
+export type ManageLinkEmailParams = {
+  to: string;
+  unsubscribeToken: string;
+};
+
+export async function sendManageLinkEmail({
+  to,
+  unsubscribeToken,
+}: ManageLinkEmailParams) {
+  const manageUrl = buildManageUrl(unsubscribeToken);
+  await getResend().emails.send({
+    from: getFromAddress(),
+    to,
+    subject: "Manage your subscriptions",
+    react: ManageLink({ manageUrl }),
   });
 }

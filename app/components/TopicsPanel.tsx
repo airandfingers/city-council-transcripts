@@ -13,6 +13,8 @@ export type Bullet = {
 export type Topic = {
   label: string;
   bullets: Bullet[];
+  /** Plain-language explanation shown as a tooltip on the tab. */
+  description?: string;
 };
 
 export default function TopicsPanel({
@@ -37,6 +39,7 @@ export default function TopicsPanel({
 
   const tabs = items.map((topic) => ({
     label: topic.label,
+    description: topic.description,
     content: (
       <ul className="list-disc list-inside space-y-2 text-gray-700 dark:text-gray-300">
         {topic.bullets.map((b, i) => (
@@ -67,9 +70,9 @@ export default function TopicsPanel({
     <TabbedPanel
       tabs={tabs}
       heading={heading}
-      className="h-full min-h-0 flex flex-col"
-      contentClassName="flex-1 min-h-0"
-      panelClassName="h-full min-h-0 overflow-y-auto pr-1"
+      // Fixed-height, scrollable content on desktop so the TL;DR stays compact;
+      // natural height on mobile where vertical space is cheaper.
+      contentClassName="md:h-[220px] md:overflow-y-auto pr-1"
     />
   );
 }
