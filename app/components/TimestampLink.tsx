@@ -17,11 +17,17 @@ export default function TimestampLink({
   label,
   className,
   offsetModel = null,
+  scrollTargetId = "video",
+  openDetailsId,
 }: {
   seconds: number;
   label?: string;
   className?: string;
   offsetModel?: OffsetModel | null;
+  /** Element id to scroll into view after seeking (defaults to the video player). */
+  scrollTargetId?: string;
+  /** If set, opens this `<details>` element (e.g. the collapsed transcript) before scrolling to it. */
+  openDetailsId?: string;
 }) {
   const { seekTo, play } = useVideoSync();
 
@@ -49,7 +55,11 @@ export default function TimestampLink({
         seekTo(targetSeconds);
         play();
         window.history.replaceState(null, "", href);
-        document.getElementById("video")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (openDetailsId) {
+          const details = document.getElementById(openDetailsId);
+          if (details instanceof HTMLDetailsElement) details.open = true;
+        }
+        document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
       }}
     >
       {label ?? formatTime(targetSeconds)}
