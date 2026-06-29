@@ -39,6 +39,8 @@ model Meeting {
   youtubeOffsetSeconds Float?
   youtubeOffsetModel   Json?
   granicusUrl          String?                     @db.VarChar(500)
+  videoUrl             String?                     @db.VarChar(1000)
+  videoProvider        String?                     @db.VarChar(50)
   minutesText          String?                     @db.Text
   minutesUrl           String?                     @db.VarChar(500)
   minutesGeneratedAt   DateTime?

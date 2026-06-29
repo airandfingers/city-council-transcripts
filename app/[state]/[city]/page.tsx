@@ -41,7 +41,7 @@ export default async function CityPage({ params }: Props) {
         plus full transcripts and video.
       </p>
 
-      <p className="mb-8 text-gray-700 dark:text-gray-300">{cityData.summary}</p>
+      <p className="mb-8 text-gray-700 dark:text-gray-300 max-w-prose">{cityData.summary}</p>
 
       <div className="mb-10 max-w-md">
         <SubscribeForm

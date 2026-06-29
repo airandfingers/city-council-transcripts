@@ -6,7 +6,7 @@ import TopicsPanel from "@/app/components/TopicsPanel";
 import type { Topic, Bullet } from "@/app/components/TopicsPanel";
 import DocumentsPanel from "@/app/components/DocumentsPanel";
 import VideoSyncProvider from "@/app/components/VideoSyncProvider";
-import YouTubePlayer from "@/app/components/YouTubePlayer";
+import VideoPlayer from "@/app/components/VideoPlayer";
 import TranscriptViewer from "@/app/components/TranscriptViewer";
 import EditableTitle from "@/app/components/EditableTitle";
 import SegmentsPanel from "@/app/components/SegmentsPanel";
@@ -37,16 +37,6 @@ const SUMMARY_TYPE_ORDER = [
   "ACTION_ITEM",
   "PUBLIC_COMMENT",
 ];
-
-function extractYouTubeId(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname === "youtu.be") return parsed.pathname.slice(1);
-    return parsed.searchParams.get("v");
-  } catch {
-    return null;
-  }
-}
 
 export const dynamic = "force-dynamic";
 
@@ -159,12 +149,18 @@ export default async function TranscriptPage({ params }: Props) {
     (item) => item.type === "TIMELINE_BULLET",
   );
 
-  const videoId = meeting.youtubeUrl
-    ? extractYouTubeId(meeting.youtubeUrl)
-    : null;
+  // Prefer the generic videoUrl/videoProvider fields; fall back to the
+  // legacy youtubeUrl/granicusUrl fields for older records not yet re-exported.
+  const videoUrl = meeting.videoUrl
+    ?? meeting.youtubeUrl
+    ?? meeting.granicusUrl
+    ?? null;
+  const videoProvider = meeting.videoProvider
+    ?? (meeting.youtubeUrl ? "youtube" : null)
+    ?? (meeting.granicusUrl ? "granicus" : null)
+    ?? null;
 
-  // Maps transcript/reference timestamps onto the YouTube recording so the
-  // timestamp links seek to the right spot in the video.
+  // Timestamp-seeking offset model — only meaningful for YouTube right now.
   const offsetModel = resolveOffsetModel(
     meeting.youtubeOffsetModel,
     meeting.youtubeOffsetSeconds,
@@ -189,29 +185,14 @@ export default async function TranscriptPage({ params }: Props) {
         {/* Push external links to the right */}
         <div className="flex-1" />
 
-        {meeting.youtubeUrl && (
+        {videoUrl && (
           <a
-            href={meeting.youtubeUrl}
+            href={videoUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 whitespace-nowrap"
           >
-            YouTube
-            <img
-              src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAQElEQVR42qXKwQkAIAxDUUdxtO6/RBQkQZvSi8I/pL4BoGw/XPkh4XigPmsUgh0626AjRsgxHTkUThsG2T/sIlzdTsp52kSS1wAAAABJRU5ErkJggg=="
-              alt=""
-              className="inline w-2.5 h-2.5 dark:invert"
-            />
-          </a>
-        )}
-        {meeting.granicusUrl && (
-          <a
-            href={meeting.granicusUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 whitespace-nowrap"
-          >
-            Granicus
+            Video
             <img
               src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAQElEQVR42qXKwQkAIAxDUUdxtO6/RBQkQZvSi8I/pL4BoGw/XPkh4XigPmsUgh0626AjRsgxHTkUThsG2T/sIlzdTsp52kSS1wAAAABJRU5ErkJggg=="
               alt=""
@@ -228,7 +209,7 @@ export default async function TranscriptPage({ params }: Props) {
         <section className="p-6">
           <h2 className="text-2xl font-semibold mb-4">TL;DR</h2>
           {meeting.logline ? (
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+            <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
               {meeting.logline}
             </p>
           ) : (
@@ -254,7 +235,7 @@ export default async function TranscriptPage({ params }: Props) {
         {meeting.summary || timelineBullets.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {meeting.summary && (
-              <div className="lg:col-span-2 space-y-3 text-gray-700 dark:text-gray-300">
+              <div className="lg:col-span-2 space-y-3 text-gray-700 dark:text-gray-300 max-w-prose">
                 {meeting.summary.split(/\n\n+/).map((para, i) => (
                   <p key={i}>{para}</p>
                 ))}
@@ -379,10 +360,10 @@ export default async function TranscriptPage({ params }: Props) {
           </details>
 
           {/* Video */}
-          {videoId && (
+          {videoUrl && videoProvider && (
             <section className="lg:col-span-1 min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
-              <YouTubePlayer videoId={videoId} />
+              <VideoPlayer videoUrl={videoUrl} videoProvider={videoProvider} />
             </section>
           )}
 
