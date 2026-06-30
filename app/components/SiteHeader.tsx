@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 /**
  * Persistent global navigation header.
@@ -11,7 +12,14 @@ export default function SiteHeader() {
   return (
     <header className="border-b border-gray-200 dark:border-gray-800">
       <div className="flex items-center gap-6 px-8 py-4">
-        <Link href="/" className="font-display font-semibold text-lg tracking-tight">
+        <Link href="/" className="flex items-center gap-2 font-display font-semibold text-lg tracking-tight">
+          <Image
+            src="/loris-city-skyline.png"
+            alt="Counciloris logo"
+            width={120}
+            height={120}
+            className="rounded-full w-20 h-20 md:w-30 md:h-30"
+          />
           Counciloris
         </Link>
         <nav className="flex items-center gap-4 text-sm">

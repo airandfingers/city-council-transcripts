@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { getCities } from "@/app/lib/cityData";
 import CityCard from "@/app/components/CityCard";
 import SubscribeForm from "@/app/components/SubscribeForm";
@@ -63,7 +64,16 @@ export default async function Home() {
 
       {/* About Section */}
       <section id="about">
-        <h2 className="text-2xl font-semibold mb-4">About</h2>
+        <div className="flex items-center gap-4 mb-4">
+          <h2 className="text-2xl font-semibold">About</h2>
+          <Image
+            src="/loris-notes.png"
+            alt="Loris taking notes"
+            width={168}
+            height={168}
+            className="rounded-full w-28 h-28 md:w-42 md:h-42"
+          />
+        </div>
         <p className="text-gray-600 dark:text-gray-400 max-w-2xl">
           Counciloris gives you easy access to local government meeting
           records, with the real data straight from the source — not
