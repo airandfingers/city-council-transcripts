@@ -52,12 +52,13 @@ export async function sendConfirmationEmail({
 }: ConfirmEmailParams) {
   const confirmUrl = `${getSiteUrl()}/confirm/${encodeURIComponent(confirmToken)}`;
   const manageUrl = buildManageUrl(unsubscribeToken);
-  await getResend().emails.send({
+  const { error: e1 } = await getResend().emails.send({
     from: getFromAddress(),
     to,
     subject: "Confirm your subscription",
     react: ConfirmSubscription({ confirmUrl, description, manageUrl }),
   });
+  if (e1) throw new Error(`Resend error: ${e1.message} (${e1.name})`);
 }
 
 export type MeetingPublishedEmailParams = {
@@ -84,7 +85,7 @@ export async function sendMeetingPublishedEmail({
   isAdmin = false,
 }: MeetingPublishedEmailParams) {
   const subject = `Counciloris - ${meetingTitle}${isAdmin ? " (ADMIN)" : ""}`;
-  await getResend().emails.send({
+  const { data, error } = await getResend().emails.send({
     from: getFromAddress(),
     to,
     subject,
@@ -97,6 +98,8 @@ export async function sendMeetingPublishedEmail({
       manageUrl,
     }),
   });
+  if (error) throw new Error(`Resend error: ${error.message} (${error.name})`);
+  console.log(`[email] sent to ${to}, Resend id=${data?.id}`);
 }
 
 export type ManageLinkEmailParams = {
@@ -109,10 +112,11 @@ export async function sendManageLinkEmail({
   unsubscribeToken,
 }: ManageLinkEmailParams) {
   const manageUrl = buildManageUrl(unsubscribeToken);
-  await getResend().emails.send({
+  const { error: e2 } = await getResend().emails.send({
     from: getFromAddress(),
     to,
     subject: "Manage your subscriptions",
     react: ManageLink({ manageUrl }),
   });
+  if (e2) throw new Error(`Resend error: ${e2.message} (${e2.name})`);
 }

@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -26,52 +26,55 @@ model City {
 }
 
 model Meeting {
-  id           Int                  @id @default(autoincrement())
-  cityId       Int
-  slug         String               @unique @db.VarChar(500)
-  title        String               @db.VarChar(500)
-  date         DateTime
-  summary                 String?              @db.Text
-  summaryModel             String?              @db.VarChar(200)
-  logline                  String?              @db.Text
-  timelineBullets          Json?
-  youtubeUrl               String?              @db.VarChar(500)
-  youtubeOffsetSeconds     Float?
-  youtubeOffsetModel       Json?
-  granicusUrl              String?              @db.VarChar(500)
-  minutesText              String?              @db.Text
-  minutesUrl               String?              @db.VarChar(500)
-  minutesGeneratedAt       DateTime?
-  minutesTotalItems        Int?
-  minutesAlignedCount      Int?
-  createdAt                DateTime             @default(now())
-  updatedAt                DateTime             @updatedAt
-  city                     City                 @relation(fields: [cityId], references: [id], onDelete: Cascade)
-  lines                    TranscriptLine[]
-  summaryItems             MeetingSummaryItem[]
-  documents                MeetingDocument[]
-  segments                 MeetingSegment[]
-  minutesItems             MinutesItem[]
-  topicSummaries           TopicSummary[]
-  speakerSummaries         SpeakerSummary[]
-  interestAreaStatuses     InterestAreaMeetingStatus[]
+  id                   Int                         @id @default(autoincrement())
+  cityId               Int
+  slug                 String                      @unique @db.VarChar(500)
+  title                String                      @db.VarChar(500)
+  date                 DateTime
+  summary              String?                     @db.Text
+  summaryModel         String?                     @db.VarChar(200)
+  logline              String?                     @db.Text
+  timelineBullets      Json?
+  youtubeUrl           String?                     @db.VarChar(500)
+  youtubeOffsetSeconds Float?
+  youtubeOffsetModel   Json?
+  granicusUrl          String?                     @db.VarChar(500)
+  videoUrl             String?                     @db.VarChar(1000)
+  videoProvider        String?                     @db.VarChar(50)
+  minutesText          String?                     @db.Text
+  minutesUrl           String?                     @db.VarChar(500)
+  minutesGeneratedAt   DateTime?
+  minutesTotalItems    Int?
+  minutesAlignedCount  Int?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  city                 City                        @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  lines                TranscriptLine[]
+  summaryItems         MeetingSummaryItem[]
+  documents            MeetingDocument[]
+  segments             MeetingSegment[]
+  minutesItems         MinutesItem[]
+  topicSummaries       TopicSummary[]
+  speakerSummaries     SpeakerSummary[]
+  interestAreaStatuses InterestAreaMeetingStatus[]
+  alerts               Alert[]
 
   @@index([cityId])
   @@index([date])
 }
 
 model TranscriptLine {
-  id                Int      @id @default(autoincrement())
+  id                Int     @id @default(autoincrement())
   meetingId         Int
   lineIndex         Int
   startTime         Float
   endTime           Float
-  speaker           String   @db.VarChar(200)
-  speakerName       String?  @db.VarChar(200)
-  text              String   @db.Text
-  confidence        Float    @default(0.0)
-  globalSpeakerUuid String?  @db.VarChar(36)
-  meeting           Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  speaker           String  @db.VarChar(200)
+  speakerName       String? @db.VarChar(200)
+  text              String  @db.Text
+  confidence        Float   @default(0.0)
+  globalSpeakerUuid String? @db.VarChar(36)
+  meeting           Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, lineIndex])
   @@index([meetingId])
@@ -145,27 +148,27 @@ model MeetingSegment {
 }
 
 model MinutesItem {
-  id                  Int      @id @default(autoincrement())
+  id                  Int     @id @default(autoincrement())
   meetingId           Int
-  itemId              String   @db.VarChar(100)
-  itemNumber          String   @db.VarChar(50)
-  title               String   @db.VarChar(500)
+  itemId              String  @db.VarChar(100)
+  itemNumber          String  @db.VarChar(50)
+  title               String  @db.VarChar(500)
   startTime           Float
   endTime             Float
   durationSeconds     Float?
-  skip                Boolean  @default(false)
+  skip                Boolean @default(false)
   sortOrder           Int
-  parentItemId        String?  @db.VarChar(100)
-  itemType            String   @db.VarChar(50)
-  alignmentConfidence String?  @db.VarChar(20)
-  alignmentMethod     String?  @db.VarChar(100)
-  agendaItemId        String?  @db.VarChar(50)
-  startTimecode       String?  @db.VarChar(20)
-  endTimecode         String?  @db.VarChar(20)
+  parentItemId        String? @db.VarChar(100)
+  itemType            String  @db.VarChar(50)
+  alignmentConfidence String? @db.VarChar(20)
+  alignmentMethod     String? @db.VarChar(100)
+  agendaItemId        String? @db.VarChar(50)
+  startTimecode       String? @db.VarChar(20)
+  endTimecode         String? @db.VarChar(20)
   textLineStart       Int?
   textLineEnd         Int?
   segmentIndices      Json?
-  meeting             Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  meeting             Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, itemId])
   @@index([meetingId])
@@ -195,21 +198,21 @@ model TopicSummary {
 }
 
 model SpeakerSummary {
-  id                Int       @id @default(autoincrement())
-  meetingId         Int
-  speakerUuid       String?   @db.VarChar(36)
-  speakerName       String    @db.VarChar(200)
-  segmentCount      Int?
-  speakingTime      Float?
-  sortOrder         Int
-  summaryText       String?   @db.Text
-  keyQuotes         Json?
-  actionsOrMotions  Json?
-  positionsByTopic  Json?
-  provider          String?   @db.VarChar(100)
-  model             String?   @db.VarChar(200)
-  generatedAt       DateTime?
-  meeting           Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  id               Int       @id @default(autoincrement())
+  meetingId        Int
+  speakerUuid      String?   @db.VarChar(36)
+  speakerName      String    @db.VarChar(200)
+  segmentCount     Int?
+  speakingTime     Float?
+  sortOrder        Int
+  summaryText      String?   @db.Text
+  keyQuotes        Json?
+  actionsOrMotions Json?
+  positionsByTopic Json?
+  provider         String?   @db.VarChar(100)
+  model            String?   @db.VarChar(200)
+  generatedAt      DateTime?
+  meeting          Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, speakerUuid])
   @@index([meetingId])
@@ -234,6 +237,7 @@ model InterestArea {
   city               City                        @relation(fields: [cityId], references: [id], onDelete: Cascade)
   meetingStatuses    InterestAreaMeetingStatus[]
   subscriptions      Subscription[]
+  alerts             Alert[]
 
   @@unique([cityId, slug])
   @@index([cityId])
@@ -298,4 +302,35 @@ model Subscription {
 
   @@unique([subscriberId, kind, cityId, requestedCityName, interestAreaId, requestedTopicName])
   @@index([kind, cityId, interestAreaId, status])
+}
+
+enum AlertType {
+  MEETING_UPDATED
+  INTEREST_AREA_UPDATED
+}
+
+enum AlertStatus {
+  DRAFTED
+  SENT_TO_ADMINS
+  PUBLISHED
+}
+
+model Alert {
+  id             Int           @id @default(autoincrement())
+  type           AlertType
+  meetingId      Int?
+  meeting        Meeting?      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  interestAreaId Int?
+  interestArea   InterestArea? @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
+  status         AlertStatus   @default(DRAFTED)
+  content        Json
+  sentToAdminsAt DateTime?
+  publishedAt    DateTime?
+  publishedBy    String?       @db.VarChar(320)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([type, status])
+  @@index([meetingId])
+  @@index([interestAreaId])
 }

@@ -124,7 +124,7 @@ export async function getCityUpdateRecipients(
   return Array.from(byEmail.values());
 }
 
-const PublishBody = z.object({
+export const PublishBody = z.object({
   meeting_id: z.number().int().positive(),
 });
 
@@ -133,7 +133,7 @@ const PublishBody = z.object({
  * The secret lives in PUBLISH_API_KEY; if it isn't configured the request
  * is rejected so the endpoints are never accidentally left open.
  */
-function isAuthorized(req: Request): boolean {
+export function isAuthorized(req: Request): boolean {
   const expected = process.env.PUBLISH_API_KEY;
   if (!expected) return false;
   const header = req.headers.get("authorization") ?? "";

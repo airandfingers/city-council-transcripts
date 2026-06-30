@@ -1,4 +1,6 @@
-import { handlePublishRequest } from "@/app/lib/publish";
+import { NextResponse } from "next/server";
+import { isAuthorized, PublishBody } from "@/app/lib/publish";
+import { createMeetingUpdateAlert, sendAlertToAdmins } from "@/app/lib/alerts";
 
 /**
  * POST /api/publish-to-admins
@@ -6,10 +8,45 @@ import { handlePublishRequest } from "@/app/lib/publish";
  * Body: { "meeting_id": <number> }
  * Auth: Authorization: Bearer <PUBLISH_API_KEY>
  *
- * Notifies admin subscribers (Subscriber.isAdmin = true) that a meeting has
- * been added, with a TL;DR, Key Decisions, and a link to the Counciloris
- * page. Subject is tagged "(ADMIN)". Intended as a pre-publish review step.
+ * Stage 1 of the alert pipeline (see app/lib/alerts.ts): drafts an Alert
+ * for the meeting and emails it to admin subscribers (Subscriber.isAdmin
+ * = true) for review, tagged "(ADMIN)". The admin's manual "send to
+ * subscribers" trigger (stage 2) happens later via
+ * publishAlertToSubscribers(), e.g. from the /admin/alerts page.
  */
 export async function POST(req: Request) {
-  return handlePublishRequest(req, "admins");
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const parsed = PublishBody.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "meeting_id (positive integer) is required" },
+      { status: 400 },
+    );
+  }
+
+  let alert;
+  try {
+    alert = await createMeetingUpdateAlert(parsed.data.meeting_id);
+  } catch {
+    return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+  }
+
+  const result = await sendAlertToAdmins(alert.id);
+
+  return NextResponse.json({
+    ok: true,
+    alertId: alert.id,
+    meetingId: parsed.data.meeting_id,
+    ...result,
+  });
 }

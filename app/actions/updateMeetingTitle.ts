@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/app/lib/prisma";
+import { createMeetingUpdateAlert, sendAlertToAdmins } from "@/app/lib/alerts";
 
 /**
  * Update a meeting's title by its numeric ID.
@@ -29,6 +30,13 @@ export async function updateMeetingTitle(
     where: { id: meetingId },
     data: { title: trimmed },
   });
+
+  try {
+    const alert = await createMeetingUpdateAlert(updated.id);
+    await sendAlertToAdmins(alert.id);
+  } catch (err) {
+    console.error(`Failed to draft/send alert for meeting ${updated.id}`, err);
+  }
 
   return { title: updated.title };
 }

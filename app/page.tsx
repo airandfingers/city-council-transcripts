@@ -71,6 +71,15 @@ export default async function Home() {
           council members voted, or dig into the full transcript and video
           for proof of exactly what was said.
         </p>
+        <h3 className="text-lg font-semibold mt-6 mb-2">Our AI strategy</h3>
+        <p className="text-gray-600 dark:text-gray-400 max-w-2xl">
+          We try to keep this project&apos;s planetary footprint small. Our
+          repeatable processes — transcription, summarization, and the rest
+          of the data pipeline — run on a MacBook Air, from a room powered by
+          solar panels at our house. We do use cloud LLMs for building and
+          maintaining the code itself. We&apos;re still early on this and
+          would love to keep improving our sustainability practice over time.
+        </p>
       </section>
 
       <AIDisclaimer />
