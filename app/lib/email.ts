@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { ConfirmSubscription } from "@/emails/ConfirmSubscription";
 import { ManageLink } from "@/emails/ManageLink";
+import { MeetingPublished } from "@/emails/MeetingPublished";
 
 let _resend: Resend | null = null;
 
@@ -28,6 +29,14 @@ export function buildManageUrl(unsubscribeToken: string): string {
   return `${getSiteUrl()}/subscriptions?token=${encodeURIComponent(unsubscribeToken)}`;
 }
 
+export function buildMeetingUrl(slug: string): string {
+  const path = slug
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+  return `${getSiteUrl()}/transcripts/${path}`;
+}
+
 export type ConfirmEmailParams = {
   to: string;
   confirmToken: string;
@@ -48,6 +57,45 @@ export async function sendConfirmationEmail({
     to,
     subject: "Confirm your subscription",
     react: ConfirmSubscription({ confirmUrl, description, manageUrl }),
+  });
+}
+
+export type MeetingPublishedEmailParams = {
+  to: string;
+  meetingTitle: string;
+  cityName: string;
+  tldr: string | null;
+  keyDecisions: string[];
+  meetingUrl: string;
+  /** Manage/unsubscribe link; omit for admin notifications. */
+  manageUrl?: string;
+  /** When true, the subject is tagged "(ADMIN)". */
+  isAdmin?: boolean;
+};
+
+export async function sendMeetingPublishedEmail({
+  to,
+  meetingTitle,
+  cityName,
+  tldr,
+  keyDecisions,
+  meetingUrl,
+  manageUrl,
+  isAdmin = false,
+}: MeetingPublishedEmailParams) {
+  const subject = `Counciloris - ${meetingTitle}${isAdmin ? " (ADMIN)" : ""}`;
+  await getResend().emails.send({
+    from: getFromAddress(),
+    to,
+    subject,
+    react: MeetingPublished({
+      meetingTitle,
+      cityName,
+      tldr,
+      keyDecisions,
+      meetingUrl,
+      manageUrl,
+    }),
   });
 }
 
