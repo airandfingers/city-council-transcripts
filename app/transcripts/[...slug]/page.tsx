@@ -353,8 +353,7 @@ export default async function TranscriptPage({ params }: Props) {
           <details id="full-transcript" className="lg:col-span-1 group">
             <summary className="cursor-pointer text-2xl font-semibold mb-4 list-none flex items-center gap-2">
               <span aria-hidden="true" className="text-base text-gray-400 group-open:rotate-90 transition-transform inline-block">▶</span>
-              Full Transcript
-              <span className="text-sm font-normal text-gray-500 dark:text-gray-400">(reference)</span>
+              Transcript
             </summary>
             <TranscriptViewer groupedLines={groupedLines} offsetModel={offsetModel} />
           </details>

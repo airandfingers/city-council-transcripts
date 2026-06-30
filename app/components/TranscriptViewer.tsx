@@ -175,10 +175,9 @@ export default function TranscriptViewer({
   // ---------------------------------------------------------------
   return (
     <section className="order-2 lg:order-1 lg:col-span-1 flex flex-col max-h-[750px] min-h-0">
-      {/* Header row: title + auto-scroll toggle */}
-      <div className="flex items-end justify-between mb-4 shrink-0">
-        <h2 className="text-2xl font-semibold">Transcript</h2>
-        <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 select-none">
+      {/* Auto-scroll toggle, left-aligned above the transcript content. */}
+      <div className="mb-4 shrink-0">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 select-none">
           <input
             type="checkbox"
             checked={autoScroll}
