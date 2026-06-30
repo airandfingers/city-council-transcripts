@@ -51,6 +51,40 @@ function fatal(message) {
 }
 
 /**
+ * Best-effort call to /api/publish-to-admins so newly-imported meetings
+ * draft an alert and notify admins for review (see app/lib/alerts.ts).
+ * Runs out-of-process, so it hits the HTTP endpoint instead of importing
+ * the Next.js lib tree directly. Requires NEXT_PUBLIC_SITE_URL and
+ * PUBLISH_API_KEY; silently no-ops if either is unset (e.g. local imports
+ * against a DB with no app server running).
+ *
+ * @param {number} meetingId
+ */
+async function notifyAdminsOfNewMeeting(meetingId) {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  const apiKey = process.env.PUBLISH_API_KEY;
+  if (!baseUrl || !apiKey) return;
+
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/publish-to-admins`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ meeting_id: meetingId }),
+    });
+    if (!res.ok) {
+      warn(`  Admin alert request failed (${res.status}) for meeting ${meetingId}`);
+    } else {
+      log(`  ✔ Admin alert drafted and sent for meeting ${meetingId}`);
+    }
+  } catch (err) {
+    warn(`  Admin alert request errored for meeting ${meetingId}: ${err.message}`);
+  }
+}
+
+/**
  * Insert TranscriptLine rows in batches to avoid memory pressure on large
  * transcripts.
  *
@@ -717,6 +751,13 @@ async function main() {
       }
 
       meetingsImported++;
+
+      // Draft + send the admin-review alert for this meeting (stage 1 of
+      // the alert pipeline in app/lib/alerts.ts). Runs out-of-process from
+      // the Next.js app, so it goes through the HTTP endpoint rather than
+      // importing app/lib/alerts.ts directly. Best-effort: a failure here
+      // shouldn't fail the import.
+      await notifyAdminsOfNewMeeting(meeting.id);
     }
 
     // -- Summary ---------------------------------------------------------------
