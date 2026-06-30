@@ -69,8 +69,8 @@ export default async function Home() {
           <Image
             src="/loris-notes.png"
             alt="Loris taking notes"
-            width={56}
-            height={56}
+            width={112}
+            height={112}
             className="rounded-full"
           />
         </div>
