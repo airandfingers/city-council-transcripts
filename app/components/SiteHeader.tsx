@@ -16,9 +16,9 @@ export default function SiteHeader() {
           <Image
             src="/loris-city-skyline.png"
             alt="Counciloris logo"
-            width={80}
-            height={80}
-            className="rounded-full"
+            width={120}
+            height={120}
+            className="rounded-full w-20 h-20 md:w-30 md:h-30"
           />
           Counciloris
         </Link>
