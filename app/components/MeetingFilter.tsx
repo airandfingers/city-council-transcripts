@@ -37,7 +37,7 @@ export default function MeetingFilter({ meetings }: { meetings: Meeting[] }) {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-3 mb-6 max-w-3xl">
         <input
           type="search"
           value={query}
@@ -62,7 +62,7 @@ export default function MeetingFilter({ meetings }: { meetings: Meeting[] }) {
           No meetings match &ldquo;{query}&rdquo;.
         </p>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 max-w-3xl">
           {filtered.map((meeting) => (
             <MeetingCard key={meeting.slug} meeting={meeting} />
           ))}

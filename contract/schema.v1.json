@@ -97,6 +97,14 @@
           "type": "string",
           "required": false
         },
+        "videoUrl": {
+          "type": "string",
+          "required": false
+        },
+        "videoProvider": {
+          "type": "string",
+          "required": false
+        },
         "minutesText": {
           "type": "string",
           "required": false
