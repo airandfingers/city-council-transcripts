@@ -185,6 +185,64 @@ export async function getInterestAreasForCity(
 }
 
 /**
+ * Returns a single interest area by slug, with full meeting history.
+ * Returns null if not found or inputs are invalid.
+ */
+export async function getInterestArea(
+  stateCode: string,
+  citySlug: string,
+  areaSlug: string,
+): Promise<InterestAreaWithMeetings | null> {
+  if (
+    !isValidStateCode(stateCode) ||
+    !isValidSlug(citySlug) ||
+    !isValidSlug(areaSlug)
+  ) {
+    return null;
+  }
+
+  const area = await prisma.interestArea.findFirst({
+    where: {
+      slug: areaSlug,
+      city: { stateCode, slug: citySlug },
+    },
+    include: {
+      meetingStatuses: {
+        include: {
+          meeting: {
+            select: { id: true, slug: true, title: true, date: true },
+          },
+        },
+        orderBy: { meeting: { date: "desc" } },
+      },
+    },
+  });
+
+  if (!area) return null;
+
+  return {
+    id: area.id,
+    slug: area.slug,
+    name: area.name,
+    description: area.description,
+    source: area.source,
+    statusSummary: area.statusSummary,
+    meetingsDiscussed: area.meetingsDiscussed,
+    totalMeetings: area.totalMeetings,
+    mostRecentActivity: area.mostRecentActivity,
+    generatedAt: area.generatedAt,
+    meetings: area.meetingStatuses.map((s) => ({
+      meetingId: s.meeting.id,
+      slug: s.meeting.slug,
+      title: s.meeting.title,
+      date: s.meeting.date,
+      summary: s.summary,
+      confidence: s.confidence,
+    })),
+  };
+}
+
+/**
  * Returns static params for generateStaticParams in dynamic routes.
  * Used by Next.js App Router to pre-render city pages at build time.
  *
