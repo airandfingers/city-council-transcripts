@@ -1,5 +1,10 @@
 import prisma from "@/app/lib/prisma";
-import { AlertContent } from "@/app/lib/alerts";
+import {
+  AlertContent,
+  InterestAreaUpdatedContent,
+  MeetingUpdatedContent,
+  MeetingUpcomingContent,
+} from "@/app/lib/alerts";
 import PublishAlertButton from "@/app/components/PublishAlertButton";
 
 /**
@@ -12,7 +17,10 @@ export default async function AdminAlertsPage() {
   const alerts = await prisma.alert.findMany({
     where: { status: { in: ["DRAFTED", "SENT_TO_ADMINS"] } },
     orderBy: { createdAt: "desc" },
-    include: { meeting: { select: { title: true, slug: true } } },
+    include: {
+      meeting: { select: { title: true, slug: true } },
+      interestArea: { select: { name: true, slug: true } },
+    },
   });
 
   return (
@@ -36,14 +44,57 @@ export default async function AdminAlertsPage() {
                 <strong>{content.subject}</strong> — {alert.type} ({alert.status})
               </p>
               {alert.meeting && <p>Meeting: {alert.meeting.title}</p>}
-              {content.tldr && <p>{content.tldr}</p>}
-              {content.keyDecisions.length > 0 && (
-                <ul>
-                  {content.keyDecisions.map((bullet, i) => (
-                    <li key={i}>{bullet}</li>
-                  ))}
-                </ul>
-              )}
+              {alert.interestArea && <p>Topic: {alert.interestArea.name}</p>}
+
+              {alert.type === "MEETING_UPDATED" && (() => {
+                const c = content as MeetingUpdatedContent;
+                return (
+                  <>
+                    {c.tldr && <p>{c.tldr}</p>}
+                    {c.keyDecisions.length > 0 && (
+                      <ul>
+                        {c.keyDecisions.map((bullet, i) => (
+                          <li key={i}>{bullet}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
+
+              {alert.type === "MEETING_UPCOMING" && (() => {
+                const c = content as MeetingUpcomingContent;
+                return (
+                  <>
+                    <p>
+                      <strong>Bite:</strong> {c.bite}
+                    </p>
+                    <p>
+                      <strong>Snack:</strong> {c.snack}
+                    </p>
+                    <p>
+                      <strong>Meal:</strong> {c.meal}
+                    </p>
+                  </>
+                );
+              })()}
+
+              {alert.type === "INTEREST_AREA_UPDATED" && (() => {
+                const c = content as InterestAreaUpdatedContent;
+                return (
+                  <>
+                    {c.tldr && <p>{c.tldr}</p>}
+                    {c.highlights.length > 0 && (
+                      <ul>
+                        {c.highlights.map((h, i) => (
+                          <li key={i}>{h}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
+
               <PublishAlertButton alertId={alert.id} />
             </li>
           );

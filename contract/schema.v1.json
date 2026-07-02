@@ -1,7 +1,7 @@
 {
   "contract_version": "1.0",
   "contract_major": 1,
-  "generated_at": "2026-06-13T01:05:43.203Z",
+  "generated_at": "2026-07-02T21:52:48.813Z",
   "description": "Publisher contract for city-council-transcripts. External publishers (e.g. city-council-transcriber) must fetch the current contract, project their data onto it (dropping surplus fields), validate, and then write directly to Neon. See CONTRACT.md for versioning rules.",
   "versioning_summary": "Publishers always target the CURRENT contract (no version pinning). New columns are additive/nullable so older publisher data still writes. Publishers project richer data DOWN to what the current schema supports. A contract_major bump signals a breaking change requiring publisher updates.",
   "write_order": [
@@ -91,6 +91,14 @@
         },
         "youtubeUrl": {
           "type": "string",
+          "required": false
+        },
+        "youtubeOffsetSeconds": {
+          "type": "float",
+          "required": false
+        },
+        "youtubeOffsetModel": {
+          "type": "json",
           "required": false
         },
         "granicusUrl": {

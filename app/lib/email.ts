@@ -1,7 +1,9 @@
 import { Resend } from "resend";
 import { ConfirmSubscription } from "@/emails/ConfirmSubscription";
+import { InterestAreaUpdated } from "@/emails/InterestAreaUpdated";
 import { ManageLink } from "@/emails/ManageLink";
 import { MeetingPublished } from "@/emails/MeetingPublished";
+import { UpcomingMeeting } from "@/emails/UpcomingMeeting";
 
 let _resend: Resend | null = null;
 
@@ -100,6 +102,93 @@ export async function sendMeetingPublishedEmail({
   });
   if (error) throw new Error(`Resend error: ${error.message} (${error.name})`);
   console.log(`[email] sent to ${to}, Resend id=${data?.id}`);
+}
+
+export type UpcomingMeetingEmailParams = {
+  to: string;
+  meetingTitle: string;
+  cityName: string;
+  meetingDate: Date;
+  /** One-line teaser — the quickest possible read. */
+  bite: string;
+  /** Short paragraph for a casual reader. */
+  snack: string;
+  /** Fuller narrative for someone who wants the full picture. */
+  meal: string;
+  meetingUrl: string;
+  manageUrl?: string;
+  isAdmin?: boolean;
+};
+
+export async function sendUpcomingMeetingEmail({
+  to,
+  meetingTitle,
+  cityName,
+  meetingDate,
+  bite,
+  snack,
+  meal,
+  meetingUrl,
+  manageUrl,
+  isAdmin = false,
+}: UpcomingMeetingEmailParams) {
+  const subject = `Counciloris - Upcoming: ${meetingTitle}${isAdmin ? " (ADMIN)" : ""}`;
+  const { data, error } = await getResend().emails.send({
+    from: getFromAddress(),
+    to,
+    subject,
+    react: UpcomingMeeting({
+      meetingTitle,
+      cityName,
+      meetingDate,
+      bite,
+      snack,
+      meal,
+      meetingUrl,
+      manageUrl,
+    }),
+  });
+  if (error) throw new Error(`Resend error: ${error.message} (${error.name})`);
+  console.log(`[email] upcoming sent to ${to}, Resend id=${data?.id}`);
+}
+
+export type InterestAreaEmailParams = {
+  to: string;
+  areaName: string;
+  cityName: string;
+  tldr: string | null;
+  highlights: string[];
+  areaUrl: string;
+  manageUrl?: string;
+  isAdmin?: boolean;
+};
+
+export async function sendInterestAreaEmail({
+  to,
+  areaName,
+  cityName,
+  tldr,
+  highlights,
+  areaUrl,
+  manageUrl,
+  isAdmin = false,
+}: InterestAreaEmailParams) {
+  const subject = `Counciloris - Update: ${areaName} (${cityName})${isAdmin ? " (ADMIN)" : ""}`;
+  const { data, error } = await getResend().emails.send({
+    from: getFromAddress(),
+    to,
+    subject,
+    react: InterestAreaUpdated({
+      areaName,
+      cityName,
+      tldr,
+      highlights,
+      areaUrl,
+      manageUrl,
+    }),
+  });
+  if (error) throw new Error(`Resend error: ${error.message} (${error.name})`);
+  console.log(`[email] interest-area sent to ${to}, Resend id=${data?.id}`);
 }
 
 export type ManageLinkEmailParams = {

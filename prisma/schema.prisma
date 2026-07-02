@@ -306,6 +306,7 @@ model Subscription {
 
 enum AlertType {
   MEETING_UPDATED
+  MEETING_UPCOMING
   INTEREST_AREA_UPDATED
 }
 
