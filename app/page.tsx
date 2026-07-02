@@ -64,16 +64,7 @@ export default async function Home() {
 
       {/* About Section */}
       <section id="about">
-        <div className="flex items-center gap-4 mb-4">
-          <h2 className="text-2xl font-semibold">About</h2>
-          <Image
-            src="/loris-notes.png"
-            alt="Loris taking notes"
-            width={168}
-            height={168}
-            className="rounded-full w-28 h-28 md:w-42 md:h-42"
-          />
-        </div>
+        <h2 className="text-2xl font-semibold mb-4">About</h2>
         <p className="text-gray-600 dark:text-gray-400 max-w-2xl">
           Counciloris gives you easy access to local government meeting
           records, with the real data straight from the source — not
@@ -81,6 +72,13 @@ export default async function Home() {
           council members voted, or dig into the full transcript and video
           for proof of exactly what was said.
         </p>
+        <Image
+          src="/loris-notes.png"
+          alt="Loris taking notes"
+          width={120}
+          height={120}
+          className="rounded-full w-16 h-16 md:w-24 md:h-24 my-4"
+        />
         <h3 className="text-lg font-semibold mt-6 mb-2">Our AI strategy</h3>
         <p className="text-gray-600 dark:text-gray-400 max-w-2xl">
           We try to keep this project&apos;s planetary footprint small. Our

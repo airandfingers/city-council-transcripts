@@ -16,6 +16,8 @@
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "db:import": "tsx scripts/import-transcription-export.mjs",
     "db:contract": "node scripts/generate-contract.mjs",
+    "publish:admins": "node scripts/publish-to-admins.mjs",
+    "publish:city": "node scripts/publish.mjs",
     "test": "npm run test:validate",
     "test:gates": "node scripts/validate/run-gates.mjs --all",
     "test:validate": "node scripts/validate/run-gates.mjs --all",

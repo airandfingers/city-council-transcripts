@@ -11,14 +11,14 @@ import Image from "next/image";
 export default function SiteHeader() {
   return (
     <header className="border-b border-gray-200 dark:border-gray-800">
-      <div className="flex items-center gap-6 px-8 py-4">
+      <div className="flex items-center gap-6 p-4">
         <Link href="/" className="flex items-center gap-2 font-display font-semibold text-lg tracking-tight">
           <Image
             src="/loris-city-skyline.png"
             alt="Counciloris logo"
             width={120}
             height={120}
-            className="rounded-full w-20 h-20 md:w-30 md:h-30"
+            className="rounded-full w-16 h-16 md:w-24 md:h-24"
           />
           Counciloris
         </Link>
