@@ -1,3 +1,5 @@
+import DonateButton from "@/app/components/DonateButton";
+
 const DISCLAIMER_TEXT =
   "Transcripts and summaries on this site are produced by automated transcription and AI summarization with minimal human review. Details may be inaccurate, incomplete, or misattributed — verify against the official meeting recording before relying on them.";
 
@@ -55,9 +57,12 @@ export default function AIDisclaimer({
       role="contentinfo"
       className={`mt-12 border-t border-gray-200 dark:border-gray-700 pt-4 ${className}`}
     >
-      <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <p>{DISCLAIMER_TEXT}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p>{DISCLAIMER_TEXT}</p>
+        </div>
+        <DonateButton className="shrink-0 self-start sm:self-auto" />
       </div>
     </footer>
   );
