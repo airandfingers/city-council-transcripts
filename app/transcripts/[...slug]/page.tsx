@@ -19,7 +19,7 @@ import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
-const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK"]);
+const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
 
 /** Mailbox for "request this summary" links when topic summaries aren't ready yet. */
 const SUMMARY_REQUEST_EMAIL =
@@ -158,6 +158,10 @@ export default async function TranscriptPage({ params }: Props) {
     .filter((item) => item.type === "SUMMARY_BLOCK")
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
+  // TLDR_BLOCK: single row carrying the logline with an optional timestamp
+  // anchor pointing to the most important moment in the meeting.
+  const tldrBlock = meeting.summaryItems.find((item) => item.type === "TLDR_BLOCK");
+
   // Prefer the generic videoUrl/videoProvider fields; fall back to the
   // legacy youtubeUrl/granicusUrl fields for older records not yet re-exported.
   const videoUrl = meeting.videoUrl
@@ -218,9 +222,21 @@ export default async function TranscriptPage({ params }: Props) {
         <section className="p-6">
           <h2 className="text-2xl font-semibold mb-4">TL;DR</h2>
           {meeting.logline ? (
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
-              {meeting.logline}
-            </p>
+            <div className="space-y-2">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
+                {meeting.logline}
+              </p>
+              {tldrBlock?.startTimeSeconds != null && (
+                <TimestampLink
+                  seconds={tldrBlock.startTimeSeconds}
+                  label={tldrBlock.timecodeLabel ?? undefined}
+                  openDetailsId="full-transcript"
+                  scrollTargetId="full-transcript"
+                  offsetModel={offsetModel}
+                  className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
+                />
+              )}
+            </div>
           ) : (
             <p className="text-gray-500 dark:text-gray-400">
               No summary available for this meeting yet.
