@@ -239,9 +239,14 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
 
   // Notify admins of every city request, even repeat submissions.
   if (data.kind === "CITY_COVERAGE_REQUEST") {
+    const adminSubscribers = await prisma.subscriber.findMany({
+      where: { isAdmin: true },
+      select: { email: true },
+    });
     void sendAdminCityRequestEmail({
       requesterEmail: data.email,
       requestedCityName: requestedCityName!,
+      adminEmails: adminSubscribers.map((s) => s.email),
     });
   }
 

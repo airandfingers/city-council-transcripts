@@ -39,36 +39,28 @@ export function buildMeetingUrl(slug: string): string {
   return `${getSiteUrl()}/transcripts/${path}`;
 }
 
-function getAdminEmail(): string {
-  // Falls back to extracting the address from EMAIL_FROM (e.g. "Name <addr@example.com>")
-  const explicit = process.env.ADMIN_EMAIL?.trim();
-  if (explicit) return explicit;
-  const from = process.env.EMAIL_FROM ?? "";
-  const match = from.match(/<([^>]+)>/);
-  return match ? match[1] : from;
-}
-
 export async function sendAdminCityRequestEmail(params: {
   requesterEmail: string;
   requestedCityName: string;
+  adminEmails: string[];
 }) {
-  const adminEmail = getAdminEmail();
-  if (!adminEmail) return; // misconfigured env — skip silently
-  const { error } = await getResend().emails.send({
-    from: getFromAddress(),
-    to: adminEmail,
-    subject: `City request: ${params.requestedCityName}`,
-    text: [
-      `Someone requested a new city on Counciloris.`,
-      ``,
-      `City: ${params.requestedCityName}`,
-      `Requester: ${params.requesterEmail}`,
-      `Time: ${new Date().toUTCString()}`,
-    ].join("\n"),
-  });
-  if (error) {
-    console.error("Failed to send admin city request email", error);
-  }
+  const { adminEmails, requesterEmail, requestedCityName } = params;
+  if (adminEmails.length === 0) return;
+  const from = getFromAddress();
+  const subject = `City request: ${requestedCityName}`;
+  const text = [
+    `Someone requested a new city on Counciloris.`,
+    ``,
+    `City: ${requestedCityName}`,
+    `Requester: ${requesterEmail}`,
+    `Time: ${new Date().toUTCString()}`,
+  ].join("\n");
+  await Promise.all(
+    adminEmails.map(async (to) => {
+      const { error } = await getResend().emails.send({ from, to, subject, text });
+      if (error) console.error("Failed to send admin city request email to", to, error);
+    }),
+  );
 }
 
 export type ConfirmEmailParams = {
