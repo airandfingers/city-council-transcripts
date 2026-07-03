@@ -39,6 +39,38 @@ export function buildMeetingUrl(slug: string): string {
   return `${getSiteUrl()}/transcripts/${path}`;
 }
 
+function getAdminEmail(): string {
+  // Falls back to extracting the address from EMAIL_FROM (e.g. "Name <addr@example.com>")
+  const explicit = process.env.ADMIN_EMAIL?.trim();
+  if (explicit) return explicit;
+  const from = process.env.EMAIL_FROM ?? "";
+  const match = from.match(/<([^>]+)>/);
+  return match ? match[1] : from;
+}
+
+export async function sendAdminCityRequestEmail(params: {
+  requesterEmail: string;
+  requestedCityName: string;
+}) {
+  const adminEmail = getAdminEmail();
+  if (!adminEmail) return; // misconfigured env — skip silently
+  const { error } = await getResend().emails.send({
+    from: getFromAddress(),
+    to: adminEmail,
+    subject: `City request: ${params.requestedCityName}`,
+    text: [
+      `Someone requested a new city on Counciloris.`,
+      ``,
+      `City: ${params.requestedCityName}`,
+      `Requester: ${params.requesterEmail}`,
+      `Time: ${new Date().toUTCString()}`,
+    ].join("\n"),
+  });
+  if (error) {
+    console.error("Failed to send admin city request email", error);
+  }
+}
+
 export type ConfirmEmailParams = {
   to: string;
   confirmToken: string;
