@@ -132,6 +132,57 @@ export function getMeetingsForCity(
   });
 }
 
+export type LatestMeetingSummary = {
+  slug: string;
+  title: string;
+  date: Date;
+  logline: string | null;
+  startTimeSeconds: number | null;
+  timecodeLabel: string | null;
+};
+
+/**
+ * Returns the most recent meeting's logline (TL;DR) for a city, for display
+ * at the top of the city page. Returns null if the city has no meetings or
+ * inputs are invalid.
+ */
+export async function getLatestMeetingSummary(
+  stateCode: string,
+  citySlug: string,
+): Promise<LatestMeetingSummary | null> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
+    return null;
+  }
+
+  const meeting = await prisma.meeting.findFirst({
+    where: { city: { stateCode, slug: citySlug } },
+    orderBy: [{ date: "desc" }, { id: "desc" }],
+    select: {
+      slug: true,
+      title: true,
+      date: true,
+      logline: true,
+      summaryItems: {
+        where: { type: "TLDR_BLOCK" },
+        select: { startTimeSeconds: true, timecodeLabel: true },
+        take: 1,
+      },
+    },
+  });
+
+  if (!meeting) return null;
+
+  const tldrBlock = meeting.summaryItems[0];
+  return {
+    slug: meeting.slug,
+    title: meeting.title,
+    date: meeting.date,
+    logline: meeting.logline,
+    startTimeSeconds: tldrBlock?.startTimeSeconds ?? null,
+    timecodeLabel: tldrBlock?.timecodeLabel ?? null,
+  };
+}
+
 /**
  * Returns interest areas for a city, each with the meetings where it was
  * discussed (sorted most-recent-first).

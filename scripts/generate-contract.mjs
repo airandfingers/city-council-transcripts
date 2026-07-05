@@ -29,7 +29,7 @@ import { Prisma } from "@prisma/client";
 // ---------------------------------------------------------------------------
 
 const CONTRACT_MAJOR = 1; // increment on breaking changes; reset MINOR to 0
-const CONTRACT_MINOR = 0; // increment on additive (backwards-compatible) changes
+const CONTRACT_MINOR = 2; // increment on additive (backwards-compatible) changes
 
 const CONTRACT_VERSION = `${CONTRACT_MAJOR}.${CONTRACT_MINOR}`;
 
@@ -49,6 +49,8 @@ const WRITE_ORDER = [
   "MinutesItem",
   "TopicSummary",
   "SpeakerSummary",
+  "InterestArea",
+  "InterestAreaMeetingStatus",
 ];
 
 /**
@@ -67,7 +69,7 @@ const EXCLUDE_ALWAYS = new Set(["id", "createdAt", "updatedAt"]);
  *
  * @type {Set<string>}
  */
-const FK_COLUMNS = new Set(["cityId", "meetingId"]);
+const FK_COLUMNS = new Set(["cityId", "meetingId", "interestAreaId"]);
 
 /**
  * Upsert / unique keys per table (used by Python's write layer for idempotency).
@@ -85,6 +87,8 @@ const UPSERT_KEYS = {
   MinutesItem:        [["meetingId", "itemId"]],
   TopicSummary:       [["meetingId", "topicId"]],
   SpeakerSummary:     [["meetingId", "speakerUuid"]],
+  InterestArea:       [["cityId", "slug"]],
+  InterestAreaMeetingStatus: [["interestAreaId", "meetingId"]],
 };
 
 /**
@@ -102,6 +106,8 @@ const TABLE_DESCRIPTIONS = {
   MinutesItem:        "An official minutes item aligned to a transcript timestamp.",
   TopicSummary:       "An AI-generated topic-level summary with speakers and positions.",
   SpeakerSummary:     "An AI-generated per-speaker rollup of the meeting.",
+  InterestArea:       "A tracked civic topic for a city (e.g. \"Spending\", \"Housing\"), with an AI-generated status rollup.",
+  InterestAreaMeetingStatus: "Whether/how a given meeting discussed a given InterestArea.",
 };
 
 // ---------------------------------------------------------------------------

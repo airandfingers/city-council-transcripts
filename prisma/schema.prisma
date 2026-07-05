@@ -9,17 +9,18 @@ datasource db {
 }
 
 model City {
-  id            Int            @id @default(autoincrement())
-  stateCode     String         @db.VarChar(2)
-  stateName     String         @db.VarChar(100)
-  name          String         @db.VarChar(200)
-  slug          String         @db.VarChar(200)
-  summary       String         @db.Text
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  meetings      Meeting[]
-  subscriptions Subscription[]
-  interestAreas InterestArea[]
+  id                    Int            @id @default(autoincrement())
+  stateCode             String         @db.VarChar(2)
+  stateName             String         @db.VarChar(100)
+  name                  String         @db.VarChar(200)
+  slug                  String         @db.VarChar(200)
+  summary               String         @db.Text
+  recentMeetingsSummary String?        @db.Text
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  meetings              Meeting[]
+  subscriptions         Subscription[]
+  interestAreas         InterestArea[]
 
   @@unique([stateCode, slug])
   @@index([stateCode])
