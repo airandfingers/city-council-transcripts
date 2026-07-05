@@ -29,7 +29,7 @@ import { Prisma } from "@prisma/client";
 // ---------------------------------------------------------------------------
 
 const CONTRACT_MAJOR = 1; // increment on breaking changes; reset MINOR to 0
-const CONTRACT_MINOR = 2; // increment on additive (backwards-compatible) changes
+const CONTRACT_MINOR = 3; // increment on additive (backwards-compatible) changes
 
 const CONTRACT_VERSION = `${CONTRACT_MAJOR}.${CONTRACT_MINOR}`;
 

@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { getCityByParams, getInterestArea } from "@/app/lib/cityData";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
+import CopyTimecode from "@/app/components/CopyTimecode";
+import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
 
 export const dynamic = "force-dynamic";
 
@@ -131,14 +133,24 @@ export default async function TopicDetailPage({ params }: Props) {
                   })}
                 </time>
 
-                <div className="flex items-center gap-2 mt-0.5 mb-1">
+                <div className="flex items-center gap-2 mt-0.5 mb-1 flex-wrap">
                   <Link
-                    href={`/transcripts/${m.slug}`}
+                    href={
+                      m.startTimeSeconds != null && canAutoSeek(m.videoProvider)
+                        ? buildTranscriptTimestampUrl(m.slug, m.startTimeSeconds)
+                        : `/transcripts/${m.slug}`
+                    }
                     className="font-medium hover:underline text-sm"
                   >
                     {m.title}
                   </Link>
                   <ConfidenceBadge confidence={m.confidence} />
+                  {m.startTimeSeconds != null && !canAutoSeek(m.videoProvider) && (
+                    <CopyTimecode
+                      seconds={m.startTimeSeconds}
+                      label={m.timecodeLabel ?? formatSeconds(m.startTimeSeconds)}
+                    />
+                  )}
                 </div>
 
                 {m.summary && (

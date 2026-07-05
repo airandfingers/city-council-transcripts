@@ -49,7 +49,12 @@ export default async function CityPage({ params }: Props) {
       {cityData.recentMeetingsSummary ? (
         <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 p-4 max-w-prose">
           <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
-            Recent activity
+            Recent activity — updated{" "}
+            {cityData.updatedAt.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
           </p>
           <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
             {cityData.recentMeetingsSummary}

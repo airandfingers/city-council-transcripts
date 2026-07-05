@@ -245,15 +245,19 @@ model InterestArea {
 }
 
 model InterestAreaMeetingStatus {
-  id             Int          @id @default(autoincrement())
-  interestAreaId Int
-  meetingId      Int
-  discussed      Boolean
-  summary        String?      @db.Text
-  confidence     Float?
-  runId          String?      @db.VarChar(100)
-  interestArea   InterestArea @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
-  meeting        Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  id               Int          @id @default(autoincrement())
+  interestAreaId   Int
+  meetingId        Int
+  discussed        Boolean
+  summary          String?      @db.Text
+  confidence       Float?
+  runId            String?      @db.VarChar(100)
+  startTimeSeconds Float?
+  endTimeSeconds   Float?
+  timecodeLabel    String?      @db.VarChar(50)
+  sourceItemId     String?      @db.VarChar(100)
+  interestArea     InterestArea @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
+  meeting          Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([interestAreaId, meetingId])
   @@index([meetingId])

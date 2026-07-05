@@ -16,6 +16,9 @@ export type InterestAreaMeetingEntry = {
   date: Date;
   summary: string | null;
   confidence: number | null;
+  startTimeSeconds: number | null;
+  timecodeLabel: string | null;
+  videoProvider: string | null;
 };
 
 export type InterestAreaWithMeetings = {
@@ -204,7 +207,7 @@ export async function getInterestAreasForCity(
         where: { discussed: true },
         include: {
           meeting: {
-            select: { id: true, slug: true, title: true, date: true },
+            select: { id: true, slug: true, title: true, date: true, videoProvider: true },
           },
         },
         orderBy: { meeting: { date: "desc" } },
@@ -231,6 +234,9 @@ export async function getInterestAreasForCity(
       date: s.meeting.date,
       summary: s.summary,
       confidence: s.confidence,
+      startTimeSeconds: s.startTimeSeconds,
+      timecodeLabel: s.timecodeLabel,
+      videoProvider: s.meeting.videoProvider,
     })),
   }));
 }
@@ -261,7 +267,7 @@ export async function getInterestArea(
       meetingStatuses: {
         include: {
           meeting: {
-            select: { id: true, slug: true, title: true, date: true },
+            select: { id: true, slug: true, title: true, date: true, videoProvider: true },
           },
         },
         orderBy: { meeting: { date: "desc" } },
@@ -289,6 +295,9 @@ export async function getInterestArea(
       date: s.meeting.date,
       summary: s.summary,
       confidence: s.confidence,
+      startTimeSeconds: s.startTimeSeconds,
+      timecodeLabel: s.timecodeLabel,
+      videoProvider: s.meeting.videoProvider,
     })),
   };
 }
