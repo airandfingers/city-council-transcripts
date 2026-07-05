@@ -37,14 +37,16 @@ export type InterestAreaWithMeetings = {
 
 /**
  * Validates that a string is a valid slug format.
- * Valid slugs contain only lowercase letters, numbers, and hyphens.
+ * Valid slugs contain lowercase letters, numbers, hyphens, and underscores
+ * (InterestArea slugs are snake_case, generated from the transcriber's
+ * area ids, e.g. "hybrid_meeting_requirements").
  *
  * @param value - The string to validate
  * @returns True if the value is a valid slug, false otherwise
  */
 function isValidSlug(value: string): boolean {
   if (!value || typeof value !== "string") return false;
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+  return /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(value);
 }
 
 /**
