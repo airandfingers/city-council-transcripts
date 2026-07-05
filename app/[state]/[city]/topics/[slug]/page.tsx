@@ -30,7 +30,10 @@ function ConfidenceBadge({ confidence }: { confidence: number | null }) {
         ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300"
         : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
   return (
-    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${color}`}>
+    <span
+      title={`AI confidence that this topic was actually discussed in this meeting: ${pct}%`}
+      className={`text-xs px-1.5 py-0.5 rounded font-medium cursor-help ${color}`}
+    >
       {pct}%
     </span>
   );
