@@ -319,6 +319,7 @@ enum AlertStatus {
   DRAFTED
   SENT_TO_ADMINS
   PUBLISHED
+  CANCELED
 }
 
 model Alert {
@@ -330,13 +331,17 @@ model Alert {
   interestArea   InterestArea? @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
   status         AlertStatus   @default(DRAFTED)
   content        Json
+  scheduledFor   DateTime?
   sentToAdminsAt DateTime?
   publishedAt    DateTime?
   publishedBy    String?       @db.VarChar(320)
+  canceledAt     DateTime?
+  canceledBy     String?       @db.VarChar(320)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([type, status])
   @@index([meetingId])
   @@index([interestAreaId])
+  @@index([status, scheduledFor])
 }
