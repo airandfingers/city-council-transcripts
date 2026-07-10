@@ -1,0 +1,28 @@
+name: Publish scheduled alerts (temporary)
+
+# TEMPORARY (2026-07-09): stand-in for Vercel Cron until CRON_SECRET can be
+# set on the Vercel project (see app/api/cron/publish-scheduled/route.ts and
+# the CronAuthToken model comment in prisma/schema.prisma). Delete this
+# workflow once CRON_SECRET is set on Vercel — vercel.json's cron config
+# takes over and needs no further changes.
+
+on:
+  schedule:
+    - cron: "0 16 * * *" # daily, ~9am Pacific (UTC-7)
+  workflow_dispatch: {}
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call scheduled-drain endpoint
+        run: |
+          status=$(curl -s -o /tmp/response.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.CRON_TEMP_TOKEN }}" \
+            "${{ vars.PROD_SITE_URL }}/api/cron/publish-scheduled")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            echo "Drain request failed"
+            exit 1
+          fi
