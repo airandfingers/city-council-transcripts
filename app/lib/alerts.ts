@@ -81,7 +81,15 @@ export function getHoldWindowHours(): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 24;
 }
 
-/** The timestamp at which a newly created alert becomes eligible to auto-send. */
+/**
+ * The timestamp at which a newly created alert becomes *eligible* to
+ * auto-send — this is a minimum, not the actual send time. The drain
+ * (`publishDueScheduledAlerts`, called by a once-daily cron — see
+ * vercel.json / .github/workflows/publish-scheduled.yml) only runs once a
+ * day, so the real release happens at the next cron run at/after this
+ * timestamp: currently ~6am Pacific (both crons target 13:00 UTC), so
+ * actual delay ranges from the hold window up to ~24h beyond it.
+ */
 function computeScheduledFor(): Date {
   return new Date(Date.now() + getHoldWindowHours() * 3_600_000);
 }
