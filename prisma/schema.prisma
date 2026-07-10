@@ -345,3 +345,17 @@ model Alert {
   @@index([interestAreaId])
   @@index([status, scheduledFor])
 }
+
+/// TEMPORARY (2026-07-09): DB-backed fallback for the cron drain endpoint's
+/// auth, used only until CRON_SECRET can be set on the Vercel project
+/// (currently no one has dashboard access). A GitHub Actions workflow drives
+/// the scheduled drain in the meantime, presenting a token stored here
+/// instead of relying on Vercel Cron's env-var-only auth. Delete this model
+/// + its migration and app/api/cron/publish-scheduled's DB-fallback check
+/// once CRON_SECRET is set on Vercel and the GH Actions workflow is removed.
+model CronAuthToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique @db.VarChar(128)
+  label     String?  @db.VarChar(200)
+  createdAt DateTime @default(now())
+}
