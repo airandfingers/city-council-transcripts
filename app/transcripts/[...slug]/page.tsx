@@ -19,7 +19,7 @@ import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
-const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT_SUMMARY"]);
+const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
 
 /** Mailbox for "request this summary" links when topic summaries aren't ready yet. */
 const SUMMARY_REQUEST_EMAIL =
@@ -149,6 +149,19 @@ export default async function TranscriptPage({ params }: Props) {
     (item) => item.type === "TIMELINE_BULLET",
   );
 
+  // SUMMARY_BLOCK items: one row per prose sentence/block, optionally
+  // carrying a video timestamp (startTimeSeconds) or a document citation
+  // (notes = title, position = URL) as a source reference. When present
+  // these replace the plain prose rendering; meeting.summary stays as
+  // fallback for meetings summarized before this feature.
+  const summaryBlocks = meeting.summaryItems
+    .filter((item) => item.type === "SUMMARY_BLOCK")
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // TLDR_BLOCK: single row carrying the logline with an optional timestamp
+  // anchor pointing to the most important moment in the meeting.
+  const tldrBlock = meeting.summaryItems.find((item) => item.type === "TLDR_BLOCK");
+
   // Prefer the generic videoUrl/videoProvider fields; fall back to the
   // legacy youtubeUrl/granicusUrl fields for older records not yet re-exported.
   const videoUrl = meeting.videoUrl
@@ -209,9 +222,21 @@ export default async function TranscriptPage({ params }: Props) {
         <section className="p-6">
           <h2 className="text-2xl font-semibold mb-4">TL;DR</h2>
           {meeting.logline ? (
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
-              {meeting.logline}
-            </p>
+            <div className="space-y-2">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
+                {meeting.logline}
+              </p>
+              {tldrBlock?.startTimeSeconds != null && (
+                <TimestampLink
+                  seconds={tldrBlock.startTimeSeconds}
+                  label={tldrBlock.timecodeLabel ?? undefined}
+                  openDetailsId="full-transcript"
+                  scrollTargetId="full-transcript"
+                  offsetModel={offsetModel}
+                  className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
+                />
+              )}
+            </div>
           ) : (
             <p className="text-gray-500 dark:text-gray-400">
               No summary available for this meeting yet.
@@ -234,11 +259,37 @@ export default async function TranscriptPage({ params }: Props) {
         <h2 className="text-2xl font-semibold mb-4">Summary</h2>
         {meeting.summary || timelineBullets.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {meeting.summary && (
+            {(summaryBlocks.length > 0 || meeting.summary) && (
               <div className="lg:col-span-2 space-y-3 text-gray-700 dark:text-gray-300 max-w-prose">
-                {meeting.summary.split(/\n\n+/).map((para, i) => (
-                  <p key={i}>{para}</p>
-                ))}
+                {summaryBlocks.length > 0
+                  ? summaryBlocks.map((block) => (
+                      <p key={block.id} className="flex gap-2 items-start">
+                        <span className="flex-1">{block.text}</span>
+                        {block.startTimeSeconds != null ? (
+                          <TimestampLink
+                            seconds={block.startTimeSeconds}
+                            label={block.timecodeLabel ?? undefined}
+                            openDetailsId="full-transcript"
+                            scrollTargetId="full-transcript"
+                            offsetModel={offsetModel}
+                            className="shrink-0 text-xs text-blue-500 dark:text-blue-400 hover:underline mt-1"
+                          />
+                        ) : block.position ? (
+                          <a
+                            href={block.position}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-xs text-blue-500 dark:text-blue-400 hover:underline mt-1"
+                            title={block.notes ?? undefined}
+                          >
+                            [source]
+                          </a>
+                        ) : null}
+                      </p>
+                    ))
+                  : meeting.summary!.split(/\n\n+/).map((para, i) => (
+                      <p key={i}>{para}</p>
+                    ))}
               </div>
             )}
             {timelineBullets.length > 0 && (

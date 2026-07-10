@@ -5,7 +5,7 @@ import { z } from "zod";
 import prisma from "@/app/lib/prisma";
 import { generateToken } from "@/app/lib/tokens";
 import { checkRateLimit } from "@/app/lib/rate-limit";
-import { sendConfirmationEmail } from "@/app/lib/email";
+import { sendConfirmationEmail, sendAdminCityRequestEmail } from "@/app/lib/email";
 
 const SubscribeInput = z
   .object({
@@ -235,6 +235,19 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
     confirmToken = existing.confirmToken;
     unsubscribeToken = existing.unsubscribeToken;
     status = existing.status as "PENDING" | "ACTIVE";
+  }
+
+  // Notify admins of every city request, even repeat submissions.
+  if (data.kind === "CITY_COVERAGE_REQUEST") {
+    const adminSubscribers = await prisma.subscriber.findMany({
+      where: { isAdmin: true },
+      select: { email: true },
+    });
+    void sendAdminCityRequestEmail({
+      requesterEmail: data.email,
+      requestedCityName: requestedCityName!,
+      adminEmails: adminSubscribers.map((s) => s.email),
+    });
   }
 
   if (status === "PENDING") {

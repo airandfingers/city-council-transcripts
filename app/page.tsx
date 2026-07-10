@@ -4,6 +4,7 @@ import { getCities } from "@/app/lib/cityData";
 import CityCard from "@/app/components/CityCard";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
+import DonateButton from "@/app/components/DonateButton";
 
 export const metadata: Metadata = {
   title: "City Council Transcripts",
@@ -72,14 +73,30 @@ export default async function Home() {
           council members voted, or dig into the full transcript and video
           for proof of exactly what was said.
         </p>
-        <Image
-          src="/loris-notes.png"
-          alt="Loris taking notes"
-          width={120}
-          height={120}
-          className="rounded-full w-16 h-16 md:w-24 md:h-24 my-4"
-        />
-        <h3 className="text-lg font-semibold mt-6 mb-2">Our AI strategy</h3>
+
+        {/* Counciloris mascot section */}
+        <div className="mt-8 flex flex-col sm:flex-row items-start gap-6 max-w-2xl">
+          <Image
+            src="/loris-city-skyline.png"
+            alt="The Counciloris — a slow loris keeping watch over the city skyline"
+            width={160}
+            height={160}
+            className="rounded-xl w-28 h-28 sm:w-36 sm:h-36 shrink-0 object-cover"
+          />
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Meet the Counciloris</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              The Counciloris is hard at work — watching every city council
+              meeting so you don&apos;t have to. Each night it transcribes the
+              recordings, picks out what was decided, and writes a plain-language
+              summary you can actually read. It moves slowly and carefully,
+              because getting the details right matters.
+            </p>
+            <DonateButton className="mt-4" />
+          </div>
+        </div>
+
+        <h3 className="text-lg font-semibold mt-8 mb-2">Our AI strategy</h3>
         <p className="text-gray-600 dark:text-gray-400 max-w-2xl">
           We try to keep this project&apos;s planetary footprint small. Our
           repeatable processes — transcription, summarization, and the rest

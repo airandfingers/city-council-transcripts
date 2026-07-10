@@ -16,6 +16,9 @@ export type InterestAreaMeetingEntry = {
   date: Date;
   summary: string | null;
   confidence: number | null;
+  startTimeSeconds: number | null;
+  timecodeLabel: string | null;
+  videoProvider: string | null;
 };
 
 export type InterestAreaWithMeetings = {
@@ -34,14 +37,16 @@ export type InterestAreaWithMeetings = {
 
 /**
  * Validates that a string is a valid slug format.
- * Valid slugs contain only lowercase letters, numbers, and hyphens.
+ * Valid slugs contain lowercase letters, numbers, hyphens, and underscores
+ * (InterestArea slugs are snake_case, generated from the transcriber's
+ * area ids, e.g. "hybrid_meeting_requirements").
  *
  * @param value - The string to validate
  * @returns True if the value is a valid slug, false otherwise
  */
 function isValidSlug(value: string): boolean {
   if (!value || typeof value !== "string") return false;
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+  return /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(value);
 }
 
 /**
@@ -132,6 +137,57 @@ export function getMeetingsForCity(
   });
 }
 
+export type LatestMeetingSummary = {
+  slug: string;
+  title: string;
+  date: Date;
+  logline: string | null;
+  startTimeSeconds: number | null;
+  timecodeLabel: string | null;
+};
+
+/**
+ * Returns the most recent meeting's logline (TL;DR) for a city, for display
+ * at the top of the city page. Returns null if the city has no meetings or
+ * inputs are invalid.
+ */
+export async function getLatestMeetingSummary(
+  stateCode: string,
+  citySlug: string,
+): Promise<LatestMeetingSummary | null> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
+    return null;
+  }
+
+  const meeting = await prisma.meeting.findFirst({
+    where: { city: { stateCode, slug: citySlug } },
+    orderBy: [{ date: "desc" }, { id: "desc" }],
+    select: {
+      slug: true,
+      title: true,
+      date: true,
+      logline: true,
+      summaryItems: {
+        where: { type: "TLDR_BLOCK" },
+        select: { startTimeSeconds: true, timecodeLabel: true },
+        take: 1,
+      },
+    },
+  });
+
+  if (!meeting) return null;
+
+  const tldrBlock = meeting.summaryItems[0];
+  return {
+    slug: meeting.slug,
+    title: meeting.title,
+    date: meeting.date,
+    logline: meeting.logline,
+    startTimeSeconds: tldrBlock?.startTimeSeconds ?? null,
+    timecodeLabel: tldrBlock?.timecodeLabel ?? null,
+  };
+}
+
 /**
  * Returns interest areas for a city, each with the meetings where it was
  * discussed (sorted most-recent-first).
@@ -153,7 +209,7 @@ export async function getInterestAreasForCity(
         where: { discussed: true },
         include: {
           meeting: {
-            select: { id: true, slug: true, title: true, date: true },
+            select: { id: true, slug: true, title: true, date: true, videoProvider: true },
           },
         },
         orderBy: { meeting: { date: "desc" } },
@@ -180,8 +236,72 @@ export async function getInterestAreasForCity(
       date: s.meeting.date,
       summary: s.summary,
       confidence: s.confidence,
+      startTimeSeconds: s.startTimeSeconds,
+      timecodeLabel: s.timecodeLabel,
+      videoProvider: s.meeting.videoProvider,
     })),
   }));
+}
+
+/**
+ * Returns a single interest area by slug, with full meeting history.
+ * Returns null if not found or inputs are invalid.
+ */
+export async function getInterestArea(
+  stateCode: string,
+  citySlug: string,
+  areaSlug: string,
+): Promise<InterestAreaWithMeetings | null> {
+  if (
+    !isValidStateCode(stateCode) ||
+    !isValidSlug(citySlug) ||
+    !isValidSlug(areaSlug)
+  ) {
+    return null;
+  }
+
+  const area = await prisma.interestArea.findFirst({
+    where: {
+      slug: areaSlug,
+      city: { stateCode, slug: citySlug },
+    },
+    include: {
+      meetingStatuses: {
+        include: {
+          meeting: {
+            select: { id: true, slug: true, title: true, date: true, videoProvider: true },
+          },
+        },
+        orderBy: { meeting: { date: "desc" } },
+      },
+    },
+  });
+
+  if (!area) return null;
+
+  return {
+    id: area.id,
+    slug: area.slug,
+    name: area.name,
+    description: area.description,
+    source: area.source,
+    statusSummary: area.statusSummary,
+    meetingsDiscussed: area.meetingsDiscussed,
+    totalMeetings: area.totalMeetings,
+    mostRecentActivity: area.mostRecentActivity,
+    generatedAt: area.generatedAt,
+    meetings: area.meetingStatuses.map((s) => ({
+      meetingId: s.meeting.id,
+      slug: s.meeting.slug,
+      title: s.meeting.title,
+      date: s.meeting.date,
+      summary: s.summary,
+      confidence: s.confidence,
+      startTimeSeconds: s.startTimeSeconds,
+      timecodeLabel: s.timecodeLabel,
+      videoProvider: s.meeting.videoProvider,
+    })),
+  };
 }
 
 /**

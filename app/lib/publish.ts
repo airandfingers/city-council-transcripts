@@ -124,6 +124,33 @@ export async function getCityUpdateRecipients(
   return Array.from(byEmail.values());
 }
 
+/**
+ * Active subscribers to a specific interest area's updates
+ * (`TOPIC_IN_CITY_UPDATES`), deduplicated by email.
+ */
+export async function getInterestAreaRecipients(
+  interestAreaId: number,
+): Promise<PublishRecipient[]> {
+  const subscriptions = await prisma.subscription.findMany({
+    where: { kind: "TOPIC_IN_CITY_UPDATES", interestAreaId, status: "ACTIVE" },
+    select: {
+      unsubscribeToken: true,
+      subscriber: { select: { email: true } },
+    },
+  });
+
+  const byEmail = new Map<string, PublishRecipient>();
+  for (const sub of subscriptions) {
+    if (!byEmail.has(sub.subscriber.email)) {
+      byEmail.set(sub.subscriber.email, {
+        email: sub.subscriber.email,
+        unsubscribeToken: sub.unsubscribeToken,
+      });
+    }
+  }
+  return Array.from(byEmail.values());
+}
+
 export const PublishBody = z.object({
   meeting_id: z.number().int().positive(),
 });
