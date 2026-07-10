@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { publishAlert } from "@/app/actions/publishAlert";
+import { cancelAlert, publishAlert } from "@/app/actions/publishAlert";
 
 export default function PublishAlertButton({ alertId }: { alertId: number }) {
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<string | null>(null);
 
-  const trigger = () => {
+  const send = () => {
     startTransition(async () => {
       try {
         const { sent, failed } = await publishAlert(alertId);
@@ -18,10 +18,24 @@ export default function PublishAlertButton({ alertId }: { alertId: number }) {
     });
   };
 
+  const hold = () => {
+    startTransition(async () => {
+      try {
+        await cancelAlert(alertId);
+        setResult("Canceled — this alert will not auto-send.");
+      } catch {
+        setResult("Failed to cancel.");
+      }
+    });
+  };
+
   return (
     <div>
-      <button onClick={trigger} disabled={isPending}>
-        {isPending ? "Sending..." : "Send to subscribers"}
+      <button onClick={send} disabled={isPending}>
+        {isPending ? "Working..." : "Send now"}
+      </button>
+      <button onClick={hold} disabled={isPending} style={{ marginLeft: "0.5rem" }}>
+        Hold / Cancel
       </button>
       {result && <p>{result}</p>}
     </div>

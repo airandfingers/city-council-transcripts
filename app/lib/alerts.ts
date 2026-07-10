@@ -69,6 +69,23 @@ export type AlertContent =
 
 export type AlertSendResult = { sent: number; failed: string[] };
 
+/**
+ * Minimum hold window, in hours, between an alert being created (admins
+ * notified) and it auto-publishing to end-user subscribers. Configurable via
+ * PUBLISH_HOLD_WINDOW_HOURS; defaults to 24h (conservative). Invalid or
+ * missing values fall back to the default.
+ */
+export function getHoldWindowHours(): number {
+  const raw = process.env.PUBLISH_HOLD_WINDOW_HOURS;
+  const parsed = raw != null ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 24;
+}
+
+/** The timestamp at which a newly created alert becomes eligible to auto-send. */
+function computeScheduledFor(): Date {
+  return new Date(Date.now() + getHoldWindowHours() * 3_600_000);
+}
+
 // ---------------------------------------------------------------------------
 // Alert creators
 // ---------------------------------------------------------------------------
@@ -90,6 +107,7 @@ export async function createMeetingUpdateAlert(meetingId: number): Promise<Alert
       meetingId,
       content,
       status: "DRAFTED",
+      scheduledFor: computeScheduledFor(),
     },
   });
 }
@@ -111,6 +129,10 @@ export async function createMeetingUpcomingAlert(
     ...tiers,
   };
 
+  // MEETING_UPCOMING is a *pre-meeting* notice (should reach subscribers
+  // before the meeting, per prd.md AC-2.2). A fixed post-creation hold could
+  // push delivery past the meeting, so this type is left on the manual
+  // publish path (scheduledFor null → the scheduled drain skips it).
   return prisma.alert.create({
     data: {
       type: "MEETING_UPCOMING",
@@ -144,6 +166,7 @@ export async function createInterestAreaAlert(interestAreaId: number): Promise<A
       interestAreaId,
       content,
       status: "DRAFTED",
+      scheduledFor: computeScheduledFor(),
     },
   });
 }
@@ -190,6 +213,70 @@ export async function publishAlertToSubscribers(
   });
 
   return result;
+}
+
+/**
+ * Cancels an alert so the scheduled auto-send skips it. Admin "hold" action;
+ * a canceled alert can no longer be drained (it leaves the DRAFTED/
+ * SENT_TO_ADMINS states the drain looks for).
+ */
+export async function cancelScheduledAlert(
+  alertId: number,
+  canceledBy?: string,
+): Promise<Alert> {
+  return prisma.alert.update({
+    where: { id: alertId },
+    data: {
+      status: "CANCELED",
+      canceledAt: new Date(),
+      canceledBy: canceledBy ?? null,
+    },
+  });
+}
+
+export type DrainResult = {
+  processed: number;
+  published: number;
+  failed: { alertId: number; error: string }[];
+};
+
+/**
+ * Publishes every alert whose hold window has elapsed: `scheduledFor <= now`
+ * and still awaiting release. Only SENT_TO_ADMINS alerts qualify — this
+ * enforces the "admins preview first" invariant, so an alert whose admin
+ * notification never went out (still DRAFTED) is never auto-blasted to users.
+ * Alerts with a null `scheduledFor` (e.g. MEETING_UPCOMING / pre-scheduling
+ * rows) and CANCELED/PUBLISHED alerts are left untouched. Each publish is
+ * isolated so one failure doesn't abort the batch. Called by the cron drain
+ * endpoint; frequency-agnostic.
+ */
+export async function publishDueScheduledAlerts(
+  now: Date = new Date(),
+  triggeredBy = "cron",
+): Promise<DrainResult> {
+  const due = await prisma.alert.findMany({
+    where: {
+      scheduledFor: { not: null, lte: now },
+      status: "SENT_TO_ADMINS",
+    },
+    select: { id: true },
+    orderBy: { scheduledFor: "asc" },
+  });
+
+  let published = 0;
+  const failed: DrainResult["failed"] = [];
+  for (const { id } of due) {
+    try {
+      await publishAlertToSubscribers(id, triggeredBy);
+      published += 1;
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error(`Failed to publish scheduled alert ${id}`, err);
+      failed.push({ alertId: id, error });
+    }
+  }
+
+  return { processed: due.length, published, failed };
 }
 
 // ---------------------------------------------------------------------------
