@@ -45,6 +45,12 @@ export default async function AdminAlertsPage() {
               </p>
               {alert.meeting && <p>Meeting: {alert.meeting.title}</p>}
               {alert.interestArea && <p>Topic: {alert.interestArea.name}</p>}
+              {alert.scheduledFor && (
+                <p style={{ color: "#555", fontSize: "0.9em" }}>
+                  Auto-sends to subscribers at{" "}
+                  {alert.scheduledFor.toLocaleString()} (unless held)
+                </p>
+              )}
 
               {alert.type === "MEETING_UPDATED" && (() => {
                 const c = content as MeetingUpdatedContent;
