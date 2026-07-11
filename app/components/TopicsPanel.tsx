@@ -1,5 +1,6 @@
 import TabbedPanel from "./TabbedPanel";
 import TimestampLink from "./TimestampLink";
+import AnnotatedText from "./AnnotatedText";
 import type { OffsetModel } from "@/app/lib/offset";
 
 export type Bullet = {
@@ -8,6 +9,7 @@ export type Bullet = {
   startTimeSeconds?: number | null;
   speaker?: string | null;
   position?: string | null;
+  references?: unknown;
 };
 
 export type Topic = {
@@ -42,26 +44,30 @@ export default function TopicsPanel({
     description: topic.description,
     content: (
       <ul className="list-disc list-inside space-y-2 text-gray-700 dark:text-gray-300">
-        {topic.bullets.map((b, i) => (
-          <li key={i}>
-            {b.speaker && <span className="font-medium">{b.speaker}: </span>}
-            {b.text}
-            {b.position && (
-              <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                {b.position}
-              </span>
-            )}
-            {b.startTimeSeconds != null && (
-              <span className="ml-1">
-                <TimestampLink
-                  seconds={b.startTimeSeconds}
-                  label={b.timecodeLabel ?? undefined}
-                  offsetModel={offsetModel}
-                />
-              </span>
-            )}
-          </li>
-        ))}
+        {topic.bullets.map((b, i) => {
+          const hasReferences =
+            Array.isArray(b.references) && b.references.length > 0;
+          return (
+            <li key={i}>
+              {b.speaker && <span className="font-medium">{b.speaker}: </span>}
+              <AnnotatedText text={b.text} references={b.references} offsetModel={offsetModel} />
+              {b.position && (
+                <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                  {b.position}
+                </span>
+              )}
+              {!hasReferences && b.startTimeSeconds != null && (
+                <span className="ml-1">
+                  <TimestampLink
+                    seconds={b.startTimeSeconds}
+                    label={b.timecodeLabel ?? undefined}
+                    offsetModel={offsetModel}
+                  />
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     ),
   }));

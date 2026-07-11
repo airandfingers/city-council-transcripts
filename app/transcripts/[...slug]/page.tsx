@@ -13,13 +13,15 @@ import SegmentsPanel from "@/app/components/SegmentsPanel";
 import SpeakerSummariesPanel from "@/app/components/SpeakerSummariesPanel";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import TimestampLink from "@/app/components/TimestampLink";
+import AnnotatedText from "@/app/components/AnnotatedText";
+import UnreviewedTranscriptNotice from "@/app/components/UnreviewedTranscriptNotice";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import type { GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
-const HIDDEN_SUMMARY_TYPES = new Set<string>(["TIMELINE_BULLET", "PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
+const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
 
 /** Mailbox for "request this summary" links when topic summaries aren't ready yet. */
 const SUMMARY_REQUEST_EMAIL =
@@ -32,6 +34,7 @@ const SUMMARY_REQUEST_EMAIL =
  * "the main takeaway" at the top rather than make people page through.
  */
 const SUMMARY_TYPE_ORDER = [
+  "TIMELINE_BULLET",
   "KEY_DECISION",
   "MOTION_AND_VOTE",
   "ACTION_ITEM",
@@ -118,11 +121,12 @@ export default async function TranscriptPage({ params }: Props) {
       label = label.split(/\s*-\s*/)[0];
     }
     list.push({
-      text: item.text.replace(/\s*\[minutes\]\s*$/i, ""),
+      text: item.text,
       timecodeLabel: label,
       startTimeSeconds: item.startTimeSeconds,
       speaker: item.speaker,
       position: item.position,
+      references: item.references,
     });
     topicMap.set(item.type, list);
   }
@@ -141,13 +145,6 @@ export default async function TranscriptPage({ params }: Props) {
       if (bi === -1) return -1;
       return ai - bi;
     });
-
-  // Chronological, timestamped bullets generated alongside the prose
-  // overview — the per-bullet timecodes are what let the Summary section
-  // deep-link into the transcript/video.
-  const timelineBullets = meeting.summaryItems.filter(
-    (item) => item.type === "TIMELINE_BULLET",
-  );
 
   // SUMMARY_BLOCK items: one row per prose sentence/block, optionally
   // carrying a video timestamp (startTimeSeconds) or a document citation
@@ -224,9 +221,16 @@ export default async function TranscriptPage({ params }: Props) {
           {meeting.logline ? (
             <div className="space-y-2">
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
-                {meeting.logline}
+                <AnnotatedText
+                  text={meeting.logline ?? ""}
+                  references={tldrBlock?.references}
+                  offsetModel={offsetModel}
+                  scrollTargetId="full-transcript"
+                  openDetailsId="full-transcript"
+                />
               </p>
-              {tldrBlock?.startTimeSeconds != null && (
+              {!(Array.isArray(tldrBlock?.references) && tldrBlock.references.length > 0) &&
+                tldrBlock?.startTimeSeconds != null && (
                 <TimestampLink
                   seconds={tldrBlock.startTimeSeconds}
                   label={tldrBlock.timecodeLabel ?? undefined}
@@ -257,15 +261,24 @@ export default async function TranscriptPage({ params }: Props) {
           in the video/transcript. */}
       <section className="mb-10">
         <h2 className="text-2xl font-semibold mb-4">Summary</h2>
-        {meeting.summary || timelineBullets.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {(summaryBlocks.length > 0 || meeting.summary) && (
-              <div className="lg:col-span-2 space-y-3 text-gray-700 dark:text-gray-300 max-w-prose">
-                {summaryBlocks.length > 0
-                  ? summaryBlocks.map((block) => (
-                      <p key={block.id} className="flex gap-2 items-start">
-                        <span className="flex-1">{block.text}</span>
-                        {block.startTimeSeconds != null ? (
+        {meeting.summary ? (
+          <div className="space-y-3 text-gray-700 dark:text-gray-300 max-w-prose">
+            {summaryBlocks.length > 0
+              ? summaryBlocks.map((block) => {
+                  const hasReferences =
+                    Array.isArray(block.references) && block.references.length > 0;
+                  return (
+                    <p key={block.id} className="flex gap-2 items-start">
+                      <AnnotatedText
+                        text={block.text}
+                        references={block.references}
+                        offsetModel={offsetModel}
+                        scrollTargetId="full-transcript"
+                        openDetailsId="full-transcript"
+                        className="flex-1"
+                      />
+                      {!hasReferences &&
+                        (block.startTimeSeconds != null ? (
                           <TimestampLink
                             seconds={block.startTimeSeconds}
                             label={block.timecodeLabel ?? undefined}
@@ -284,33 +297,13 @@ export default async function TranscriptPage({ params }: Props) {
                           >
                             [source]
                           </a>
-                        ) : null}
-                      </p>
-                    ))
-                  : meeting.summary!.split(/\n\n+/).map((para, i) => (
-                      <p key={i}>{para}</p>
-                    ))}
-              </div>
-            )}
-            {timelineBullets.length > 0 && (
-              <ul className="lg:col-span-1 space-y-2">
-                {timelineBullets.map((item) => (
-                  <li key={item.id} className="text-sm flex gap-2">
-                    {item.startTimeSeconds != null && (
-                      <TimestampLink
-                        seconds={item.startTimeSeconds}
-                        label={item.timecodeLabel ?? undefined}
-                        openDetailsId="full-transcript"
-                        scrollTargetId="full-transcript"
-                        offsetModel={offsetModel}
-                        className="shrink-0 text-xs text-blue-500 dark:text-blue-400 hover:underline mt-0.5"
-                      />
-                    )}
-                    <span className="text-gray-700 dark:text-gray-300">{item.text}</span>
-                  </li>
+                        ) : null)}
+                    </p>
+                  );
+                })
+              : meeting.summary!.split(/\n\n+/).map((para, i) => (
+                  <p key={i}>{para}</p>
                 ))}
-              </ul>
-            )}
           </div>
         ) : meeting.topicSummaries.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -402,9 +395,12 @@ export default async function TranscriptPage({ params }: Props) {
               good proof of what happened, but no one is going to read
               the whole thing." */}
           <details id="full-transcript" className="lg:col-span-1 group">
-            <summary className="cursor-pointer text-2xl font-semibold mb-4 list-none flex items-center gap-2">
+            <summary className="cursor-pointer text-2xl font-semibold mb-4 list-none flex items-center gap-2 flex-wrap">
               <span aria-hidden="true" className="text-base text-gray-400 group-open:rotate-90 transition-transform inline-block">▶</span>
               Transcript
+              {!meeting.transcriptReviewed && (
+                <UnreviewedTranscriptNotice meetingId={meeting.id} />
+              )}
             </summary>
             <TranscriptViewer groupedLines={groupedLines} offsetModel={offsetModel} />
           </details>

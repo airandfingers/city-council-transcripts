@@ -63,6 +63,33 @@ export async function sendAdminCityRequestEmail(params: {
   );
 }
 
+export async function sendTranscriptReviewRequestEmail(params: {
+  meetingTitle: string;
+  meetingUrl: string;
+  requesterNote?: string;
+  adminEmails: string[];
+}) {
+  const { adminEmails, meetingTitle, meetingUrl, requesterNote } = params;
+  if (adminEmails.length === 0) return;
+  const from = getFromAddress();
+  const subject = `Transcript review requested: ${meetingTitle}`;
+  const text = [
+    `A visitor requested a human review of an AI-generated transcript on Counciloris.`,
+    ``,
+    `Meeting: ${meetingTitle}`,
+    `Link: ${meetingUrl}`,
+    ...(requesterNote ? ["", `Note: ${requesterNote}`] : []),
+    ``,
+    `Time: ${new Date().toUTCString()}`,
+  ].join("\n");
+  await Promise.all(
+    adminEmails.map(async (to) => {
+      const { error } = await getResend().emails.send({ from, to, subject, text });
+      if (error) console.error("Failed to send review request email to", to, error);
+    }),
+  );
+}
+
 export type ConfirmEmailParams = {
   to: string;
   confirmToken: string;

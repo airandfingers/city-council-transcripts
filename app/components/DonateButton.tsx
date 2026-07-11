@@ -2,11 +2,11 @@ import Image from "next/image";
 
 /**
  * Provider-agnostic donate button. The destination URL is read from
- * NEXT_PUBLIC_DONATE_URL (defaults to a Ko-fi link if unset). Swap to
- * PayPal or any other provider by changing one env var — no code change needed.
+ * NEXT_PUBLIC_DONATE_URL (defaults to PayPal.me if unset). Swap providers
+ * by changing one env var — no code change needed.
  */
 
-const DONATE_URL = process.env.NEXT_PUBLIC_DONATE_URL ?? "https://ko-fi.com/counciloris";
+const DONATE_URL = process.env.NEXT_PUBLIC_DONATE_URL ?? "https://paypal.me/RNakano";
 
 export default function DonateButton({ className = "" }: { className?: string }) {
   return (

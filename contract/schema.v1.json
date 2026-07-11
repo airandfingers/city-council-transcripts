@@ -1,7 +1,7 @@
 {
-  "contract_version": "1.3",
+  "contract_version": "1.5",
   "contract_major": 1,
-  "generated_at": "2026-07-05T20:37:03.020Z",
+  "generated_at": "2026-07-10T20:04:41.808Z",
   "description": "Publisher contract for city-council-transcripts. External publishers (e.g. city-council-transcriber) must fetch the current contract, project their data onto it (dropping surplus fields), validate, and then write directly to Neon. See CONTRACT.md for versioning rules.",
   "versioning_summary": "Publishers always target the CURRENT contract (no version pinning). New columns are additive/nullable so older publisher data still writes. Publishers project richer data DOWN to what the current schema supports. A contract_major bump signals a breaking change requiring publisher updates.",
   "write_order": [
@@ -138,6 +138,38 @@
         "minutesAlignedCount": {
           "type": "integer",
           "required": false
+        },
+        "transcriptReviewed": {
+          "type": "boolean",
+          "required": false
+        },
+        "transcriptReviewedAt": {
+          "type": "datetime",
+          "required": false
+        },
+        "transcriptReviewedBy": {
+          "type": "string",
+          "required": false
+        },
+        "transcriptQualityScore": {
+          "type": "integer",
+          "required": false
+        },
+        "transcriptReviewNotes": {
+          "type": "string",
+          "required": false
+        },
+        "meetingReviewed": {
+          "type": "boolean",
+          "required": false
+        },
+        "meetingReviewedAt": {
+          "type": "datetime",
+          "required": false
+        },
+        "meetingReviewedBy": {
+          "type": "string",
+          "required": false
         }
       }
     },
@@ -257,6 +289,10 @@
         },
         "notes": {
           "type": "string",
+          "required": false
+        },
+        "references": {
+          "type": "json",
           "required": false
         }
       }

@@ -27,38 +27,52 @@ model City {
 }
 
 model Meeting {
-  id                   Int                         @id @default(autoincrement())
-  cityId               Int
-  slug                 String                      @unique @db.VarChar(500)
-  title                String                      @db.VarChar(500)
-  date                 DateTime
-  summary              String?                     @db.Text
-  summaryModel         String?                     @db.VarChar(200)
-  logline              String?                     @db.Text
-  timelineBullets      Json?
-  youtubeUrl           String?                     @db.VarChar(500)
-  youtubeOffsetSeconds Float?
-  youtubeOffsetModel   Json?
-  granicusUrl          String?                     @db.VarChar(500)
-  videoUrl             String?                     @db.VarChar(1000)
-  videoProvider        String?                     @db.VarChar(50)
-  minutesText          String?                     @db.Text
-  minutesUrl           String?                     @db.VarChar(500)
-  minutesGeneratedAt   DateTime?
-  minutesTotalItems    Int?
-  minutesAlignedCount  Int?
-  createdAt            DateTime                    @default(now())
-  updatedAt            DateTime                    @updatedAt
-  city                 City                        @relation(fields: [cityId], references: [id], onDelete: Cascade)
-  lines                TranscriptLine[]
-  summaryItems         MeetingSummaryItem[]
-  documents            MeetingDocument[]
-  segments             MeetingSegment[]
-  minutesItems         MinutesItem[]
-  topicSummaries       TopicSummary[]
-  speakerSummaries     SpeakerSummary[]
-  interestAreaStatuses InterestAreaMeetingStatus[]
-  alerts               Alert[]
+  id                     Int                         @id @default(autoincrement())
+  cityId                 Int
+  slug                   String                      @unique @db.VarChar(500)
+  title                  String                      @db.VarChar(500)
+  date                   DateTime
+  summary                String?                     @db.Text
+  summaryModel           String?                     @db.VarChar(200)
+  logline                String?                     @db.Text
+  timelineBullets        Json?
+  youtubeUrl             String?                     @db.VarChar(500)
+  youtubeOffsetSeconds   Float?
+  youtubeOffsetModel     Json?
+  granicusUrl            String?                     @db.VarChar(500)
+  videoUrl               String?                     @db.VarChar(1000)
+  videoProvider          String?                     @db.VarChar(50)
+  minutesText            String?                     @db.Text
+  minutesUrl             String?                     @db.VarChar(500)
+  minutesGeneratedAt     DateTime?
+  minutesTotalItems      Int?
+  minutesAlignedCount    Int?
+  // Transcript accuracy review — sourced from the transcriber's existing
+  // review_status.json (quality_score/reviewed_by/notes), independent of
+  // meetingReviewed below (see FEAT-REVIEW-FLAGS-001).
+  transcriptReviewed     Boolean?
+  transcriptReviewedAt   DateTime?
+  transcriptReviewedBy   String?                     @db.VarChar(200)
+  transcriptQualityScore Int?
+  transcriptReviewNotes  String?                     @db.Text
+  // Whole-meeting/summary content review — a separate, admin-toggled flag
+  // with no transcriber-side equivalent (not derived from any pipeline
+  // artifact).
+  meetingReviewed        Boolean?
+  meetingReviewedAt      DateTime?
+  meetingReviewedBy      String?                     @db.VarChar(200)
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  city                   City                        @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  lines                  TranscriptLine[]
+  summaryItems           MeetingSummaryItem[]
+  documents              MeetingDocument[]
+  segments               MeetingSegment[]
+  minutesItems           MinutesItem[]
+  topicSummaries         TopicSummary[]
+  speakerSummaries       SpeakerSummary[]
+  interestAreaStatuses   InterestAreaMeetingStatus[]
+  alerts                 Alert[]
 
   @@index([cityId])
   @@index([date])
@@ -98,6 +112,7 @@ model MeetingSummaryItem {
   speaker          String? @db.VarChar(200)
   position         String? @db.VarChar(50)
   notes            String? @db.Text
+  references       Json?
   meeting          Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, type, sortOrder])
