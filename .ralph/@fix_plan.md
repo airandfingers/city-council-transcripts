@@ -30,6 +30,37 @@
 - [ ] Update `.ralph/@AGENT.md` with any new build/test commands or gate notes
 - [ ] Mark completed items and commit with conventional commit message
 
+## Subscription Module (specs/subscription/)
+
+### DB / Schema
+- [ ] Add `Subscriber` model to `prisma/schema.prisma` (email, cityId FK, status, confirmed, confirmToken, unsubscribeToken, timestamps)
+- [ ] Add `subscribers` relation to `City` model
+- [ ] Generate and apply Prisma migration (`prisma migrate dev`)
+- [ ] Add email index + token indexes
+
+### Email Delivery (`app/lib/email.ts`)
+- [ ] Implement `sendEmail({ to, subject, html })` with Resend (RESEND_API_KEY) and Nodemailer (SMTP_HOST) provider selection
+- [ ] Update `.env.example` with all new vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_BASE_URL`)
+
+### API Routes
+- [ ] `app/api/subscribe/route.ts` — upsert subscriber, send confirmation email
+- [ ] `app/api/confirm/route.ts` — set confirmed=true via confirmToken
+- [ ] `app/api/unsubscribe/route.ts` — set status=unsubscribed via unsubscribeToken
+
+### UI
+- [ ] `app/components/SubscribeForm.tsx` — client component with idle/loading/success/error states, optional cityId prop
+- [ ] Embed `SubscribeForm` on home page (`app/page.tsx`)
+- [ ] Embed `SubscribeForm` on city page (`app/[state]/[city]/page.tsx`)
+
+### Gates
+- [ ] Gate: `subscribe-api-e2e` — POST valid/invalid/duplicate email, verify DB row and response
+- [ ] Gate: `confirm-unsubscribe-e2e` — token flows set correct DB fields
+- [ ] Register new gates in `scripts/validate/gates.json`
+
+### Stretch
+- [ ] `scripts/list-subscribers.mjs` — print active confirmed subscribers to stdout
+- [ ] Document script in `README.md`
+
 ## Completed
 
 - [x] Project initialization
