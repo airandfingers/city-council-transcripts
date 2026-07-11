@@ -10,8 +10,12 @@ export default function PublishAlertButton({ alertId }: { alertId: number }) {
   const send = () => {
     startTransition(async () => {
       try {
-        const { sent, failed } = await publishAlert(alertId);
-        setResult(`Sent to ${sent} subscriber(s)${failed.length ? `, ${failed.length} failed` : ""}.`);
+        const { sent, failed, skipped, skippedReason } = await publishAlert(alertId);
+        if (skipped) {
+          setResult(`Skipped — ${skippedReason ?? "not sent to subscribers"}.`);
+        } else {
+          setResult(`Sent to ${sent} subscriber(s)${failed.length ? `, ${failed.length} failed` : ""}.`);
+        }
       } catch {
         setResult("Failed to send.");
       }

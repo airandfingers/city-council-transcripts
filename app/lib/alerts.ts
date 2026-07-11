@@ -12,6 +12,7 @@ import {
   getCityUpdateRecipients,
   getInterestAreaRecipients,
   getPublishMeeting,
+  isMeetingTooOldForUserAlerts,
 } from "@/app/lib/publish";
 
 /**
@@ -67,7 +68,13 @@ export type AlertContent =
   | MeetingUpcomingContent
   | InterestAreaUpdatedContent;
 
-export type AlertSendResult = { sent: number; failed: string[] };
+export type AlertSendResult = {
+  sent: number;
+  failed: string[];
+  /** True when the send was skipped entirely (e.g. meeting too old for user alerts). */
+  skipped?: boolean;
+  skippedReason?: string;
+};
 
 /**
  * Minimum hold window, in hours, between an alert being created (admins
@@ -208,6 +215,26 @@ export async function publishAlertToSubscribers(
   const alert = await prisma.alert.findUnique({ where: { id: alertId } });
   if (!alert) throw new Error(`Alert ${alertId} not found`);
 
+  // Guard: never email end-user subscribers about meetings older than the
+  // configured age limit. Admin review emails (sendAlertToAdmins) are
+  // unaffected — this only gates the subscriber-facing send.
+  if (await isAlertMeetingTooOldForSubscribers(alert)) {
+    await prisma.alert.update({
+      where: { id: alertId },
+      data: {
+        status: "CANCELED",
+        canceledAt: new Date(),
+        canceledBy: "system:meeting-too-old",
+      },
+    });
+    return {
+      sent: 0,
+      failed: [],
+      skipped: true,
+      skippedReason: "meeting is older than the user-alert age limit",
+    };
+  }
+
   const recipients = await getSubscriberRecipients(alert);
   const result = await sendAlertEmails(alert, recipients, { isAdmin: false });
 
@@ -290,6 +317,20 @@ export async function publishDueScheduledAlerts(
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * True when the alert's underlying meeting is too old for a subscriber
+ * send. INTEREST_AREA_UPDATED alerts have no single associated meeting and
+ * are never age-gated.
+ */
+async function isAlertMeetingTooOldForSubscribers(alert: Alert): Promise<boolean> {
+  if (!alert.meetingId) return false;
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: alert.meetingId },
+    select: { date: true },
+  });
+  return meeting ? isMeetingTooOldForUserAlerts(meeting.date) : false;
+}
 
 async function getSubscriberRecipients(alert: Alert) {
   switch (alert.type) {

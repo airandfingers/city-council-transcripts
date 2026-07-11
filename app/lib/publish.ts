@@ -26,6 +26,8 @@ export type PublishMeeting = {
   tldr: string | null;
   /** Key-decision bullets, ordered as shown on the site. */
   keyDecisions: string[];
+  /** When the meeting took place; used to age-gate end-user alerts. */
+  date: Date;
 };
 
 /** A subscriber to notify, with an optional manage/unsubscribe link. */
@@ -55,6 +57,7 @@ export async function getPublishMeeting(
       slug: true,
       cityId: true,
       logline: true,
+      date: true,
       city: { select: { name: true } },
       summaryItems: {
         where: { type: "KEY_DECISION" },
@@ -74,7 +77,30 @@ export async function getPublishMeeting(
     cityName: meeting.city.name,
     tldr: meeting.logline,
     keyDecisions: meeting.summaryItems.map((item) => cleanBullet(item.text)),
+    date: meeting.date,
   };
+}
+
+/**
+ * Max age, in days, of a meeting for which end-user (non-admin) alert
+ * emails will still be sent. Configurable via MAX_USER_ALERT_MEETING_AGE_DAYS;
+ * defaults to 30 (~1 month). Invalid or missing values fall back to the
+ * default. Admin review emails are never age-gated — this only guards the
+ * subscriber-facing sends.
+ */
+export function getMaxUserAlertMeetingAgeDays(): number {
+  const raw = process.env.MAX_USER_ALERT_MEETING_AGE_DAYS;
+  const parsed = raw != null ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+}
+
+/** True when a meeting is too old to still email end-user subscribers about. */
+export function isMeetingTooOldForUserAlerts(
+  meetingDate: Date,
+  now: Date = new Date(),
+): boolean {
+  const ageMs = now.getTime() - meetingDate.getTime();
+  return ageMs > getMaxUserAlertMeetingAgeDays() * 24 * 3_600_000;
 }
 
 /** Admin subscribers, who receive the (ADMIN) notification. */
@@ -205,6 +231,21 @@ export async function handlePublishRequest(
   }
 
   const isAdmin = mode === "admins";
+
+  // Guard: never email end-user subscribers about meetings older than the
+  // configured age limit. Admin review emails are unaffected.
+  if (!isAdmin && isMeetingTooOldForUserAlerts(meeting.date)) {
+    return NextResponse.json({
+      ok: true,
+      meetingId: meeting.id,
+      skipped: true,
+      reason: "meeting is older than the user-alert age limit",
+      recipients: 0,
+      sent: 0,
+      failed: [],
+    });
+  }
+
   const recipients = isAdmin
     ? await getAdminRecipients()
     : await getCityUpdateRecipients(meeting.cityId);
