@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import YouTubePlayer from "./YouTubePlayer";
 import CopyTimecode from "./CopyTimecode";
+import { useVideoSync, type SyncablePlayer } from "./VideoSyncProvider";
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -23,20 +24,46 @@ type Props = {
 function Mp4Player({ videoUrl }: { videoUrl: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const searchParams = useSearchParams();
+  const { registerPlayer } = useVideoSync();
 
   useEffect(() => {
     const startSeconds = Number(searchParams.get("t")) || 0;
     const video = videoRef.current;
-    if (!video || startSeconds <= 0) return;
+    if (!video) return;
     const seek = () => {
-      video.currentTime = startSeconds;
+      if (startSeconds > 0) video.currentTime = startSeconds;
     };
     if (video.readyState >= 1) {
       seek();
     } else {
       video.addEventListener("loadedmetadata", seek, { once: true });
-      return () => video.removeEventListener("loadedmetadata", seek);
     }
+
+    // Register with VideoSyncProvider so TimestampLink's seekTo()/play()
+    // (used for in-page clicks on inline summary/transcript timecodes)
+    // actually reach this player — previously only YouTubePlayer did this,
+    // so clicking a timecode on an mp4-hosted meeting silently no-op'd.
+    const adapter: SyncablePlayer = {
+      seekTo: (seconds) => {
+        video.currentTime = seconds;
+      },
+      playVideo: () => {
+        void video.play();
+      },
+      getCurrentTime: () => video.currentTime,
+      addEventListener: (event, handler) => {
+        if (event !== "onStateChange") return;
+        const onPlay = () => handler({ data: 1 });
+        const onPause = () => handler({ data: 2 });
+        video.addEventListener("play", onPlay);
+        video.addEventListener("pause", onPause);
+      },
+    };
+    registerPlayer(adapter);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", seek);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
