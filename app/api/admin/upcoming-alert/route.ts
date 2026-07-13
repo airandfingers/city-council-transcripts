@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createMeetingUpcomingAlert, sendAlertToAdmins } from "@/app/lib/alerts";
+import {
+  createMeetingUpcomingAlert,
+  publishAlertToSubscribers,
+  sendAlertToAdmins,
+} from "@/app/lib/alerts";
 import { isAuthorized } from "@/app/lib/publish";
 
 const UpcomingAlertBody = z.object({
@@ -21,7 +25,14 @@ const UpcomingAlertBody = z.object({
  *
  * Called by the Python scraper when a new upcoming meeting's agenda is
  * available. Creates a MEETING_UPCOMING alert with the bite/snack/meal
- * tiered summary and immediately sends it to admins for review.
+ * tiered summary, sends it to admins for visibility, and — unlike the
+ * post-meeting MEETING_UPDATED path — immediately fans it out to
+ * subscribers too (per-subscription frequency: INSTANT sent now,
+ * DAILY/WEEKLY/MONTHLY queued for the next digest). This alert type is
+ * time-sensitive (per prd.md AC-2.2, must reach subscribers before the
+ * meeting) and scraped/agenda-derived rather than AI-summarized meeting
+ * content, so it skips the admin-hold-then-manual-publish step the
+ * post-meeting alerts use for quality review.
  */
 export async function POST(req: Request) {
   if (!isAuthorized(req)) {
@@ -47,11 +58,13 @@ export async function POST(req: Request) {
 
   try {
     const alert = await createMeetingUpcomingAlert(meeting_id, { bite, snack, meal });
-    const sendResult = await sendAlertToAdmins(alert.id);
+    const adminResult = await sendAlertToAdmins(alert.id);
+    const subscriberResult = await publishAlertToSubscribers(alert.id, "api:upcoming-alert");
     return NextResponse.json({
       ok: true,
       alertId: alert.id,
-      ...sendResult,
+      admins: adminResult,
+      subscribers: subscriberResult,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

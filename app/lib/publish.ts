@@ -1,11 +1,6 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/app/lib/prisma";
-import {
-  buildManageUrl,
-  buildMeetingUrl,
-  sendMeetingPublishedEmail,
-} from "@/app/lib/email";
+import type { AlertFrequency } from "@prisma/client";
 
 /**
  * Shared logic for the publish endpoints (`/api/publish` and
@@ -35,6 +30,17 @@ export type PublishRecipient = {
   email: string;
   /** Token backing the manage/unsubscribe link; null for admins with none. */
   unsubscribeToken: string | null;
+};
+
+/**
+ * A subscription-backed recipient: same as PublishRecipient, plus the
+ * subscription id and frequency the fan-out layer (app/lib/alerts.ts) needs
+ * to create an AlertDelivery and decide whether to send immediately (INSTANT)
+ * or queue for the next digest (DAILY/WEEKLY/MONTHLY).
+ */
+export type SubscriptionRecipient = PublishRecipient & {
+  subscriptionId: number;
+  frequency: AlertFrequency;
 };
 
 /** Strips the trailing "[minutes]" marker the site also hides from bullets. */
@@ -124,26 +130,33 @@ export async function getAdminRecipients(): Promise<PublishRecipient[]> {
 }
 
 /**
- * Active subscribers to a city's updates (`CITY_UPDATES`), deduplicated by
- * email. Each recipient's own unsubscribe token backs their manage link.
+ * Active subscriptions to a city's updates (`CITY_UPDATES`), deduplicated by
+ * subscriber email (a given subscriber can only have one CITY_UPDATES
+ * subscription per city, enforced by a DB constraint, so this is defensive).
+ * Returns the subscription id + frequency so the fan-out layer can create
+ * AlertDeliveries and route INSTANT vs. digest sends.
  */
 export async function getCityUpdateRecipients(
   cityId: number,
-): Promise<PublishRecipient[]> {
+): Promise<SubscriptionRecipient[]> {
   const subscriptions = await prisma.subscription.findMany({
     where: { kind: "CITY_UPDATES", cityId, status: "ACTIVE" },
     select: {
+      id: true,
       unsubscribeToken: true,
+      frequency: true,
       subscriber: { select: { email: true } },
     },
   });
 
-  const byEmail = new Map<string, PublishRecipient>();
+  const byEmail = new Map<string, SubscriptionRecipient>();
   for (const sub of subscriptions) {
     if (!byEmail.has(sub.subscriber.email)) {
       byEmail.set(sub.subscriber.email, {
+        subscriptionId: sub.id,
         email: sub.subscriber.email,
         unsubscribeToken: sub.unsubscribeToken,
+        frequency: sub.frequency,
       });
     }
   }
@@ -151,26 +164,31 @@ export async function getCityUpdateRecipients(
 }
 
 /**
- * Active subscribers to a specific interest area's updates
- * (`TOPIC_IN_CITY_UPDATES`), deduplicated by email.
+ * Active subscriptions to a specific interest area's updates
+ * (`TOPIC_IN_CITY_UPDATES`), deduplicated by subscriber email. See
+ * getCityUpdateRecipients for the same shape/rationale.
  */
 export async function getInterestAreaRecipients(
   interestAreaId: number,
-): Promise<PublishRecipient[]> {
+): Promise<SubscriptionRecipient[]> {
   const subscriptions = await prisma.subscription.findMany({
     where: { kind: "TOPIC_IN_CITY_UPDATES", interestAreaId, status: "ACTIVE" },
     select: {
+      id: true,
       unsubscribeToken: true,
+      frequency: true,
       subscriber: { select: { email: true } },
     },
   });
 
-  const byEmail = new Map<string, PublishRecipient>();
+  const byEmail = new Map<string, SubscriptionRecipient>();
   for (const sub of subscriptions) {
     if (!byEmail.has(sub.subscriber.email)) {
       byEmail.set(sub.subscriber.email, {
+        subscriptionId: sub.id,
         email: sub.subscriber.email,
         unsubscribeToken: sub.unsubscribeToken,
+        frequency: sub.frequency,
       });
     }
   }
@@ -194,92 +212,3 @@ export function isAuthorized(req: Request): boolean {
   return token.length > 0 && token === expected;
 }
 
-export type PublishMode = "admins" | "city";
-
-/**
- * Shared request handler for `/api/publish` and `/api/publish-to-admins`.
- * Authorizes the caller, loads the meeting, resolves recipients for the
- * given mode, and sends each notification. Email failures are collected
- * per-recipient so one bad address doesn't abort the whole batch.
- */
-export async function handlePublishRequest(
-  req: Request,
-  mode: PublishMode,
-): Promise<NextResponse> {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const parsed = PublishBody.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "meeting_id (positive integer) is required" },
-      { status: 400 },
-    );
-  }
-
-  const meeting = await getPublishMeeting(parsed.data.meeting_id);
-  if (!meeting) {
-    return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
-  }
-
-  const isAdmin = mode === "admins";
-
-  // Guard: never email end-user subscribers about meetings older than the
-  // configured age limit. Admin review emails are unaffected.
-  if (!isAdmin && isMeetingTooOldForUserAlerts(meeting.date)) {
-    return NextResponse.json({
-      ok: true,
-      meetingId: meeting.id,
-      skipped: true,
-      reason: "meeting is older than the user-alert age limit",
-      recipients: 0,
-      sent: 0,
-      failed: [],
-    });
-  }
-
-  const recipients = isAdmin
-    ? await getAdminRecipients()
-    : await getCityUpdateRecipients(meeting.cityId);
-
-  const meetingUrl = buildMeetingUrl(meeting.slug);
-
-  let sent = 0;
-  const failed: string[] = [];
-  for (const recipient of recipients) {
-    try {
-      await sendMeetingPublishedEmail({
-        to: recipient.email,
-        meetingTitle: meeting.title,
-        cityName: meeting.cityName,
-        tldr: meeting.tldr,
-        keyDecisions: meeting.keyDecisions,
-        meetingUrl,
-        manageUrl: recipient.unsubscribeToken
-          ? buildManageUrl(recipient.unsubscribeToken)
-          : undefined,
-        isAdmin,
-      });
-      sent += 1;
-    } catch (err) {
-      console.error(`Failed to send publish email to ${recipient.email}`, err);
-      failed.push(recipient.email);
-    }
-  }
-
-  return NextResponse.json({
-    ok: true,
-    meetingId: meeting.id,
-    recipients: recipients.length,
-    sent,
-    failed,
-  });
-}

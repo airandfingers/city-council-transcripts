@@ -26,12 +26,25 @@ model City {
   @@index([stateCode])
 }
 
+enum MeetingStatus {
+  SCHEDULED
+  OCCURRED
+  PUBLISHED
+  CANCELED
+}
+
 model Meeting {
   id                     Int                         @id @default(autoincrement())
   cityId                 Int
   slug                   String                      @unique @db.VarChar(500)
   title                  String                      @db.VarChar(500)
   date                   DateTime
+  // Default is PUBLISHED, not SCHEDULED: until the transcriber's stub-write
+  // path ships (see FEAT-EARLY-ALERTS-001 phase 3), every Meeting row is
+  // still created post-transcription by cmd_publish, which never sets this
+  // column explicitly. Only the new stub-upsert path sets SCHEDULED.
+  status                 MeetingStatus               @default(PUBLISHED)
+  agendaLastFetchedAt    DateTime?
   summary                String?                     @db.Text
   summaryModel           String?                     @db.VarChar(200)
   logline                String?                     @db.Text
@@ -73,9 +86,31 @@ model Meeting {
   speakerSummaries       SpeakerSummary[]
   interestAreaStatuses   InterestAreaMeetingStatus[]
   alerts                 Alert[]
+  agendaItemVersions     AgendaItemVersion[]
 
   @@index([cityId])
   @@index([date])
+}
+
+/// Append-only history of an agenda item's content as scraped pre-meeting.
+/// Every re-scrape that detects a content change inserts a new revision
+/// rather than overwriting, so older "what did the agenda say" states stay
+/// visible (see FEAT-EARLY-ALERTS-001).
+model AgendaItemVersion {
+  id           Int      @id @default(autoincrement())
+  meetingId    Int
+  sourceItemId String   @db.VarChar(100)
+  itemNumber   String?  @db.VarChar(50)
+  title        String   @db.Text
+  description  String?  @db.Text
+  documentUrls Json?
+  revision     Int      @default(1)
+  scrapedAt    DateTime @default(now())
+  createdAt    DateTime @default(now())
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, sourceItemId, revision])
+  @@index([meetingId, sourceItemId])
 }
 
 model TranscriptLine {
@@ -259,22 +294,33 @@ model InterestArea {
   @@index([cityId])
 }
 
-model InterestAreaMeetingStatus {
-  id               Int          @id @default(autoincrement())
-  interestAreaId   Int
-  meetingId        Int
-  discussed        Boolean
-  summary          String?      @db.Text
-  confidence       Float?
-  runId            String?      @db.VarChar(100)
-  startTimeSeconds Float?
-  endTimeSeconds   Float?
-  timecodeLabel    String?      @db.VarChar(50)
-  sourceItemId     String?      @db.VarChar(100)
-  interestArea     InterestArea @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
-  meeting          Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+enum InterestAreaStatusPhase {
+  PREVIEW
+  POSTMEETING
+}
 
-  @@unique([interestAreaId, meetingId])
+model InterestAreaMeetingStatus {
+  id                 Int                     @id @default(autoincrement())
+  interestAreaId     Int
+  meetingId          Int
+  phase              InterestAreaStatusPhase @default(POSTMEETING)
+  // Pre-meeting PREVIEW rows don't yet know whether the topic was actually
+  // discussed, hence nullable; POSTMEETING rows always set it.
+  discussed          Boolean?
+  discussionExpected Boolean?
+  signalStrength     String?                 @db.VarChar(10)
+  summary            String?                 @db.Text
+  confidence         Float?
+  runId              String?                 @db.VarChar(100)
+  startTimeSeconds   Float?
+  endTimeSeconds     Float?
+  timecodeLabel      String?                 @db.VarChar(50)
+  sourceItemId       String?                 @db.VarChar(100)
+  createdAt          DateTime                @default(now())
+  interestArea       InterestArea            @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
+  meeting            Meeting                 @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([interestAreaId, meetingId, phase])
   @@index([meetingId])
 }
 
@@ -292,6 +338,13 @@ enum SubscriptionStatus {
   UNSUBSCRIBED
 }
 
+enum AlertFrequency {
+  INSTANT
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 model Subscriber {
   id            Int            @id @default(autoincrement())
   email         String         @unique @db.VarChar(320)
@@ -299,6 +352,7 @@ model Subscriber {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   subscriptions Subscription[]
+  digestBatches DigestBatch[]
 }
 
 model Subscription {
@@ -313,12 +367,14 @@ model Subscription {
   interestArea       InterestArea?      @relation(fields: [interestAreaId], references: [id], onDelete: SetNull)
   requestedTopicName String?            @db.VarChar(200)
   status             SubscriptionStatus @default(PENDING)
+  frequency          AlertFrequency     @default(INSTANT)
   confirmToken       String             @unique @db.VarChar(64)
   unsubscribeToken   String             @unique @db.VarChar(64)
   confirmedAt        DateTime?
   unsubscribedAt     DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
+  deliveries         AlertDelivery[]
 
   @@unique([subscriberId, kind, cityId, requestedCityName, interestAreaId, requestedTopicName])
   @@index([kind, cityId, interestAreaId, status])
@@ -338,27 +394,71 @@ enum AlertStatus {
 }
 
 model Alert {
-  id             Int           @id @default(autoincrement())
+  id             Int             @id @default(autoincrement())
   type           AlertType
   meetingId      Int?
-  meeting        Meeting?      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  meeting        Meeting?        @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   interestAreaId Int?
-  interestArea   InterestArea? @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
-  status         AlertStatus   @default(DRAFTED)
+  interestArea   InterestArea?   @relation(fields: [interestAreaId], references: [id], onDelete: Cascade)
+  status         AlertStatus     @default(DRAFTED)
   content        Json
   scheduledFor   DateTime?
   sentToAdminsAt DateTime?
   publishedAt    DateTime?
-  publishedBy    String?       @db.VarChar(320)
+  publishedBy    String?         @db.VarChar(320)
   canceledAt     DateTime?
-  canceledBy     String?       @db.VarChar(320)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  canceledBy     String?         @db.VarChar(320)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deliveries     AlertDelivery[]
 
   @@index([type, status])
   @@index([meetingId])
   @@index([interestAreaId])
   @@index([status, scheduledFor])
+}
+
+enum AlertDeliveryStatus {
+  PENDING
+  SENT
+  SKIPPED
+}
+
+/// Per-subscription fan-out ledger. Decouples "an alert was published" from
+/// "a given subscriber received it," which is what lets DAILY/WEEKLY/MONTHLY
+/// deliveries get bundled into a single digest email across alerts, while
+/// INSTANT deliveries are sent (and marked SENT) immediately at publish time.
+model AlertDelivery {
+  id             Int                 @id @default(autoincrement())
+  alertId        Int
+  alert          Alert               @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  subscriptionId Int
+  subscription   Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  // Snapshot of the subscription's frequency at fan-out time, so a later
+  // frequency change doesn't retroactively reroute an already-queued delivery.
+  frequency      AlertFrequency
+  status         AlertDeliveryStatus @default(PENDING)
+  sentAt         DateTime?
+  digestBatchId  Int?
+  digestBatch    DigestBatch?        @relation(fields: [digestBatchId], references: [id], onDelete: SetNull)
+  createdAt      DateTime            @default(now())
+
+  @@unique([alertId, subscriptionId])
+  @@index([subscriptionId, status, frequency])
+  @@index([digestBatchId])
+}
+
+/// One row per digest email actually sent to a subscriber for a single
+/// cadence tick, grouping the AlertDeliveries bundled into that email.
+model DigestBatch {
+  id           Int             @id @default(autoincrement())
+  subscriberId Int
+  subscriber   Subscriber      @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  frequency    AlertFrequency
+  sentAt       DateTime        @default(now())
+  deliveries   AlertDelivery[]
+
+  @@index([subscriberId, frequency, sentAt])
 }
 
 /// TEMPORARY (2026-07-09): DB-backed fallback for the cron drain endpoint's

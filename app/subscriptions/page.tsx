@@ -1,7 +1,17 @@
 import prisma from "@/app/lib/prisma";
 import { unsubscribe } from "@/app/actions/unsubscribe";
+import { updateSubscriptionFrequency } from "@/app/actions/updateFrequency";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import RequestManageLinkForm from "@/app/components/RequestManageLinkForm";
+
+const FREQUENCY_OPTIONS = [
+  { value: "INSTANT", label: "Instantly" },
+  { value: "DAILY", label: "Daily digest" },
+  { value: "WEEKLY", label: "Weekly digest" },
+  { value: "MONTHLY", label: "Monthly digest" },
+] as const;
+
+const FREQUENCY_ELIGIBLE_KINDS = new Set(["CITY_UPDATES", "TOPIC_IN_CITY_UPDATES"]);
 
 type Search = Promise<{ token?: string }>;
 
@@ -54,6 +64,7 @@ export default async function SubscriptionsPage({
           status: true,
           unsubscribeToken: true,
           requestedCityName: true,
+          frequency: true,
           city: { select: { name: true, stateCode: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -79,6 +90,32 @@ export default async function SubscriptionsPage({
             <div>
               <div className="text-sm font-medium">{labelFor(s)}</div>
               <div className="text-xs text-gray-500">{s.status}</div>
+              {(s.status === "ACTIVE" || s.status === "PENDING") &&
+                FREQUENCY_ELIGIBLE_KINDS.has(s.kind) && (
+                  <form
+                    action={async (formData: FormData) => {
+                      "use server";
+                      const frequency = formData.get("frequency");
+                      if (typeof frequency === "string") {
+                        await updateSubscriptionFrequency(token, s.id, frequency);
+                      }
+                    }}
+                    className="mt-2"
+                  >
+                    <select
+                      name="frequency"
+                      defaultValue={s.frequency}
+                      onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                      className="text-xs border border-gray-300 dark:border-gray-700 rounded px-1 py-0.5 bg-white dark:bg-gray-800"
+                    >
+                      {FREQUENCY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </form>
+                )}
             </div>
             {s.status === "ACTIVE" || s.status === "PENDING" ? (
               <form

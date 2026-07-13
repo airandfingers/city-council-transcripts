@@ -27,6 +27,14 @@ export type SubscribeFormProps = SubscribeFormCommon &
   );
 
 type Status = "idle" | "submitting" | "success" | "error";
+type Frequency = "INSTANT" | "DAILY" | "WEEKLY" | "MONTHLY";
+
+const FREQUENCY_OPTIONS: { value: Frequency; label: string }[] = [
+  { value: "INSTANT", label: "Instantly" },
+  { value: "DAILY", label: "Daily digest" },
+  { value: "WEEKLY", label: "Weekly digest" },
+  { value: "MONTHLY", label: "Monthly digest" },
+];
 
 function defaultCta(kind: SubscribeFormProps["kind"]): string {
   switch (kind) {
@@ -58,6 +66,7 @@ export default function SubscribeForm(props: SubscribeFormProps) {
   const [requestedCityName, setRequestedCityName] = useState("");
   const [requestedTopicName, setRequestedTopicName] = useState("");
   const [honeypot, setHoneypot] = useState("");
+  const [frequency, setFrequency] = useState<Frequency>("INSTANT");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -66,6 +75,7 @@ export default function SubscribeForm(props: SubscribeFormProps) {
   const prompt = defaultPrompt(props);
   const showCityName = props.kind === "CITY_COVERAGE_REQUEST";
   const showTopicName = props.kind === "TOPIC_IN_CITY_COVERAGE_REQUEST";
+  const showFrequency = props.kind === "CITY_UPDATES" || props.kind === "TOPIC_IN_CITY_UPDATES";
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -88,6 +98,7 @@ export default function SubscribeForm(props: SubscribeFormProps) {
             kind: "CITY_UPDATES",
             email,
             cityId: props.cityId,
+            frequency,
             honeypot,
           };
         case "TOPIC_IN_CITY_UPDATES":
@@ -96,6 +107,7 @@ export default function SubscribeForm(props: SubscribeFormProps) {
             email,
             cityId: props.cityId,
             interestAreaId: props.interestAreaId,
+            frequency,
             honeypot,
           };
         case "TOPIC_IN_CITY_COVERAGE_REQUEST":
@@ -180,6 +192,22 @@ export default function SubscribeForm(props: SubscribeFormProps) {
           disabled={isPending}
           maxLength={320}
         />
+
+        {showFrequency && (
+          <select
+            value={frequency}
+            onChange={(e) => setFrequency(e.target.value as Frequency)}
+            className="border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800"
+            disabled={isPending}
+            aria-label="How often would you like to be emailed?"
+          >
+            {FREQUENCY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           type="text"

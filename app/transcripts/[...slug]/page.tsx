@@ -16,6 +16,7 @@ import TimestampLink from "@/app/components/TimestampLink";
 import AnnotatedText from "@/app/components/AnnotatedText";
 import UnreviewedTranscriptNotice from "@/app/components/UnreviewedTranscriptNotice";
 import SubscribeForm from "@/app/components/SubscribeForm";
+import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
 import type { GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
@@ -82,12 +83,31 @@ export default async function TranscriptPage({ params }: Props) {
       speakerSummaries: {
         orderBy: { sortOrder: "asc" },
       },
+      agendaItemVersions: {
+        orderBy: [{ sourceItemId: "asc" }, { revision: "desc" }],
+      },
     },
   });
 
   if (!meeting) {
     notFound();
   }
+
+  // Pre-meeting agenda content (see AgendaItemVersion — populated by the
+  // transcriber's upcoming-meeting scraper before a transcript exists).
+  // Keep only the latest revision per item; superseded once real
+  // per-item summaries (segments) exist post-transcription.
+  const latestAgendaItems = (() => {
+    const seen = new Set<string>();
+    const items: (typeof meeting.agendaItemVersions)[number][] = [];
+    for (const item of meeting.agendaItemVersions) {
+      if (seen.has(item.sourceItemId)) continue;
+      seen.add(item.sourceItemId);
+      items.push(item);
+    }
+    return items.sort((a, b) => a.sourceItemId.localeCompare(b.sourceItemId));
+  })();
+  const showPreMeetingAgenda = meeting.segments.length === 0 && latestAgendaItems.length > 0;
 
   // Group consecutive lines by the same speaker.
   // Use a double newline as separator when there is a gap of 2.5 s+.
@@ -192,6 +212,22 @@ export default async function TranscriptPage({ params }: Props) {
         {/* Meeting title */}
         <EditableTitle meetingId={meeting.id} initialTitle={meeting.title} />
 
+        {meeting.status === "SCHEDULED" && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
+            Upcoming meeting
+          </span>
+        )}
+        {meeting.status === "OCCURRED" && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 whitespace-nowrap">
+            Meeting held — transcript pending
+          </span>
+        )}
+        {meeting.status === "CANCELED" && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 whitespace-nowrap">
+            Canceled
+          </span>
+        )}
+
         {/* Push external links to the right */}
         <div className="flex-1" />
 
@@ -211,6 +247,18 @@ export default async function TranscriptPage({ params }: Props) {
           </a>
         )}
       </div>
+
+      {meeting.status === "SCHEDULED" && meeting.agendaLastFetchedAt && (
+        <p className="-mt-6 mb-8 text-xs text-gray-500 dark:text-gray-400">
+          Agenda last updated{" "}
+          {meeting.agendaLastFetchedAt.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </p>
+      )}
 
       {/* TLDR: the main takeaway leads, ahead of the full transcript.
           PoC feedback: "we always want to put the TLDR at the top." */}
@@ -433,7 +481,16 @@ export default async function TranscriptPage({ params }: Props) {
                         ),
                       },
                     ]
-                  : []),
+                  : showPreMeetingAgenda
+                    ? [
+                        {
+                          label: "Agenda",
+                          description:
+                            "Scraped ahead of the meeting — check back after it's held for the full discussion summary.",
+                          content: <AgendaItemsPanel items={latestAgendaItems} />,
+                        },
+                      ]
+                    : []),
                 ...(meeting.speakerSummaries.length > 0
                   ? [
                       {

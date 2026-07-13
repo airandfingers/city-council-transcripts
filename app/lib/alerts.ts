@@ -55,11 +55,22 @@ export type MeetingUpcomingContent = {
   meal: string;
 };
 
-/** Content for an INTEREST_AREA_UPDATED alert ("topic discussed at a meeting"). */
+/**
+ * Content for an INTEREST_AREA_UPDATED alert ("topic discussed at a meeting").
+ * When `phase` is "preview", this is a pre-meeting agenda-only signal (the
+ * topic is *expected* to come up at an upcoming meeting) rather than a
+ * confirmed post-meeting finding — `meetingTitle`/`meetingDate` are set so
+ * the email can link to that meeting's (possibly agenda-only) page.
+ */
 export type InterestAreaUpdatedContent = {
   subject: string;
   tldr: string | null;
   highlights: string[];
+  phase?: "preview" | "postmeeting";
+  meetingTitle?: string;
+  meetingDate?: string;
+  discussionExpected?: boolean;
+  signalStrength?: string;
 };
 
 /** Union of all alert content shapes, discriminated by Alert.type. */
@@ -159,26 +170,72 @@ export async function createMeetingUpcomingAlert(
 }
 
 /**
- * Creates a DRAFTED alert for an interest area update.
- * The summary content is derived from the InterestArea's current statusSummary.
+ * Options for a pre-meeting PREVIEW-phase interest-area alert: the topic is
+ * *expected* to be discussed at an upcoming meeting, per agenda-only LLM
+ * classification (see interest_area_summarizer.py::preview_meeting_for_interest_areas
+ * in city-council-transcriber). When omitted, the alert is built from the
+ * InterestArea's city-wide statusSummary rollup (today's post-meeting path).
  */
-export async function createInterestAreaAlert(interestAreaId: number): Promise<Alert> {
+export type InterestAreaPreviewOptions = {
+  meetingId: number;
+  summary?: string;
+  discussionExpected?: boolean;
+  signalStrength?: string;
+};
+
+/**
+ * Creates a DRAFTED alert for an interest area update. Without `preview`,
+ * the summary content is derived from the InterestArea's current
+ * statusSummary (post-meeting rollup). With `preview`, the content is
+ * meeting-specific pre-meeting agenda signal instead, and the alert carries
+ * `meetingId` so the email can link to that (possibly agenda-only) meeting
+ * page rather than a bare topics URL.
+ */
+export async function createInterestAreaAlert(
+  interestAreaId: number,
+  preview?: InterestAreaPreviewOptions,
+): Promise<Alert> {
   const area = await prisma.interestArea.findUnique({
     where: { id: interestAreaId },
     select: { name: true, statusSummary: true },
   });
   if (!area) throw new Error(`InterestArea ${interestAreaId} not found`);
 
-  const content: InterestAreaUpdatedContent = {
-    subject: area.name,
-    tldr: area.statusSummary ?? null,
-    highlights: [],
-  };
+  let content: InterestAreaUpdatedContent;
+  let meetingId: number | undefined;
+
+  if (preview) {
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: preview.meetingId },
+      select: { title: true, date: true },
+    });
+    if (!meeting) throw new Error(`Meeting ${preview.meetingId} not found`);
+
+    meetingId = preview.meetingId;
+    content = {
+      subject: area.name,
+      tldr: preview.summary ?? null,
+      highlights: [],
+      phase: "preview",
+      meetingTitle: meeting.title,
+      meetingDate: meeting.date.toISOString(),
+      discussionExpected: preview.discussionExpected,
+      signalStrength: preview.signalStrength,
+    };
+  } else {
+    content = {
+      subject: area.name,
+      tldr: area.statusSummary ?? null,
+      highlights: [],
+      phase: "postmeeting",
+    };
+  }
 
   return prisma.alert.create({
     data: {
       type: "INTEREST_AREA_UPDATED",
       interestAreaId,
+      meetingId,
       content,
       status: "DRAFTED",
       scheduledFor: computeScheduledFor(),
@@ -207,7 +264,15 @@ export async function sendAlertToAdmins(alertId: number): Promise<AlertSendResul
   return result;
 }
 
-/** Admin's manual trigger: sends the reviewed content to end-user subscribers. */
+/**
+ * Admin's manual trigger (or the direct-publish endpoint): fans the reviewed
+ * content out to end-user subscribers, respecting each subscription's alert
+ * frequency. An AlertDelivery row is created for every matching subscription
+ * (idempotent — safe to call more than once for the same alert); INSTANT
+ * subscriptions are emailed immediately and marked SENT, while DAILY/WEEKLY/
+ * MONTHLY subscriptions are left PENDING for the next digest run
+ * (app/lib/digest.ts::sendDueDigests) to bundle into a single email.
+ */
 export async function publishAlertToSubscribers(
   alertId: number,
   triggeredBy?: string,
@@ -236,7 +301,35 @@ export async function publishAlertToSubscribers(
   }
 
   const recipients = await getSubscriberRecipients(alert);
-  const result = await sendAlertEmails(alert, recipients, { isAdmin: false });
+
+  // Queue a PENDING delivery for every matching subscription up front so the
+  // digest job has a record to bundle later, regardless of frequency.
+  // skipDuplicates makes this safe to re-run for an alert already fanned out.
+  if (recipients.length > 0) {
+    await prisma.alertDelivery.createMany({
+      data: recipients.map((r) => ({
+        alertId,
+        subscriptionId: r.subscriptionId,
+        frequency: r.frequency,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  const instantRecipients = recipients.filter((r) => r.frequency === "INSTANT");
+  const result = await sendAlertEmails(alert, instantRecipients, { isAdmin: false });
+
+  const failedEmails = new Set(result.failed);
+  const sentSubscriptionIds = instantRecipients
+    .filter((r) => !failedEmails.has(r.email))
+    .map((r) => r.subscriptionId);
+
+  if (sentSubscriptionIds.length > 0) {
+    await prisma.alertDelivery.updateMany({
+      where: { alertId, subscriptionId: { in: sentSubscriptionIds } },
+      data: { status: "SENT", sentAt: new Date() },
+    });
+  }
 
   await prisma.alert.update({
     where: { id: alertId },
@@ -432,8 +525,19 @@ async function sendAlertEmails(
         select: { slug: true, city: { select: { name: true, stateCode: true } } },
       });
       const content = alert.content as InterestAreaUpdatedContent;
-      // TODO: build a proper interest-area URL once the Topics page exists
-      const areaUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}`;
+      // When this alert carries a meetingId (e.g. a pre-meeting PREVIEW
+      // signal — see createInterestAreaAlert's `preview` option), link
+      // straight to that meeting's page instead of a bare topics URL.
+      let areaUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}`;
+      if (alert.meetingId) {
+        const meeting = await prisma.meeting.findUnique({
+          where: { id: alert.meetingId },
+          select: { slug: true },
+        });
+        if (meeting) areaUrl = buildMeetingUrl(meeting.slug);
+      }
+      // TODO: build a proper interest-area URL (once meetingId is absent)
+      // once the Topics page exists
       for (const recipient of recipients) {
         try {
           await sendInterestAreaEmail({

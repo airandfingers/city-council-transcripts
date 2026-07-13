@@ -28,8 +28,8 @@ import { Prisma } from "@prisma/client";
 // Version — bump CONTRACT_MAJOR on breaking changes only (see CONTRACT.md)
 // ---------------------------------------------------------------------------
 
-const CONTRACT_MAJOR = 1; // increment on breaking changes; reset MINOR to 0
-const CONTRACT_MINOR = 5; // increment on additive (backwards-compatible) changes
+const CONTRACT_MAJOR = 2; // increment on breaking changes; reset MINOR to 0
+const CONTRACT_MINOR = 0; // increment on additive (backwards-compatible) changes
 
 const CONTRACT_VERSION = `${CONTRACT_MAJOR}.${CONTRACT_MINOR}`;
 
@@ -51,6 +51,7 @@ const WRITE_ORDER = [
   "SpeakerSummary",
   "InterestArea",
   "InterestAreaMeetingStatus",
+  "AgendaItemVersion",
 ];
 
 /**
@@ -88,7 +89,8 @@ const UPSERT_KEYS = {
   TopicSummary:       [["meetingId", "topicId"]],
   SpeakerSummary:     [["meetingId", "speakerUuid"]],
   InterestArea:       [["cityId", "slug"]],
-  InterestAreaMeetingStatus: [["interestAreaId", "meetingId"]],
+  InterestAreaMeetingStatus: [["interestAreaId", "meetingId", "phase"]],
+  AgendaItemVersion:  [["meetingId", "sourceItemId", "revision"]],
 };
 
 /**
@@ -107,7 +109,8 @@ const TABLE_DESCRIPTIONS = {
   TopicSummary:       "An AI-generated topic-level summary with speakers and positions.",
   SpeakerSummary:     "An AI-generated per-speaker rollup of the meeting.",
   InterestArea:       "A tracked civic topic for a city (e.g. \"Spending\", \"Housing\"), with an AI-generated status rollup.",
-  InterestAreaMeetingStatus: "Whether/how a given meeting discussed a given InterestArea.",
+  InterestAreaMeetingStatus: "Whether/how a given meeting discussed a given InterestArea. PREVIEW-phase rows record a pre-meeting agenda-only classification; POSTMEETING rows record the actual post-transcript finding.",
+  AgendaItemVersion: "Append-only history of an agenda item's content as scraped pre-meeting. A new revision is written whenever a re-scrape detects a content change.",
 };
 
 // ---------------------------------------------------------------------------
@@ -134,6 +137,9 @@ function contractType(prismaType) {
 function buildContract() {
   const models = Prisma.dmmf.datamodel.models;
   const modelMap = Object.fromEntries(models.map((m) => [m.name, m]));
+  const enumMap = Object.fromEntries(
+    Prisma.dmmf.datamodel.enums.map((e) => [e.name, e.values.map((v) => v.name)]),
+  );
 
   const tables = {};
 
@@ -152,10 +158,11 @@ function buildContract() {
       }
 
       const isFk = FK_COLUMNS.has(field.name);
+      const isEnum = field.kind === "enum";
 
       /** @type {Record<string, unknown>} */
       const col = {
-        type: contractType(field.type),
+        type: isEnum ? "enum" : contractType(field.type),
         // A column is "required" from the publisher's perspective when it is
         // non-nullable and has no DB default. FK columns are technically required
         // by the DB but are resolved by the write layer — they are still
@@ -163,6 +170,10 @@ function buildContract() {
         // Note: Prisma DMMF uses `hasDefaultValue`, not `hasDefault`.
         required: field.isRequired && !field.hasDefaultValue,
       };
+
+      if (isEnum) {
+        col.enum = enumMap[field.type] ?? [];
+      }
 
       if (isFk) {
         col.fk = true;

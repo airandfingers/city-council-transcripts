@@ -1,14 +1,16 @@
 name: Publish scheduled alerts (temporary)
 
 # TEMPORARY (2026-07-09): stand-in for Vercel Cron until CRON_SECRET can be
-# set on the Vercel project (see app/api/cron/publish-scheduled/route.ts and
-# the CronAuthToken model comment in prisma/schema.prisma). Delete this
-# workflow once CRON_SECRET is set on Vercel — vercel.json's cron config
-# takes over and needs no further changes.
+# set on the Vercel project (see app/api/cron/publish-scheduled/route.ts,
+# app/lib/cronAuth.ts, and the CronAuthToken model comment in
+# prisma/schema.prisma). Delete this workflow once CRON_SECRET is set on
+# Vercel — vercel.json's cron config takes over and needs no further changes.
 
 on:
   schedule:
-    - cron: "0 13 * * *" # daily, ~6am Pacific (PDT, UTC-7; drifts to 5am during PST)
+    - cron: "0 13 * * *" # publish-scheduled + digest-daily: daily, ~6am Pacific (PDT, UTC-7; drifts to 5am during PST)
+    - cron: "0 13 * * 1" # digest-weekly: Mondays
+    - cron: "0 13 1 * *" # digest-monthly: 1st of month
   workflow_dispatch: {}
 
 jobs:
@@ -24,5 +26,44 @@ jobs:
           cat /tmp/response.json
           if [ "$status" -ge 300 ]; then
             echo "Drain request failed"
+            exit 1
+          fi
+
+      - name: Call daily digest endpoint
+        if: github.event.schedule == '0 13 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          status=$(curl -s -o /tmp/response.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.CRON_TEMP_TOKEN }}" \
+            "${{ vars.PROD_SITE_URL }}/api/cron/digest-daily")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            echo "Daily digest request failed"
+            exit 1
+          fi
+
+      - name: Call weekly digest endpoint
+        if: github.event.schedule == '0 13 * * 1'
+        run: |
+          status=$(curl -s -o /tmp/response.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.CRON_TEMP_TOKEN }}" \
+            "${{ vars.PROD_SITE_URL }}/api/cron/digest-weekly")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            echo "Weekly digest request failed"
+            exit 1
+          fi
+
+      - name: Call monthly digest endpoint
+        if: github.event.schedule == '0 13 1 * *'
+        run: |
+          status=$(curl -s -o /tmp/response.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.CRON_TEMP_TOKEN }}" \
+            "${{ vars.PROD_SITE_URL }}/api/cron/digest-monthly")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            echo "Monthly digest request failed"
             exit 1
           fi
