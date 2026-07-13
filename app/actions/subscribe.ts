@@ -31,6 +31,9 @@ const SubscribeInput = z
       .min(1)
       .max(200)
       .optional(),
+    // Only meaningful for CITY_UPDATES / TOPIC_IN_CITY_UPDATES — ignored
+    // (defaults to INSTANT) for one-off coverage requests and site updates.
+    frequency: z.enum(["INSTANT", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
     honeypot: z.string().optional(),
   })
   .superRefine((val, ctx) => {
@@ -154,6 +157,10 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
     data.kind === "TOPIC_IN_CITY_UPDATES" ? data.interestAreaId! : null;
   const requestedTopicName =
     data.kind === "TOPIC_IN_CITY_COVERAGE_REQUEST" ? data.requestedTopicName! : null;
+  const frequency =
+    data.kind === "CITY_UPDATES" || data.kind === "TOPIC_IN_CITY_UPDATES"
+      ? (data.frequency ?? "INSTANT")
+      : "INSTANT";
 
   let cityName: string | null = null;
   if (cityId !== null) {
@@ -211,6 +218,7 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
         requestedCityName,
         interestAreaId,
         requestedTopicName,
+        frequency,
         status: "PENDING",
         confirmToken,
         unsubscribeToken,
@@ -228,6 +236,7 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
         unsubscribeToken,
         confirmedAt: null,
         unsubscribedAt: null,
+        frequency,
       },
     });
     status = "PENDING";
@@ -235,6 +244,14 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
     confirmToken = existing.confirmToken;
     unsubscribeToken = existing.unsubscribeToken;
     status = existing.status as "PENDING" | "ACTIVE";
+    // Resubmitting an active/pending subscription (e.g. changing frequency
+    // from the subscribe form) updates the frequency in place.
+    if (data.frequency && data.frequency !== existing.frequency) {
+      await prisma.subscription.update({
+        where: { id: existing.id },
+        data: { frequency: data.frequency },
+      });
+    }
   }
 
   // Notify admins of every city request, even repeat submissions.

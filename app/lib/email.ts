@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { ConfirmSubscription } from "@/emails/ConfirmSubscription";
+import { DigestEmail, type DigestGroup } from "@/emails/DigestEmail";
 import { InterestAreaUpdated } from "@/emails/InterestAreaUpdated";
 import { ManageLink } from "@/emails/ManageLink";
 import { MeetingPublished } from "@/emails/MeetingPublished";
@@ -259,4 +260,31 @@ export async function sendManageLinkEmail({
     react: ManageLink({ manageUrl }),
   });
   if (e2) throw new Error(`Resend error: ${e2.message} (${e2.name})`);
+}
+
+export type DigestEmailParams = {
+  to: string;
+  /** e.g. "Daily", "Weekly", "Monthly". */
+  frequencyLabel: string;
+  groups: DigestGroup[];
+  manageUrl?: string;
+};
+
+/** One bundled email covering every due AlertDelivery for a subscriber's cadence tick. */
+export async function sendDigestEmail({
+  to,
+  frequencyLabel,
+  groups,
+  manageUrl,
+}: DigestEmailParams) {
+  const itemCount = groups.reduce((n, g) => n + g.items.length, 0);
+  const subject = `Counciloris ${frequencyLabel} digest — ${itemCount} update${itemCount === 1 ? "" : "s"}`;
+  const { data, error } = await getResend().emails.send({
+    from: getFromAddress(),
+    to,
+    subject,
+    react: DigestEmail({ frequencyLabel, groups, manageUrl }),
+  });
+  if (error) throw new Error(`Resend error: ${error.message} (${error.name})`);
+  console.log(`[email] digest (${frequencyLabel}) sent to ${to}, Resend id=${data?.id}`);
 }
