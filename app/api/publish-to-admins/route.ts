@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthorized, PublishBody } from "@/app/lib/publish";
-import { createMeetingUpdateAlert, sendAlertToAdmins } from "@/app/lib/alerts";
+import { createMeetingUpdateAlert } from "@/app/lib/alerts";
 
 /**
  * POST /api/publish-to-admins
@@ -9,10 +9,13 @@ import { createMeetingUpdateAlert, sendAlertToAdmins } from "@/app/lib/alerts";
  * Auth: Authorization: Bearer <PUBLISH_API_KEY>
  *
  * Stage 1 of the alert pipeline (see app/lib/alerts.ts): drafts an Alert
- * for the meeting and emails it to admin subscribers (Subscriber.isAdmin
- * = true) for review, tagged "(ADMIN)". The admin's manual "send to
- * subscribers" trigger (stage 2) happens later via
- * publishAlertToSubscribers(), e.g. from the /admin/alerts page.
+ * for the meeting. Admins are notified via the once-daily admin digest
+ * (app/lib/adminDigest.ts::sendDueAdminDigest, /api/cron/admin-digest)
+ * rather than an instant per-meeting email — this alert type always waits
+ * for the subscriber hold window anyway, so there's no urgency to notify
+ * admins immediately. The admin's manual "send to subscribers" trigger
+ * (stage 2) happens later via publishAlertToSubscribers(), e.g. from the
+ * /admin/alerts page.
  */
 export async function POST(req: Request) {
   if (!isAuthorized(req)) {
@@ -41,12 +44,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   }
 
-  const result = await sendAlertToAdmins(alert.id);
-
   return NextResponse.json({
     ok: true,
     alertId: alert.id,
     meetingId: parsed.data.meeting_id,
-    ...result,
   });
 }

@@ -33,12 +33,15 @@ const InterestAreaAlertBody = z.object({
  * (a pre-meeting agenda-only signal), the alert is meeting-specific instead
  * — content built from `summary`/`discussion_expected`/`signal_strength`,
  * with `meetingId` set so the resulting email links to that meeting's page.
- * Either way, sends the draft to admins for visibility. PREVIEW-phase
- * alerts additionally fan out to subscribers immediately (per-subscription
- * frequency: INSTANT sent now, DAILY/WEEKLY/MONTHLY queued for the next
- * digest) since they're time-sensitive pre-meeting signals, not AI-generated
- * meeting content awaiting quality review — the existing post-meeting
- * rollup path is unchanged (admin-hold + scheduled drain).
+ * PREVIEW-phase alerts fan out to admins AND subscribers immediately
+ * (per-subscription frequency: INSTANT sent now, DAILY/WEEKLY/MONTHLY
+ * queued for the next digest) since they're time-sensitive pre-meeting
+ * signals, not AI-generated meeting content awaiting quality review.
+ * POSTMEETING-phase alerts (the existing rollup path) are left DRAFTED —
+ * admins see them via the once-daily admin digest
+ * (app/lib/adminDigest.ts::sendDueAdminDigest) rather than an instant email,
+ * and the scheduled drain still releases them to subscribers on the normal
+ * hold window.
  */
 export async function POST(req: Request) {
   if (!isAuthorized(req)) {
@@ -77,9 +80,8 @@ export async function POST(req: Request) {
           }
         : undefined,
     );
-    const adminResult = await sendAlertToAdmins(alert.id);
-
     if (isPreview) {
+      const adminResult = await sendAlertToAdmins(alert.id);
       const subscriberResult = await publishAlertToSubscribers(
         alert.id,
         "api:interest-area-alert",
@@ -92,10 +94,10 @@ export async function POST(req: Request) {
       });
     }
 
+    // POSTMEETING: leave DRAFTED — picked up by the daily admin digest.
     return NextResponse.json({
       ok: true,
       alertId: alert.id,
-      ...adminResult,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

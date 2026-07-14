@@ -411,6 +411,19 @@ export default async function TranscriptPage({ params }: Props) {
               );
             })}
           </div>
+        ) : meeting.status === "SCHEDULED" ? (
+          <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
+            <p className="text-gray-700 dark:text-gray-300 mb-3">
+              This meeting hasn&apos;t happened yet, so there&apos;s nothing to summarize —
+              once it&apos;s held and transcribed, a summary will appear here.
+            </p>
+            <SubscribeForm
+              kind="CITY_UPDATES"
+              cityId={meeting.city.id}
+              cityName={meeting.city.name}
+              compact
+            />
+          </div>
         ) : (
           <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
             <p className="text-gray-700 dark:text-gray-300 mb-3">
