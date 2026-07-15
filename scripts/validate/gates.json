@@ -12,6 +12,11 @@
       "command": "node scripts/validate/build-check.mjs"
     },
     {
+      "id": "roster-title-resolver-check",
+      "description": "resolveTitleAt resolves speaker titles as-of a meeting date, including the Monterey Park mayor-rotation fixture",
+      "command": "node scripts/validate/roster-title-resolver-check.mjs"
+    },
+    {
       "id": "home-layout-content-e2e",
       "description": "Home page shows city cards with correct content and layout",
       "command": "node scripts/validate/home-layout-content-e2e.mjs",

@@ -29,7 +29,7 @@ import { Prisma } from "@prisma/client";
 // ---------------------------------------------------------------------------
 
 const CONTRACT_MAJOR = 2; // increment on breaking changes; reset MINOR to 0
-const CONTRACT_MINOR = 0; // increment on additive (backwards-compatible) changes
+const CONTRACT_MINOR = 1; // increment on additive (backwards-compatible) changes
 
 const CONTRACT_VERSION = `${CONTRACT_MAJOR}.${CONTRACT_MINOR}`;
 
@@ -41,6 +41,7 @@ const CONTRACT_VERSION = `${CONTRACT_MAJOR}.${CONTRACT_MINOR}`;
 /** @type {string[]} */
 const WRITE_ORDER = [
   "City",
+  "RosterMember",
   "Meeting",
   "TranscriptLine",
   "MeetingSummaryItem",
@@ -80,6 +81,7 @@ const FK_COLUMNS = new Set(["cityId", "meetingId", "interestAreaId"]);
  */
 const UPSERT_KEYS = {
   City:               [["stateCode", "slug"]],
+  RosterMember:       [["cityId", "memberId"]],
   Meeting:            [["slug"]],
   TranscriptLine:     [["meetingId", "lineIndex"]],
   MeetingSummaryItem: [["meetingId", "type", "sortOrder"]],
@@ -100,6 +102,7 @@ const UPSERT_KEYS = {
  */
 const TABLE_DESCRIPTIONS = {
   City:               "A municipality. Must exist before meetings can be written.",
+  RosterMember:       "A council member's identity and time-versioned titles (title/startDate/endDate/isPrimary) for a city. The site resolves the displayed title as-of a meeting's date rather than always showing the member's current title.",
   Meeting:            "A single council meeting session, child of City.",
   TranscriptLine:     "One timestamped speaker turn in the meeting transcript.",
   MeetingSummaryItem: "A typed summary bullet (KEY_DECISION, ACTION_ITEM, etc.).",
