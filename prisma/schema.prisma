@@ -21,9 +21,32 @@ model City {
   meetings              Meeting[]
   subscriptions         Subscription[]
   interestAreas         InterestArea[]
+  rosterMembers         RosterMember[]
 
   @@unique([stateCode, slug])
   @@index([stateCode])
+}
+
+/// A council member's identity and time-versioned titles for a city. The
+/// site resolves the displayed title as-of a meeting's date, rather than
+/// always showing the member's current title (e.g. mayor rotations).
+model RosterMember {
+  id                Int      @id @default(autoincrement())
+  cityId            Int
+  memberId          String   @db.VarChar(200)
+  name              String   @db.VarChar(200)
+  globalSpeakerUuid String?  @db.VarChar(36)
+  titles            Json
+  affiliation       String?  @db.VarChar(200)
+  district          String?  @db.VarChar(100)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  city              City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@unique([cityId, memberId])
+  @@index([cityId])
+  @@index([globalSpeakerUuid])
 }
 
 enum MeetingStatus {

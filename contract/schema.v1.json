@@ -1,11 +1,12 @@
 {
-  "contract_version": "2.0",
+  "contract_version": "2.1",
   "contract_major": 2,
-  "generated_at": "2026-07-13T19:55:08.080Z",
+  "generated_at": "2026-07-15T04:54:49.659Z",
   "description": "Publisher contract for city-council-transcripts. External publishers (e.g. city-council-transcriber) must fetch the current contract, project their data onto it (dropping surplus fields), validate, and then write directly to Neon. See CONTRACT.md for versioning rules.",
   "versioning_summary": "Publishers always target the CURRENT contract (no version pinning). New columns are additive/nullable so older publisher data still writes. Publishers project richer data DOWN to what the current schema supports. A contract_major bump signals a breaking change requiring publisher updates.",
   "write_order": [
     "City",
+    "RosterMember",
     "Meeting",
     "TranscriptLine",
     "MeetingSummaryItem",
@@ -51,6 +52,52 @@
         "recentMeetingsSummary": {
           "type": "string",
           "required": false
+        }
+      }
+    },
+    "RosterMember": {
+      "description": "A council member's identity and time-versioned titles (title/startDate/endDate/isPrimary) for a city. The site resolves the displayed title as-of a meeting's date rather than always showing the member's current title.",
+      "upsert_keys": [
+        [
+          "cityId",
+          "memberId"
+        ]
+      ],
+      "columns": {
+        "cityId": {
+          "type": "integer",
+          "required": true,
+          "fk": true,
+          "note": "Resolved by the write layer from the parent entity — not supplied directly in export data."
+        },
+        "memberId": {
+          "type": "string",
+          "required": true
+        },
+        "name": {
+          "type": "string",
+          "required": true
+        },
+        "globalSpeakerUuid": {
+          "type": "string",
+          "required": false
+        },
+        "titles": {
+          "type": "json",
+          "required": true
+        },
+        "affiliation": {
+          "type": "string",
+          "required": false
+        },
+        "district": {
+          "type": "string",
+          "required": false
+        },
+        "sortOrder": {
+          "type": "integer",
+          "required": false,
+          "default": 0
         }
       }
     },

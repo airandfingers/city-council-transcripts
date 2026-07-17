@@ -9,6 +9,7 @@ import {
   type GroupedLine,
 } from "@/app/lib/transcript";
 import { applyOffset, type OffsetModel } from "@/app/lib/offset";
+import { speakerLabel } from "@/app/lib/roster";
 
 /**
  * Client component that renders grouped transcript lines with:
@@ -21,9 +22,11 @@ import { applyOffset, type OffsetModel } from "@/app/lib/offset";
 export default function TranscriptViewer({
   groupedLines,
   offsetModel = null,
+  titleByUuid = {},
 }: {
   groupedLines: GroupedLine[];
   offsetModel?: OffsetModel | null;
+  titleByUuid?: Record<string, string>;
 }) {
   const { currentTime, seekTo } = useVideoSync();
   const router = useRouter();
@@ -221,7 +224,12 @@ export default function TranscriptViewer({
               >
                 <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
                   <span className="font-medium">
-                    {displayName(group.speakerName, group.speaker)}
+                    {speakerLabel(
+                      displayName(group.speakerName, group.speaker),
+                      group.globalSpeakerUuid
+                        ? (titleByUuid[group.globalSpeakerUuid] ?? null)
+                        : null,
+                    )}
                   </span>
                   <span className="mx-2">•</span>
                   <button
