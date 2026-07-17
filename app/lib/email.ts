@@ -170,6 +170,8 @@ export type UpcomingMeetingEmailParams = {
   meetingUrl: string;
   manageUrl?: string;
   isAdmin?: boolean;
+  /** False when no agenda has been posted yet — see UpcomingMeeting.tsx. */
+  agendaAvailable?: boolean;
 };
 
 export async function sendUpcomingMeetingEmail({
@@ -183,6 +185,7 @@ export async function sendUpcomingMeetingEmail({
   meetingUrl,
   manageUrl,
   isAdmin = false,
+  agendaAvailable = true,
 }: UpcomingMeetingEmailParams) {
   const subject = `Counciloris - Upcoming: ${meetingTitle}${isAdmin ? " (ADMIN)" : ""}`;
   const { data, error } = await getResend().emails.send({
@@ -198,6 +201,7 @@ export async function sendUpcomingMeetingEmail({
       meal,
       meetingUrl,
       manageUrl,
+      agendaAvailable,
     }),
   });
   if (error) throw new Error(`Resend error: ${error.message} (${error.name})`);

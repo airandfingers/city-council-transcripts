@@ -3,6 +3,12 @@
 ## Implementation Status Summary
 
 - ✅ US-LOCALDB-001 — Local Postgres for development
+- ✅ FIX-ALERT-AGEGATE-NULLMEETING-001 — Age-gate interest-area alerts with no meetingId
+- ✅ FEAT-ADMIN-DIGEST-ALWAYS-001 — Route all automated admin alerts through the daily digest only
+- ✅ FIX-ALERT-DEDUP-001 — Dedup repeat createMeetingUpdateAlert calls per meeting
+- ✅ FEAT-EMAIL-UPCOMING-NOAGENDA-001 — Collapse redundant no-agenda copy in UpcomingMeeting email
+- ✅ FEAT-MEETINGCARD-STATUS-CTA-001 — Gate "View summary & transcript" CTA on meeting status
+- ✅ FEAT-MEETINGFILTER-STATUS-001 — Add status/upcoming filter to city meeting list (client-side scope)
 - 📋 US-ALERT-001 — Subscribe to a city's upcoming agenda items
 - 📋 US-ALERT-002 — Notify ahead of an upcoming vote
 - 📋 US-ALERT-003 — Topic watch alerts
@@ -36,6 +42,115 @@
 
 - Schema uses Postgres-specific types (`@db.VarChar`, `@db.Text`, `Json`), so SQLite is not viable without invasive schema changes — local Postgres preserves prod parity.
 - The Neon adapter (`@prisma/adapter-neon`) is installed but not wired into `app/lib/prisma.ts`, so no client-side branching is required for local dev.
+
+---
+
+### FIX-ALERT-AGEGATE-NULLMEETING-001 — Age-gate interest-area alerts with no meetingId
+
+**Status:** ✅ Done (AC-1.4 not done — no existing unit test suite for alerts.ts to extend)
+
+**As a** subscriber
+**I want** to not receive alert emails about meetings from years ago
+**So that** my inbox reflects what's actually new, not old data being reprocessed
+
+Root cause: `isAlertMeetingTooOldForSubscribers` (`app/lib/alerts.ts:419-426`) returns `false` (i.e. "not too old, send it") whenever `alert.meetingId` is null. Postmeeting `INTEREST_AREA_UPDATED` alerts are created with `meetingId: undefined` (`app/lib/alerts.ts:225-232`), so they never go through the 30-day age gate that `MEETING_UPDATED`/`MEETING_UPCOMING` alerts already respect (`app/lib/publish.ts:104-110`). When the transcriber backfills/reprocesses an old meeting and that updates an InterestArea's `statusSummary` rollup, the resulting subscriber email is sent regardless of age.
+
+**Acceptance Criteria:**
+- [x] AC-1.1: `isAlertMeetingTooOldForSubscribers` (or its caller) resolves a representative meeting date for interest-area alerts (e.g. via the area's most-recently-discussed meeting) instead of short-circuiting on null `meetingId`.
+- [x] AC-1.2: A postmeeting `INTEREST_AREA_UPDATED` alert whose underlying meeting is older than the existing age cutoff is auto-canceled the same way `MEETING_UPDATED`/`MEETING_UPCOMING` alerts already are.
+- [x] AC-1.3: Preview-phase interest-area alerts (which always have a `meetingId`) are unaffected — this only closes the null-meetingId gap.
+- [ ] AC-1.4: Not done — repo has no existing unit test suite for `alerts.ts` (only `tests/e2e`) to extend; flagged as a gap, not silently skipped.
+
+---
+
+### FEAT-ADMIN-DIGEST-ALWAYS-001 — Route all automated admin alerts through the daily digest only
+
+**Status:** ✅ Done
+
+**As an** admin reviewing meeting content
+**I want** at most one admin email per day
+**So that** reprocessing/backfill of old meetings doesn't spam my inbox with individual emails
+
+Today most admin alerts are created `DRAFTED` and swept once daily by the `/api/cron/admin-digest` route (`app/lib/adminDigest.ts`, 12:55 UTC) — this part already works. But three call sites bypass the digest and email admins instantly: `app/actions/updateMeetingTitle.ts:36`, `app/api/admin/upcoming-alert/route.ts:89` (when `agenda_available`), and `app/api/admin/interest-area-alert/route.ts:84` (preview phase). The upcoming-alert and interest-area-alert paths are automated (triggered by the transcriber pipeline), so any volume of qualifying events becomes that many separate instant admin emails on top of the daily digest.
+
+**Acceptance Criteria:**
+- [x] AC-2.1: `app/api/admin/upcoming-alert/route.ts` and `app/api/admin/interest-area-alert/route.ts` (preview phase) no longer call `sendAlertToAdmins` inline — alerts are left `DRAFTED`/`PUBLISHED` and picked up by the existing admin-digest cron.
+- [x] AC-2.2: `app/actions/updateMeetingTitle.ts`'s instant admin send is left as-is (it's a manual, user-initiated one-off action, not an automated/recurring trigger) — confirmed this is the only justified exception.
+- [x] AC-2.3: Subscriber-facing instant sends (`publishAlertToSubscribers` for preview-phase/time-sensitive content) are unaffected — this story only changes admin fan-out timing.
+- [ ] AC-2.4: Not verified end-to-end against a live cron run (no test DB/queue harness available in this session) — verified by code inspection + typecheck instead. **Important fix discovered along the way**: `publishAlertToSubscribers` unconditionally sets `Alert.status = PUBLISHED`, so once the instant admin send was removed, `sendDueAdminDigest`'s original `status: "DRAFTED"` filter would have silently never picked these alerts up — admins would get *zero* notification instead of a batched one. Fixed by widening the digest query to `status: { not: "CANCELED" }` and making the post-bundle status update conditional (only a still-`DRAFTED` alert flips to `SENT_TO_ADMINS`; an already-`PUBLISHED` one just gets `sentToAdminsAt` stamped, so the scheduled drain never re-publishes it to subscribers a second time).
+
+**Notes:** a daily digest fixes email *count* but not necessarily *volume* — if a backfill touches 200 old meetings in one day, admins still get one email with 200 rows. Combined with FIX-ALERT-DEDUP-001 below, repeat rows across multiple days for the same unchanged meeting should stop.
+
+---
+
+### FIX-ALERT-DEDUP-001 — Dedup repeat createMeetingUpdateAlert calls per meeting
+
+**Status:** ✅ Done (AC-3.3 not done — no existing unit test suite for alerts.ts to extend)
+
+**As an** admin
+**I want** a given meeting's update alert to appear once, not once per reprocessing run
+**So that** old meetings caught in a transcriber backfill don't resurface in my digest day after day
+
+Root cause: `createMeetingUpdateAlert()` (`app/lib/alerts.ts:120-139`) has no idempotency/dedup check — every call (including repeat publish/backfill calls for a meeting whose content hasn't materially changed) creates a fresh `DRAFTED` `Alert` row. Since `FEAT-ADMIN-DIGEST-ALWAYS-001` sweeps all un-actioned `DRAFTED` alerts daily, a meeting reprocessed on multiple different days produces a new alert — and a new digest row — each time.
+
+**Acceptance Criteria:**
+- [x] AC-3.1: `createMeetingUpdateAlert` checks for an existing un-actioned (`DRAFTED`) alert for the same `meetingId`+`type` with equivalent content before creating a new one; if found and content is unchanged, no new alert is created.
+- [x] AC-3.2: A genuine content change (e.g. a corrected summary) for the same meeting still produces an updated alert (content overwritten in place on the existing `DRAFTED` row) — this is dedup, not suppression of real updates.
+- [ ] AC-3.3: Not done — no existing unit test suite for `alerts.ts` to extend; verified by code inspection + typecheck only.
+
+---
+
+### FEAT-EMAIL-UPCOMING-NOAGENDA-001 — Collapse redundant no-agenda copy in UpcomingMeeting email
+
+**Status:** ✅ Done
+
+**As a** subscriber
+**I want** the "upcoming meeting" email to be short when there's nothing to say yet
+**So that** I'm not reading the same city/title/date restated three times with no new information
+
+`emails/UpcomingMeeting.tsx` has no conditional logic — it always renders the header, "Quick take", and "Full picture" sections, each restating city/title/date. The route that calls it (`app/api/admin/upcoming-alert/route.ts`) already receives an `agenda_available` boolean but never threads it through to the email.
+
+**Acceptance Criteria:**
+- [x] AC-4.1: `agenda_available` is threaded from `app/api/admin/upcoming-alert/route.ts` → `MeetingUpcomingContent` → `sendUpcomingMeetingEmail` → `emails/UpcomingMeeting.tsx` props (`agendaAvailable`, defaults to `true`).
+- [x] AC-4.2: When `agendaAvailable` is false, the "Full picture" section is skipped entirely — no restating city/title/date a third time.
+- [x] AC-4.3: When an agenda exists (`agendaAvailable` true/default), the email is unchanged from today's behavior.
+- [x] AC-4.4: Verified with `@react-email/render` (plain-text mode) for both cases: the no-agenda render dropped the "Full picture" section entirely (376 vs. 348 chars for a *longer* real-agenda body/shorter placeholder text — the meaningful check was confirming the section itself disappeared, not raw length).
+
+---
+
+### FEAT-MEETINGCARD-STATUS-CTA-001 — Gate "View summary & transcript" CTA on meeting status
+
+**Status:** ✅ Done
+
+**As a** site visitor browsing a city's meeting list
+**I want** upcoming/unpublished meetings to look different from published ones
+**So that** I don't click into a "summary & transcript" link that doesn't exist yet
+
+`app/components/MeetingCard.tsx:42-44` renders the "View summary & transcript" link unconditionally, even though `meeting.status` (`SCHEDULED`/`OCCURRED`/`PUBLISHED`/`CANCELED`, `prisma/schema.prisma:52-57`) is already present on every meeting reaching the component via `getMeetingsForCity` → `MeetingFilter` → `MeetingCard`.
+
+**Acceptance Criteria:**
+- [x] AC-5.1: When `meeting.status !== "PUBLISHED"`, the card shows the meeting date and a status badge ("Upcoming meeting" / "Transcript pending" / "Canceled") instead of the "View summary & transcript" CTA.
+- [x] AC-5.2: `PUBLISHED` meetings are unaffected — same CTA as today.
+- [x] AC-5.3: Matches the existing "Meeting held — transcript pending" language/style already used on the detail page for consistency (shortened to "Transcript pending" to fit the card's compact badge).
+- [x] AC-5.4: Verified visually against `wa/seattle` (has a real `SCHEDULED` meeting) in a running dev server — confirmed exactly one "Upcoming meeting" badge rendered and zero misleading "View summary & transcript" links for that meeting.
+
+---
+
+### FEAT-MEETINGFILTER-STATUS-001 — Add status/upcoming filter to city meeting list
+
+**Status:** ✅ Done (client-side scope; server-side + URL-sync deferred)
+
+**As a** site visitor viewing a city with a long meeting history (e.g. Seattle)
+**I want** to filter the list to just upcoming meetings, or hide ones without a transcript yet
+**So that** I don't have to scroll past dozens of not-yet-transcribed meetings to find what I want
+
+`app/components/MeetingFilter.tsx` already had client-side text search and newest/oldest sort, with an inline comment noting client-side filtering doesn't scale and should move server-side for larger cities — Seattle's volume has now hit that point.
+
+**Acceptance Criteria:**
+- [x] AC-6.1: Adds a status filter ("All meetings" / "Published only" / "Upcoming" / "Awaiting transcript") using the existing `meeting.status` field, alongside the existing search/sort controls.
+- [ ] AC-6.2: Deferred — filtering still happens client-side over the already-fetched full list. Worth revisiting if Seattle-scale cities' initial page-load payload becomes the bottleneck (separate from filter UX, which this story addresses).
+- [ ] AC-6.3: Deferred — filter state is local component state, not synced to the URL. Would need a Suspense boundary around `useSearchParams` in the parent page; scoped out to keep this change minimal until bookmarkable filtered views are actually requested.
+- [x] AC-6.4: Verified against Seattle's city page in a running dev server — confirmed the status `<select>` renders and a `SCHEDULED` meeting no longer shows the misleading "View summary & transcript" CTA (see FEAT-MEETINGCARD-STATUS-CTA-001).
 
 ---
 

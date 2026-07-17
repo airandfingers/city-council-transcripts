@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  createInterestAreaAlert,
-  publishAlertToSubscribers,
-  sendAlertToAdmins,
-} from "@/app/lib/alerts";
+import { createInterestAreaAlert, publishAlertToSubscribers } from "@/app/lib/alerts";
 import { isAuthorized } from "@/app/lib/publish";
 
 const InterestAreaAlertBody = z.object({
@@ -33,15 +29,16 @@ const InterestAreaAlertBody = z.object({
  * (a pre-meeting agenda-only signal), the alert is meeting-specific instead
  * — content built from `summary`/`discussion_expected`/`signal_strength`,
  * with `meetingId` set so the resulting email links to that meeting's page.
- * PREVIEW-phase alerts fan out to admins AND subscribers immediately
- * (per-subscription frequency: INSTANT sent now, DAILY/WEEKLY/MONTHLY
- * queued for the next digest) since they're time-sensitive pre-meeting
- * signals, not AI-generated meeting content awaiting quality review.
- * POSTMEETING-phase alerts (the existing rollup path) are left DRAFTED —
- * admins see them via the once-daily admin digest
- * (app/lib/adminDigest.ts::sendDueAdminDigest) rather than an instant email,
- * and the scheduled drain still releases them to subscribers on the normal
- * hold window.
+ * PREVIEW-phase alerts fan out to subscribers immediately (per-subscription
+ * frequency: INSTANT sent now, DAILY/WEEKLY/MONTHLY queued for the next
+ * digest) since they're time-sensitive pre-meeting signals, not
+ * AI-generated meeting content awaiting quality review. Admin notification,
+ * however, always goes through the once-daily admin digest
+ * (app/lib/adminDigest.ts::sendDueAdminDigest) regardless of phase — admin
+ * review volume is capped to one email/day (per FEAT-ADMIN-DIGEST-ALWAYS-001
+ * in prd.md). POSTMEETING-phase alerts (the existing rollup path) are left
+ * DRAFTED, and the scheduled drain still releases them to subscribers on
+ * the normal hold window.
  */
 export async function POST(req: Request) {
   if (!isAuthorized(req)) {
@@ -81,7 +78,8 @@ export async function POST(req: Request) {
         : undefined,
     );
     if (isPreview) {
-      const adminResult = await sendAlertToAdmins(alert.id);
+      // Admin notification always goes through the once-daily digest (leave
+      // DRAFTED) — only the subscriber-facing send is instant here.
       const subscriberResult = await publishAlertToSubscribers(
         alert.id,
         "api:interest-area-alert",
@@ -89,7 +87,6 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         alertId: alert.id,
-        admins: adminResult,
         subscribers: subscriberResult,
       });
     }
