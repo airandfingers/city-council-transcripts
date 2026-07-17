@@ -81,6 +81,8 @@ Today most admin alerts are created `DRAFTED` and swept once daily by the `/api/
 
 **Notes:** a daily digest fixes email *count* but not necessarily *volume* — if a backfill touches 200 old meetings in one day, admins still get one email with 200 rows. Combined with FIX-ALERT-DEDUP-001 below, repeat rows across multiple days for the same unchanged meeting should stop.
 
+**Follow-up fix (2026-07-17):** a post-merge code review found `createMeetingUpcomingAlert` (`app/lib/alerts.ts`) has no dedup at all — by design, each call creates a fresh alert (a no-agenda placeholder and the later real agenda-backed alert are deliberately distinct content, not a repeat of the same thing). But nothing ever resolved the earlier placeholder once superseded: a no-agenda alert that already reached `SENT_TO_ADMINS` via the daily digest stayed there permanently (its `scheduledFor` is always null for this alert type, so the scheduled drain never touches it either) — harmless (no incorrect email), but an unbounded accumulation of dead rows. Fixed by canceling any earlier non-terminal (`DRAFTED`/`SENT_TO_ADMINS`) `MEETING_UPCOMING` alert for the same meeting before creating the new one. Verified by typecheck + code inspection only — same test-coverage gap as the rest of `alerts.ts` (no unit test suite to extend), and the live write-path test against prod that would have exercised this was blocked by Claude Code's own auto-mode safety classifier (creating/mutating real `Alert` rows), same as the earlier age-gate/digest test attempt — not retried without fresh authorization.
+
 ---
 
 ### FIX-ALERT-DEDUP-001 — Dedup repeat createMeetingUpdateAlert calls per meeting
