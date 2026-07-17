@@ -120,13 +120,19 @@ function computeScheduledFor(): Date {
 
 /**
  * Creates a DRAFTED alert snapshotting a meeting's current post-meeting
- * content. Deduped against any still-DRAFTED MEETING_UPDATED alert already
- * pending for this meeting: a repeat call with unchanged content (e.g. a
- * backfill/reprocessing run touching the same meeting more than once before
- * the daily admin digest sweeps it) is a no-op rather than a fresh row, so
- * an old meeting caught in reprocessing doesn't resurface in admin digests
- * day after day. A repeat call with genuinely changed content updates the
- * pending alert in place instead of creating a duplicate.
+ * content. Deduped against any not-yet-terminal MEETING_UPDATED alert
+ * already pending for this meeting — DRAFTED *or* SENT_TO_ADMINS, not just
+ * DRAFTED: an alert already swept into SENT_TO_ADMINS is still in flight
+ * (waiting on its scheduledFor drain to subscribers), so excluding it from
+ * the dedup check would let a reprocessing run spawn a second alert that
+ * eventually double-sends the same meeting update to subscribers. A repeat
+ * call with unchanged content is a no-op (whether the pending alert is
+ * DRAFTED or SENT_TO_ADMINS), so an old meeting caught in reprocessing
+ * doesn't resurface in admin digests day after day. A repeat call with
+ * genuinely changed content updates the pending alert in place and resets
+ * it to DRAFTED so admins review the new content before it can drain to
+ * subscribers, preserving the "admins preview first" invariant
+ * (publishDueScheduledAlerts only drains SENT_TO_ADMINS alerts).
  */
 export async function createMeetingUpdateAlert(meetingId: number): Promise<Alert> {
   const meeting = await getPublishMeeting(meetingId);
@@ -139,7 +145,7 @@ export async function createMeetingUpdateAlert(meetingId: number): Promise<Alert
   };
 
   const pendingAlert = await prisma.alert.findFirst({
-    where: { meetingId, type: "MEETING_UPDATED", status: "DRAFTED" },
+    where: { meetingId, type: "MEETING_UPDATED", status: { in: ["DRAFTED", "SENT_TO_ADMINS"] } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -149,7 +155,12 @@ export async function createMeetingUpdateAlert(meetingId: number): Promise<Alert
     }
     return prisma.alert.update({
       where: { id: pendingAlert.id },
-      data: { content, scheduledFor: computeScheduledFor() },
+      data: {
+        content,
+        status: "DRAFTED",
+        sentToAdminsAt: null,
+        scheduledFor: computeScheduledFor(),
+      },
     });
   }
 
