@@ -7,6 +7,7 @@
 export type GroupedLine = {
   speaker: string;
   speakerName: string | null;
+  globalSpeakerUuid: string | null;
   startTime: number;
   endTime: number;
   text: string;

@@ -20,6 +20,7 @@ import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
 import type { GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
+import { buildTitleByUuid, type RosterMemberRow } from "@/app/lib/roster";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
@@ -93,6 +94,23 @@ export default async function TranscriptPage({ params }: Props) {
     notFound();
   }
 
+  // Roster titles as of this meeting's date (e.g. "Mayor Jane Doe" rather
+  // than always showing the speaker's current title). See app/lib/roster.ts.
+  const rosterMembers = await prisma.rosterMember.findMany({
+    where: { cityId: meeting.cityId },
+    select: { globalSpeakerUuid: true, name: true, titles: true },
+  });
+  const titleByUuid: Record<string, string> = Object.fromEntries(
+    buildTitleByUuid(
+      rosterMembers.map((m) => ({
+        globalSpeakerUuid: m.globalSpeakerUuid,
+        name: m.name,
+        titles: m.titles as RosterMemberRow["titles"],
+      })),
+      meeting.date,
+    ),
+  );
+
   // Pre-meeting agenda content (see AgendaItemVersion — populated by the
   // transcriber's upcoming-meeting scraper before a transcript exists).
   // Keep only the latest revision per item; superseded once real
@@ -121,6 +139,7 @@ export default async function TranscriptPage({ params }: Props) {
       groups.push({
         speaker: line.speaker,
         speakerName: line.speakerName,
+        globalSpeakerUuid: line.globalSpeakerUuid,
         startTime: line.startTime,
         endTime: line.endTime,
         text: line.text,
@@ -463,7 +482,11 @@ export default async function TranscriptPage({ params }: Props) {
                 <UnreviewedTranscriptNotice meetingId={meeting.id} />
               )}
             </summary>
-            <TranscriptViewer groupedLines={groupedLines} offsetModel={offsetModel} />
+            <TranscriptViewer
+              groupedLines={groupedLines}
+              offsetModel={offsetModel}
+              titleByUuid={titleByUuid}
+            />
           </details>
 
           {/* Video */}
@@ -513,6 +536,7 @@ export default async function TranscriptPage({ params }: Props) {
                         content: (
                           <SpeakerSummariesPanel
                             speakers={meeting.speakerSummaries}
+                            titleByUuid={titleByUuid}
                           />
                         ),
                       },

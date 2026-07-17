@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { speakerLabel } from "@/app/lib/roster";
 
 type SpeakerSummary = {
   id: number;
+  speakerUuid: string | null;
   speakerName: string;
   speakingTime: number | null;
   summaryText: string | null;
@@ -26,8 +28,10 @@ function quoteText(q: QuoteItem): string {
 
 export default function SpeakerSummariesPanel({
   speakers,
+  titleByUuid = {},
 }: {
   speakers: SpeakerSummary[];
+  titleByUuid?: Record<string, string>;
 }) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -52,6 +56,10 @@ export default function SpeakerSummariesPanel({
         const positions = Array.isArray(sp.positionsByTopic)
           ? (sp.positionsByTopic as { topic: string; position: string }[])
           : [];
+        const label = speakerLabel(
+          sp.speakerName,
+          sp.speakerUuid ? (titleByUuid[sp.speakerUuid] ?? null) : null,
+        );
 
         return (
           <div
@@ -65,7 +73,7 @@ export default function SpeakerSummariesPanel({
               <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-gray-500">
                 {sp.speakerName.charAt(0)}
               </div>
-              <span className="font-medium flex-1">{sp.speakerName}</span>
+              <span className="font-medium flex-1">{label}</span>
               {sp.speakingTime != null && (
                 <span className="text-xs text-gray-400">
                   {formatDuration(sp.speakingTime)}
