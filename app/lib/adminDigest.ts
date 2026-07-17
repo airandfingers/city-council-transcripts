@@ -10,18 +10,21 @@ import type {
 
 /**
  * Bundles every admin-review alert that hasn't been emailed to admins yet
- * (`Alert.sentToAdminsAt` is null — the same ledger `sendAlertToAdmins` sets)
- * into a single daily digest email per admin, then marks each alert
- * `SENT_TO_ADMINS` so the existing subscriber drain
- * (`publishDueScheduledAlerts`) can still release the ones with a
- * `scheduledFor` on their normal hold window.
+ * (`Alert.sentToAdminsAt` is null — the same ledger `sendAlertToAdmins` used
+ * to set) into a single daily digest email per admin.
  *
- * Only covers alerts that were *not* instantly fanned out to admins at
- * creation time — the preview/instant paths (interest-area preview,
- * upcoming-with-agenda) call `sendAlertToAdmins` inline and are excluded via
- * the `sentToAdminsAt` filter. Called by the `/api/cron/admin-digest` route,
- * scheduled to run before `publish-scheduled` so admins are never notified
- * after subscribers.
+ * Admin notification is now always routed through this digest — nothing
+ * calls `sendAlertToAdmins` inline anymore (see FEAT-ADMIN-DIGEST-ALWAYS-001
+ * in prd.md), so a bundled alert may already be `PUBLISHED` by the time this
+ * runs (e.g. a time-sensitive upcoming-meeting/preview alert that fans out
+ * to subscribers instantly, independent of admin review). For a still-
+ * `DRAFTED` alert, bundling also flips it to `SENT_TO_ADMINS` so the
+ * existing subscriber drain (`publishDueScheduledAlerts`) can release it on
+ * its normal hold window; an already-`PUBLISHED` alert is left alone aside
+ * from stamping `sentToAdminsAt` — it must not be pushed back through the
+ * drain and re-sent to subscribers. Called by the `/api/cron/admin-digest`
+ * route, scheduled to run before `publish-scheduled` so admins are never
+ * notified after subscribers for the alerts that do wait on review.
  *
  * @module adminDigest
  */
@@ -34,7 +37,7 @@ export type AdminDigestResult = {
 
 export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminDigestResult> {
   const pending = await prisma.alert.findMany({
-    where: { status: "DRAFTED", sentToAdminsAt: null },
+    where: { status: { not: "CANCELED" }, sentToAdminsAt: null },
     select: {
       id: true,
       type: true,
@@ -167,11 +170,18 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
   }
 
   // Mark bundled alerts as sent-to-admins regardless of per-admin send
-  // failures — the content is the same "reviewed" snapshot either way, and
-  // this is what unblocks the scheduled subscriber drain.
+  // failures — the content is the same "reviewed" snapshot either way.
+  // Only a still-DRAFTED alert transitions to SENT_TO_ADMINS (unblocking the
+  // scheduled subscriber drain); an alert that's already PUBLISHED (instant
+  // subscriber fan-out, e.g. upcoming-with-agenda/preview) keeps that status
+  // — flipping it back to SENT_TO_ADMINS would make the drain re-publish it.
   await prisma.alert.updateMany({
-    where: { id: { in: bundledAlertIds } },
+    where: { id: { in: bundledAlertIds }, status: "DRAFTED" },
     data: { status: "SENT_TO_ADMINS", sentToAdminsAt: now },
+  });
+  await prisma.alert.updateMany({
+    where: { id: { in: bundledAlertIds }, status: { not: "DRAFTED" } },
+    data: { sentToAdminsAt: now },
   });
 
   return { adminsEmailed, alertsBundled: bundledAlertIds.length, failed };

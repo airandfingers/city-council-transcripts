@@ -14,18 +14,29 @@ import type { Meeting } from "@/app/lib/cityData";
  * enough that this becomes sluggish, move the same matching logic into
  * a server-side query in app/lib/cityData.ts instead.
  */
+type StatusFilter = "all" | "published" | "upcoming" | "pending";
+
 export default function MeetingFilter({ meetings }: { meetings: Meeting[] }) {
   const [query, setQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const matched = q
+    let matched = q
       ? meetings.filter((m) => {
           const haystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`.toLowerCase();
           return haystack.includes(q);
         })
       : meetings;
+
+    if (statusFilter === "published") {
+      matched = matched.filter((m) => m.status === "PUBLISHED");
+    } else if (statusFilter === "upcoming") {
+      matched = matched.filter((m) => m.status === "SCHEDULED");
+    } else if (statusFilter === "pending") {
+      matched = matched.filter((m) => m.status === "OCCURRED");
+    }
 
     const sorted = [...matched].sort((a, b) => {
       const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
@@ -33,7 +44,7 @@ export default function MeetingFilter({ meetings }: { meetings: Meeting[] }) {
     });
 
     return sorted;
-  }, [meetings, query, sortOrder]);
+  }, [meetings, query, sortOrder, statusFilter]);
 
   return (
     <div>
@@ -55,11 +66,24 @@ export default function MeetingFilter({ meetings }: { meetings: Meeting[] }) {
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
         </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          aria-label="Filter meetings by status"
+          className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-transparent text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+        >
+          <option value="all">All meetings</option>
+          <option value="published">Published only</option>
+          <option value="upcoming">Upcoming</option>
+          <option value="pending">Awaiting transcript</option>
+        </select>
       </div>
 
       {filtered.length === 0 ? (
         <p className="text-gray-500 dark:text-gray-400">
-          No meetings match &ldquo;{query}&rdquo;.
+          {query
+            ? <>No meetings match &ldquo;{query}&rdquo;.</>
+            : "No meetings match the selected filter."}
         </p>
       ) : (
         <div className="flex flex-col gap-4 max-w-3xl">

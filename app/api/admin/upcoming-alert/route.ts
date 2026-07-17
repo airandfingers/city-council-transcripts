@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  createMeetingUpcomingAlert,
-  publishAlertToSubscribers,
-  sendAlertToAdmins,
-} from "@/app/lib/alerts";
+import { createMeetingUpcomingAlert, publishAlertToSubscribers } from "@/app/lib/alerts";
 import { isAuthorized } from "@/app/lib/publish";
 
 const UpcomingAlertBody = z.object({
@@ -36,24 +32,24 @@ const UpcomingAlertBody = z.object({
  * Creates a MEETING_UPCOMING alert with the bite/snack/meal tiered summary.
  *
  * When `agenda_available` is true (default — a real agenda-backed summary):
- * sends it to admins for visibility and — unlike the post-meeting
- * MEETING_UPDATED path — immediately fans it out to subscribers too
- * (per-subscription frequency: INSTANT sent now, DAILY/WEEKLY/MONTHLY
- * queued for the next digest). This alert type is time-sensitive (per
- * prd.md AC-2.2, must reach subscribers before the meeting) and
- * scraped/agenda-derived rather than AI-summarized meeting content, so it
- * skips the admin-hold-then-manual-publish step the post-meeting alerts use
- * for quality review.
+ * unlike the post-meeting MEETING_UPDATED path, this immediately fans out to
+ * subscribers too (per-subscription frequency: INSTANT sent now, DAILY/
+ * WEEKLY/MONTHLY queued for the next digest) — this alert type is
+ * time-sensitive (per prd.md AC-2.2, must reach subscribers before the
+ * meeting). Admin-facing notification, however, always goes through the
+ * once-daily admin digest (app/lib/adminDigest.ts) rather than an instant
+ * email — admin review volume is capped to one email/day regardless of alert
+ * type (per FEAT-ADMIN-DIGEST-ALWAYS-001 in prd.md).
  *
  * When `agenda_available` is false: the meeting is on the calendar but has
  * no agenda/other information yet, so there's nothing worth emailing
  * subscribers about — the alert is left DRAFTED and picked up by the daily
- * admin digest (app/lib/adminDigest.ts) instead of an instant admin email.
- * It never auto-publishes to subscribers (scheduledFor is left null, same
- * as the agenda-backed case) — the scraper re-fires a fresh, real alert
- * through this same endpoint once the agenda is actually posted (see
- * upcoming_scraper.py's noagenda sentinel, kept separate from the permanent
- * "alert already sent" sentinel for exactly this reason).
+ * admin digest same as the agenda-backed case. It never auto-publishes to
+ * subscribers (scheduledFor is left null, same as the agenda-backed case) —
+ * the scraper re-fires a fresh, real alert through this same endpoint once
+ * the agenda is actually posted (see upcoming_scraper.py's noagenda
+ * sentinel, kept separate from the permanent "alert already sent" sentinel
+ * for exactly this reason).
  */
 export async function POST(req: Request) {
   if (!isAuthorized(req)) {
@@ -78,7 +74,12 @@ export async function POST(req: Request) {
   const { meeting_id, bite, snack, meal, agenda_available = true } = parsed.data;
 
   try {
-    const alert = await createMeetingUpcomingAlert(meeting_id, { bite, snack, meal });
+    const alert = await createMeetingUpcomingAlert(meeting_id, {
+      bite,
+      snack,
+      meal,
+      agendaAvailable: agenda_available,
+    });
 
     if (!agenda_available) {
       // No agenda yet — nothing worth emailing subscribers about. Leave
@@ -86,12 +87,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, alertId: alert.id, agendaAvailable: false });
     }
 
-    const adminResult = await sendAlertToAdmins(alert.id);
+    // Admin notification always goes through the once-daily digest (leave
+    // DRAFTED) — only the subscriber-facing send is instant here.
     const subscriberResult = await publishAlertToSubscribers(alert.id, "api:upcoming-alert");
     return NextResponse.json({
       ok: true,
       alertId: alert.id,
-      admins: adminResult,
       subscribers: subscriberResult,
     });
   } catch (err) {

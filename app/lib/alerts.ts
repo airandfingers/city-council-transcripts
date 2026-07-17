@@ -53,6 +53,8 @@ export type MeetingUpcomingContent = {
   bite: string;
   snack: string;
   meal: string;
+  /** False when no agenda has been posted yet — see UpcomingMeeting.tsx. */
+  agendaAvailable?: boolean;
 };
 
 /**
@@ -116,7 +118,16 @@ function computeScheduledFor(): Date {
 // Alert creators
 // ---------------------------------------------------------------------------
 
-/** Creates a DRAFTED alert snapshotting a meeting's current post-meeting content. */
+/**
+ * Creates a DRAFTED alert snapshotting a meeting's current post-meeting
+ * content. Deduped against any still-DRAFTED MEETING_UPDATED alert already
+ * pending for this meeting: a repeat call with unchanged content (e.g. a
+ * backfill/reprocessing run touching the same meeting more than once before
+ * the daily admin digest sweeps it) is a no-op rather than a fresh row, so
+ * an old meeting caught in reprocessing doesn't resurface in admin digests
+ * day after day. A repeat call with genuinely changed content updates the
+ * pending alert in place instead of creating a duplicate.
+ */
 export async function createMeetingUpdateAlert(meetingId: number): Promise<Alert> {
   const meeting = await getPublishMeeting(meetingId);
   if (!meeting) throw new Error(`Meeting ${meetingId} not found`);
@@ -126,6 +137,21 @@ export async function createMeetingUpdateAlert(meetingId: number): Promise<Alert
     tldr: meeting.tldr,
     keyDecisions: meeting.keyDecisions,
   };
+
+  const pendingAlert = await prisma.alert.findFirst({
+    where: { meetingId, type: "MEETING_UPDATED", status: "DRAFTED" },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (pendingAlert) {
+    if (JSON.stringify(pendingAlert.content) === JSON.stringify(content)) {
+      return pendingAlert;
+    }
+    return prisma.alert.update({
+      where: { id: pendingAlert.id },
+      data: { content, scheduledFor: computeScheduledFor() },
+    });
+  }
 
   return prisma.alert.create({
     data: {
@@ -145,7 +171,7 @@ export async function createMeetingUpdateAlert(meetingId: number): Promise<Alert
  */
 export async function createMeetingUpcomingAlert(
   meetingId: number,
-  tiers: Pick<MeetingUpcomingContent, "bite" | "snack" | "meal">,
+  tiers: Pick<MeetingUpcomingContent, "bite" | "snack" | "meal" | "agendaAvailable">,
 ): Promise<Alert> {
   const meeting = await getPublishMeeting(meetingId);
   if (!meeting) throw new Error(`Meeting ${meetingId} not found`);
@@ -413,16 +439,28 @@ export async function publishDueScheduledAlerts(
 
 /**
  * True when the alert's underlying meeting is too old for a subscriber
- * send. INTEREST_AREA_UPDATED alerts have no single associated meeting and
- * are never age-gated.
+ * send. INTEREST_AREA_UPDATED alerts created from the postmeeting rollup
+ * (no `meetingId` — see createInterestAreaAlert) resolve a representative
+ * date from the area's most recently discussed meeting instead, so a
+ * backfill/reprocessing run touching a years-old meeting still gets
+ * age-gated like every other alert type.
  */
 async function isAlertMeetingTooOldForSubscribers(alert: Alert): Promise<boolean> {
-  if (!alert.meetingId) return false;
-  const meeting = await prisma.meeting.findUnique({
-    where: { id: alert.meetingId },
-    select: { date: true },
+  if (alert.meetingId) {
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: alert.meetingId },
+      select: { date: true },
+    });
+    return meeting ? isMeetingTooOldForUserAlerts(meeting.date) : false;
+  }
+
+  if (!alert.interestAreaId) return false;
+  const mostRecentDiscussed = await prisma.interestAreaMeetingStatus.findFirst({
+    where: { interestAreaId: alert.interestAreaId, phase: "POSTMEETING", discussed: true },
+    orderBy: { meeting: { date: "desc" } },
+    select: { meeting: { select: { date: true } } },
   });
-  return meeting ? isMeetingTooOldForUserAlerts(meeting.date) : false;
+  return mostRecentDiscussed ? isMeetingTooOldForUserAlerts(mostRecentDiscussed.meeting.date) : false;
 }
 
 async function getSubscriberRecipients(alert: Alert) {
@@ -507,6 +545,7 @@ async function sendAlertEmails(
               ? buildManageUrl(recipient.unsubscribeToken)
               : undefined,
             isAdmin: opts.isAdmin,
+            agendaAvailable: content.agendaAvailable,
           });
           sent += 1;
         } catch (err) {

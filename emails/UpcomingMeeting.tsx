@@ -22,6 +22,13 @@ type Props = {
   meal: string;
   meetingUrl: string;
   manageUrl?: string;
+  /**
+   * False when no agenda has been posted yet — bite/snack/meal are all
+   * placeholder copy restating the same "nothing to report yet" message.
+   * In that case the "Full picture" section is skipped so the email isn't
+   * three tiers saying the same thing. Defaults to true (today's behavior).
+   */
+  agendaAvailable?: boolean;
 };
 
 export function UpcomingMeeting({
@@ -33,6 +40,7 @@ export function UpcomingMeeting({
   meal,
   meetingUrl,
   manageUrl,
+  agendaAvailable = true,
 }: Props) {
   const dateStr = meetingDate.toLocaleDateString("en-US", {
     weekday: "long",
@@ -83,11 +91,16 @@ export function UpcomingMeeting({
           </Heading>
           <Text style={{ marginTop: 0 }}>{snack}</Text>
 
-          {/* Meal — full picture */}
-          <Heading as="h2" style={{ fontSize: "15px", marginBottom: "4px" }}>
-            Full picture
-          </Heading>
-          <Text style={{ marginTop: 0 }}>{meal}</Text>
+          {/* Meal — full picture. Skipped when there's no agenda yet, since
+              bite/snack/meal are all the same "nothing to report" placeholder. */}
+          {agendaAvailable && (
+            <>
+              <Heading as="h2" style={{ fontSize: "15px", marginBottom: "4px" }}>
+                Full picture
+              </Heading>
+              <Text style={{ marginTop: 0 }}>{meal}</Text>
+            </>
+          )}
 
           <Button
             href={meetingUrl}
