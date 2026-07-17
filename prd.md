@@ -94,9 +94,11 @@ Today most admin alerts are created `DRAFTED` and swept once daily by the `/api/
 Root cause: `createMeetingUpdateAlert()` (`app/lib/alerts.ts:120-139`) has no idempotency/dedup check — every call (including repeat publish/backfill calls for a meeting whose content hasn't materially changed) creates a fresh `DRAFTED` `Alert` row. Since `FEAT-ADMIN-DIGEST-ALWAYS-001` sweeps all un-actioned `DRAFTED` alerts daily, a meeting reprocessed on multiple different days produces a new alert — and a new digest row — each time.
 
 **Acceptance Criteria:**
-- [x] AC-3.1: `createMeetingUpdateAlert` checks for an existing un-actioned (`DRAFTED`) alert for the same `meetingId`+`type` with equivalent content before creating a new one; if found and content is unchanged, no new alert is created.
-- [x] AC-3.2: A genuine content change (e.g. a corrected summary) for the same meeting still produces an updated alert (content overwritten in place on the existing `DRAFTED` row) — this is dedup, not suppression of real updates.
+- [x] AC-3.1: `createMeetingUpdateAlert` checks for an existing not-yet-terminal (`DRAFTED` *or* `SENT_TO_ADMINS`) alert for the same `meetingId`+`type` with equivalent content before creating a new one; if found and content is unchanged, no new alert is created.
+- [x] AC-3.2: A genuine content change (e.g. a corrected summary) for the same meeting still produces an updated alert (content overwritten in place, reset to `DRAFTED` so admins re-review before it can drain) — this is dedup, not suppression of real updates.
 - [ ] AC-3.3: Not done — no existing unit test suite for `alerts.ts` to extend; verified by code inspection + typecheck only.
+
+**Follow-up fix (2026-07-17):** original dedup only matched `status: "DRAFTED"`. A code review after shipping caught a real gap: once the admin digest sweeps an alert to `SENT_TO_ADMINS` (in flight, waiting on its `scheduledFor` drain), it no longer matched the dedup query — a reprocessing run before that drain fired would create a second, brand-new alert for the same meeting, and **both would eventually drain to subscribers independently, double-sending the same meeting update.** Widened the dedup query to `status: { in: ["DRAFTED", "SENT_TO_ADMINS"] }`; a genuine content change on an already-`SENT_TO_ADMINS` alert now resets it to `DRAFTED`/clears `sentToAdminsAt` so it goes through admin review again rather than silently updating an alert admins already reviewed. Shipped as PR (see git history) rather than amending the original merged commit.
 
 ---
 
