@@ -15,6 +15,7 @@
 - 📋 US-PREF-001 — Optional topic preferences
 - 📋 US-PREF-002 — "What's new since you last checked" digest
 - 📋 US-PREF-003 — Tune suggestions from behavior, not just stated preference
+- 📋 US-SUMMARY-TOPIC-LINKS-001 — Hyperlink topic mentions in summaries to interest-area pages
 - 📋 US-REEL-001 — Auto-generated highlight clips
 - 📋 US-REEL-002 — Shareable / embeddable clip pages
 - 📋 US-REEL-003 — Social-ready clip exports
@@ -254,6 +255,30 @@ PoC feedback distinguished **behavior vs. intent** explicitly as something to de
 - [ ] AC-3.1: Track view events on meetings/topics without requiring an account (session-scoped is acceptable for v1).
 - [ ] AC-3.2: Surfaces a privacy-respecting explanation of what's tracked and why; no dark patterns.
 - [ ] AC-3.3: Stated preferences remain user-overridable — behavior tuning augments, never silently overrides, explicit choices.
+
+---
+
+### Phase 5.5 — In-summary topic linking
+
+#### US-SUMMARY-TOPIC-LINKS-001 — Hyperlink topic mentions in summaries to interest-area pages
+
+**Status:** 📋 Not started
+
+**As a** resident reading a meeting's TL;DR or key-decisions summary
+**I want** a topic word (e.g. "housing", "short-term rental") that's mentioned in the summary to be a link
+**So that** I can jump straight to that topic's interest-area page (or the specific moment in this meeting that discusses it) instead of re-reading the whole summary/transcript to find context
+
+User-reported (2026-07-18), inspired by a real digest email: the July 15, 2026 Monterey Park summary mentions "housing-overlay ballot language," "short-term rental enforcement," "weed abatement," and "TOT ballot argument" — none of these are currently linked anywhere, even though `app/[state]/[city]/topics/[slug]` (interest-area pages) and the existing timecode-citation system (`[1]`-style `references` on `MeetingSummaryItem`, see `d54b66a`) already provide both plausible link targets.
+
+**Open design question (needs a decision before implementation):** when a summary mentions a topic, should the link prefer:
+  (a) the city's interest-area/topic page for that topic (`getInterestArea`/`TopicsPanel`), giving cross-meeting context, or
+  (b) the specific transcript timestamp within *this* meeting that discusses it (reusing the existing `references`/timecode-citation machinery)?
+The user's phrasing ("or fallback to the part of the meeting that discusses it") suggests (a) as primary with (b) as a fallback when no matching interest-area page exists for that city/topic — this needs confirming with the user before scoping acceptance criteria precisely, and likely needs a matching pass in `city-council-transcriber`'s summarizer (`src/interest_area_summarizer.py` already does agenda-only topic classification — a similar mention-span/topic-tagging step may need to run over generated summary text, not just agendas) so summary text arrives with topic spans already identified rather than being pattern-matched client-side in `city-council-transcripts`.
+
+**Acceptance Criteria (draft — pending design decision above):**
+- [ ] AC-1: Topic mentions within TL;DR/key-decisions summary text are detected and wrapped as links (exact mechanism TBD: transcriber-side tagging vs. client-side keyword matching against known interest areas).
+- [ ] AC-2: Link target resolution: interest-area page if the city has one for that topic, else the in-meeting timestamp where it's discussed (pending confirmation of preferred order).
+- [ ] AC-3: No link is rendered if neither an interest-area page nor a timestamp reference can be confidently resolved (avoid dead/wrong links — this is user-facing accuracy-sensitive, similar bar to the existing `references` citation system).
 
 ---
 
