@@ -38,6 +38,9 @@ export default function DocumentsPanel({
               >
                 Meeting source page ↗
               </a>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {sourceUrl}
+              </p>
             </li>
           )}
           {documents.map((doc) => (
