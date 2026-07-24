@@ -504,6 +504,7 @@ export default async function TranscriptPage({ params }: Props) {
               minutesText={meeting.minutesText}
               minutesUrl={meeting.minutesUrl}
               documents={meeting.documents}
+              sourceUrl={meeting.sourceUrl}
               extraTabs={[
                 ...(meeting.segments.length > 0
                   ? [

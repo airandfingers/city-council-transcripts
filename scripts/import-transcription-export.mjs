@@ -670,6 +670,7 @@ async function main() {
           timelineBullets: nonEmptyJsonArray(mtg.summary?.timeline_bullets),
           youtubeUrl: mtg.youtube_url ?? null,
           granicusUrl: mtg.granicus_url ?? null,
+          sourceUrl: mtg.source_url ?? null,
           youtubeOffsetSeconds: parseYoutubeOffsetScalar(mtg),
           youtubeOffsetModel: parseYoutubeOffsetModel(mtg),
           minutesText: mtg.minutes?.text ?? null,
