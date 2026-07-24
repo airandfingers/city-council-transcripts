@@ -68,6 +68,12 @@ model Meeting {
   // column explicitly. Only the new stub-upsert path sets SCHEDULED.
   status                 MeetingStatus               @default(PUBLISHED)
   agendaLastFetchedAt    DateTime?
+  // External source/agenda-listing page for this meeting (Legistar in-site
+  // page, Municode webpage, or the agenda file itself as a fallback when no
+  // distinct portal page exists -- see city-council-transcriber's
+  // source_url, which falls back to agenda_url using the same rule the
+  // admin webapp already applies).
+  sourceUrl              String?                     @db.VarChar(500)
   summary                String?                     @db.Text
   summaryModel           String?                     @db.VarChar(200)
   logline                String?                     @db.Text
