@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 /**
  * GET /api/contract
  *
- * Returns the current publisher contract (contract/schema.v1.json) as JSON.
+ * Returns the current publisher contract (contract/schema.json) as JSON.
  *
  * External publishers (e.g. city-council-transcriber) fetch this to learn
  * the current writable schema and project their data onto it before writing
@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
  */
 export async function GET() {
   try {
-    const contractPath = resolve(process.cwd(), "contract/schema.v1.json");
+    const contractPath = resolve(process.cwd(), "contract/schema.json");
     const raw = await readFile(contractPath, "utf-8");
     const contract = JSON.parse(raw);
 

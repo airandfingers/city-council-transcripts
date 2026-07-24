@@ -1,6 +1,6 @@
 # Publisher Contract
 
-`contract/schema.v1.json` is the **machine-readable schema contract** for
+`contract/schema.json` is the **machine-readable schema contract** for
 external publishers writing data directly into the `city-council-transcripts`
 Neon database.
 
@@ -20,7 +20,7 @@ migrates (see auto-catch-up below).
 
 ## How publishers use the contract
 
-1. **Fetch** `contract/schema.v1.json` (via filesystem or `GET /api/contract`).
+1. **Fetch** `contract/schema.json` (via filesystem or `GET /api/contract`).
 2. **Project** the export data DOWN onto the contract's column set — drop any
    fields the current schema doesn't have yet. This is how a richer/newer
    transcriber payload succeeds against an older web-app schema.
@@ -74,7 +74,7 @@ can publish again.
 ### Automated check
 
 ```bash
-npm run db:contract -- --check   # exits 1 if contract/schema.v1.json is stale
+npm run db:contract -- --check   # exits 1 if contract/schema.json is stale
 ```
 
 Add this to CI after Prisma migrations.
@@ -87,7 +87,7 @@ Run after any Prisma schema change:
 npm run db:contract
 ```
 
-This reads the live Prisma DMMF and rewrites `contract/schema.v1.json`.
+This reads the live Prisma DMMF and rewrites `contract/schema.json`.
 Commit the updated file alongside the migration.
 
 **Bump the version before regenerating when a breaking change is involved:**
@@ -96,7 +96,7 @@ Open `scripts/generate-contract.mjs`, increment `CONTRACT_MAJOR` and reset
 
 ## HTTP endpoint
 
-`GET /api/contract` serves the current `contract/schema.v1.json` over HTTP,
+`GET /api/contract` serves the current `contract/schema.json` over HTTP,
 so remote publishers can fetch it without cloning the repo.
 
 - No authentication required (the contract is public schema metadata).

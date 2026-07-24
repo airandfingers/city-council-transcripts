@@ -8,7 +8,7 @@
  * the current schema and validate it before writing.
  *
  * Usage:
- *   node scripts/generate-contract.mjs              # write contract/schema.v1.json
+ *   node scripts/generate-contract.mjs              # write contract/schema.json
  *   node scripts/generate-contract.mjs --check      # diff only — exit 1 if stale
  *   npm run db:contract                              # same as write
  *   npm run db:contract -- --check                  # same as --check
@@ -29,7 +29,7 @@ import { Prisma } from "@prisma/client";
 // ---------------------------------------------------------------------------
 
 const CONTRACT_MAJOR = 2; // increment on breaking changes; reset MINOR to 0
-const CONTRACT_MINOR = 1; // increment on additive (backwards-compatible) changes
+const CONTRACT_MINOR = 2; // increment on additive (backwards-compatible) changes
 
 const CONTRACT_VERSION = `${CONTRACT_MAJOR}.${CONTRACT_MINOR}`;
 
@@ -289,22 +289,22 @@ async function main() {
 
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const contractDir = resolve(__dirname, "../contract");
-  const contractPath = resolve(contractDir, "schema.v1.json");
+  const contractPath = resolve(contractDir, "schema.json");
 
   const fresh = buildContract();
 
   if (checkOnly) {
     if (!existsSync(contractPath)) {
-      console.error("✖  contract/schema.v1.json does not exist. Run `npm run db:contract` to generate it.");
+      console.error("✖  contract/schema.json does not exist. Run `npm run db:contract` to generate it.");
       process.exit(1);
     }
     const raw = await readFile(contractPath, "utf-8");
     const existing = JSON.parse(raw);
 
     if (contractsEqual(existing, fresh)) {
-      console.log("✔  contract/schema.v1.json is up to date.");
+      console.log("✔  contract/schema.json is up to date.");
     } else {
-      console.error("✖  contract/schema.v1.json is STALE. Differences:\n");
+      console.error("✖  contract/schema.json is STALE. Differences:\n");
       console.error(summarizeDiff(existing, fresh));
       console.error("\nRun `npm run db:contract` to regenerate.");
       process.exit(1);
@@ -318,7 +318,7 @@ async function main() {
     const raw = await readFile(contractPath, "utf-8");
     const existing = JSON.parse(raw);
     if (contractsEqual(existing, fresh)) {
-      console.log("✔  contract/schema.v1.json is already up to date — no changes written.");
+      console.log("✔  contract/schema.json is already up to date — no changes written.");
       return;
     }
     existingDiff = summarizeDiff(existing, fresh);
@@ -330,7 +330,7 @@ async function main() {
 
   await writeFile(contractPath, JSON.stringify(fresh, null, 2) + "\n", "utf-8");
 
-  console.log("✔  contract/schema.v1.json written.");
+  console.log("✔  contract/schema.json written.");
   if (existingDiff) {
     console.log("Changes from previous contract:\n" + existingDiff);
   }

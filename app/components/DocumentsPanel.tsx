@@ -12,11 +12,13 @@ export default function DocumentsPanel({
   minutesText,
   minutesUrl,
   documents,
+  sourceUrl,
   extraTabs,
 }: {
   minutesText: string | null;
   minutesUrl: string | null;
   documents: DocumentItem[];
+  sourceUrl?: string | null;
   extraTabs?: Tab[];
 }) {
   const tabs: Tab[] = [];
@@ -24,8 +26,20 @@ export default function DocumentsPanel({
   tabs.push({
     label: "Documents",
     content:
-      documents.length > 0 ? (
+      documents.length > 0 || sourceUrl ? (
         <ul className="space-y-3">
+          {sourceUrl && (
+            <li>
+              <a
+                href={sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+              >
+                Meeting source page ↗
+              </a>
+            </li>
+          )}
           {documents.map((doc) => (
             <li key={doc.id}>
               <a
