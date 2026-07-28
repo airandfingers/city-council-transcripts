@@ -1,4 +1,4 @@
-# security-baseline v2
+# security-baseline v3
 name: Security Baseline
 
 on:
@@ -16,26 +16,25 @@ jobs:
   dependency-audit:
     name: Dependency audit (advisory)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - run: npm install --no-audit --ignore-scripts
       - name: npm audit
-        run: |
-          npm install --no-audit --ignore-scripts
-          npm audit --audit-level=high
+        continue-on-error: true
+        run: npm audit --audit-level=high
 
   secret-scan:
     name: Secret scan (advisory)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: gitleaks
+        continue-on-error: true
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
