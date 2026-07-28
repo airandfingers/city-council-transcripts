@@ -21,6 +21,10 @@ export const metadata: Metadata = {
   },
   description:
     "Browse transcripts from city council meetings to stay informed about decisions that affect your community.",
+  icons: {
+    icon: [{ url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" }],
+  },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({
