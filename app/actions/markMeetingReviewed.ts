@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import prisma from "@/app/lib/prisma";
 
 /**
@@ -27,6 +28,9 @@ export async function markMeetingReviewed(
       meetingReviewedBy: reviewed ? reviewedBy : null,
     },
   });
+
+  const slugPath = updated.slug.split("/").map(encodeURIComponent).join("/");
+  revalidatePath(`/transcripts/${slugPath}`);
 
   return { meetingReviewed: updated.meetingReviewed ?? false };
 }

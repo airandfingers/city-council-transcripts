@@ -43,7 +43,7 @@ const SUMMARY_TYPE_ORDER = [
   "PUBLIC_COMMENT",
 ];
 
-export const dynamic = "force-dynamic";
+export const revalidate = 604800; // 7 days — transcript content is immutable once published
 
 type Props = {
   params: Promise<{ slug: string[] }>;

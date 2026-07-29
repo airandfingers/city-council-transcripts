@@ -4,6 +4,7 @@
  * @module cityData
  */
 
+import { cache } from "react";
 import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
 
@@ -87,7 +88,7 @@ export async function getCities(): Promise<City[]> {
  *   console.log(city.name); // "Monterey Park"
  * }
  */
-export function getCityByParams(
+export const getCityByParams = cache(function getCityByParams(
   stateCode: string,
   citySlug: string
 ): Promise<City | null> {
@@ -104,7 +105,7 @@ export function getCityByParams(
       },
     },
   });
-}
+});
 
 /**
  * Returns all meetings for a given city.
@@ -247,7 +248,7 @@ export async function getInterestAreasForCity(
  * Returns a single interest area by slug, with full meeting history.
  * Returns null if not found or inputs are invalid.
  */
-export async function getInterestArea(
+export const getInterestArea = cache(async function getInterestArea(
   stateCode: string,
   citySlug: string,
   areaSlug: string,
@@ -302,7 +303,7 @@ export async function getInterestArea(
       videoProvider: s.meeting.videoProvider,
     })),
   };
-}
+});
 
 /**
  * Returns static params for generateStaticParams in dynamic routes.

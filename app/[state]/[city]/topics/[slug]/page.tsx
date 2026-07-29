@@ -7,7 +7,7 @@ import AIDisclaimer from "@/app/components/AIDisclaimer";
 import CopyTimecode from "@/app/components/CopyTimecode";
 import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 type Props = {
   params: Promise<{ state: string; city: string; slug: string }>;

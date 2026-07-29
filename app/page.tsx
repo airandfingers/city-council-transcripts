@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   title: "City Council Transcripts",
 };
 
+// Kept dynamic (not ISR) deliberately: this route has no dynamic segments,
+// so Next would prerender it at *build time* under ISR — coupling every
+// deploy to database availability, the same failure mode that broke
+// /admin/alerts. The query here is cheap (city list only, no transcript
+// text), so it isn't the egress driver this fix targets.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
