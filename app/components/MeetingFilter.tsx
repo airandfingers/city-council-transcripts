@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import MeetingCard from "./MeetingCard";
-import type { Meeting } from "@/app/lib/cityData";
+import type { MeetingCardData } from "@/app/lib/cityData";
 
 /**
  * Client-side search & filter over a city's meeting list.
@@ -16,7 +16,7 @@ import type { Meeting } from "@/app/lib/cityData";
  */
 type StatusFilter = "all" | "published" | "upcoming" | "pending";
 
-export default function MeetingFilter({ meetings }: { meetings: Meeting[] }) {
+export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[] }) {
   const [query, setQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");

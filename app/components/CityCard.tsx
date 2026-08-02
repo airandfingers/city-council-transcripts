@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { City } from "@/app/lib/cityData";
 
 export type CityCardProps = {
-  city: City;
+  city: Omit<City, "recentMeetingsSummary">;
 };
 
 export default function CityCard({ city }: CityCardProps) {
