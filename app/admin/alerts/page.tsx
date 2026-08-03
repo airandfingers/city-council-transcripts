@@ -13,6 +13,8 @@ import PublishAlertButton from "@/app/components/PublishAlertButton";
  * of app/lib/alerts.ts). No auth gate yet — internal/unauthenticated by
  * design for this MVP slice; revisit once an admin auth system exists.
  */
+export const dynamic = "force-dynamic";
+
 export default async function AdminAlertsPage() {
   const alerts = await prisma.alert.findMany({
     where: { status: { in: ["DRAFTED", "SENT_TO_ADMINS"] } },

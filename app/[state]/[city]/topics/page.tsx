@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getCityByParams, getInterestAreasForCity } from "@/app/lib/cityData";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 type Props = {
   params: Promise<{ state: string; city: string }>;

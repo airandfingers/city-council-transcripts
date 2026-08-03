@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import prisma from "@/app/lib/prisma";
 import { createMeetingUpdateAlert, sendAlertToAdmins } from "@/app/lib/alerts";
 
@@ -29,7 +30,12 @@ export async function updateMeetingTitle(
   const updated = await prisma.meeting.update({
     where: { id: meetingId },
     data: { title: trimmed },
+    include: { city: { select: { stateCode: true, slug: true } } },
   });
+
+  const slugPath = updated.slug.split("/").map(encodeURIComponent).join("/");
+  revalidatePath(`/transcripts/${slugPath}`);
+  revalidatePath(`/${updated.city.stateCode}/${updated.city.slug}`);
 
   try {
     const alert = await createMeetingUpdateAlert(updated.id);

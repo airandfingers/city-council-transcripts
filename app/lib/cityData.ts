@@ -4,6 +4,7 @@
  * @module cityData
  */
 
+import { cache } from "react";
 import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
 
@@ -68,9 +69,21 @@ function isValidStateCode(value: string): boolean {
  * const cities = await getCities();
  * // [{ stateCode: "ca", name: "Monterey Park", ... }, ...]
  */
-export async function getCities(): Promise<City[]> {
+export async function getCities(): Promise<Omit<City, "recentMeetingsSummary">[]> {
   return prisma.city.findMany({
     orderBy: [{ stateCode: "asc" }, { name: "asc" }],
+    // recentMeetingsSummary (@db.Text) is only rendered on the individual
+    // city page (getCityByParams), never by CityCard on this list.
+    omit: { recentMeetingsSummary: true },
+  });
+}
+
+/** Slug/state-only variant for the sitemap, which links to cities but
+ * renders no city text at all. */
+export function getCitySlugsOnly(): Promise<Array<{ stateCode: string; slug: string }>> {
+  return prisma.city.findMany({
+    orderBy: [{ stateCode: "asc" }, { name: "asc" }],
+    select: { stateCode: true, slug: true },
   });
 }
 
@@ -87,7 +100,7 @@ export async function getCities(): Promise<City[]> {
  *   console.log(city.name); // "Monterey Park"
  * }
  */
-export function getCityByParams(
+export const getCityByParams = cache(function getCityByParams(
   stateCode: string,
   citySlug: string
 ): Promise<City | null> {
@@ -104,7 +117,7 @@ export function getCityByParams(
       },
     },
   });
-}
+});
 
 /**
  * Returns all meetings for a given city.
@@ -117,10 +130,33 @@ export function getCityByParams(
  * const meetings = await getMeetingsForCity("ca", "monterey-park");
  * // [{ slug: "...", title: "City Council Meeting...", ... }, ...]
  */
+/** Fields MeetingCard/MeetingFilter actually render — everything else on
+ * Meeting (minutesText, transcriptReviewNotes, timelineBullets,
+ * youtubeOffsetModel, review flags, etc.) is dead weight on the city page
+ * and would also be serialized into the client RSC payload via
+ * MeetingFilter. */
+const MEETING_CARD_SELECT = {
+  slug: true,
+  status: true,
+  date: true,
+  title: true,
+  logline: true,
+  summary: true,
+} as const;
+
+export type MeetingCardData = {
+  slug: string;
+  status: string;
+  date: Date;
+  title: string;
+  logline: string | null;
+  summary: string | null;
+};
+
 export function getMeetingsForCity(
   stateCode: string,
   citySlug: string
-): Promise<Meeting[]> {
+): Promise<MeetingCardData[]> {
   // Return empty array for invalid inputs
   if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
     return Promise.resolve([]);
@@ -134,6 +170,26 @@ export function getMeetingsForCity(
       },
     },
     orderBy: [{ date: "desc" }, { id: "desc" }],
+    select: MEETING_CARD_SELECT,
+  });
+}
+
+/** Narrow slug/date-only variant for the sitemap — that's all it renders
+ * into <url> entries, and this is a route hit by every crawler. */
+export function getMeetingSlugsForCity(
+  stateCode: string,
+  citySlug: string
+): Promise<Array<{ slug: string; date: Date }>> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
+    return Promise.resolve([]);
+  }
+
+  return prisma.meeting.findMany({
+    where: {
+      city: { stateCode, slug: citySlug },
+    },
+    orderBy: [{ date: "desc" }, { id: "desc" }],
+    select: { slug: true, date: true },
   });
 }
 
@@ -247,7 +303,7 @@ export async function getInterestAreasForCity(
  * Returns a single interest area by slug, with full meeting history.
  * Returns null if not found or inputs are invalid.
  */
-export async function getInterestArea(
+export const getInterestArea = cache(async function getInterestArea(
   stateCode: string,
   citySlug: string,
   areaSlug: string,
@@ -302,7 +358,7 @@ export async function getInterestArea(
       videoProvider: s.meeting.videoProvider,
     })),
   };
-}
+});
 
 /**
  * Returns static params for generateStaticParams in dynamic routes.

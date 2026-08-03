@@ -1,8 +1,8 @@
 import Link from "next/link";
-import type { Meeting } from "@/app/lib/cityData";
+import type { MeetingCardData } from "@/app/lib/cityData";
 
 export type MeetingCardProps = {
-  meeting: Meeting;
+  meeting: MeetingCardData;
 };
 
 export default function MeetingCard({ meeting }: MeetingCardProps) {

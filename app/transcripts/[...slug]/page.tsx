@@ -43,7 +43,7 @@ const SUMMARY_TYPE_ORDER = [
   "PUBLIC_COMMENT",
 ];
 
-export const dynamic = "force-dynamic";
+export const revalidate = 604800; // 7 days — transcript content is immutable once published
 
 type Props = {
   params: Promise<{ slug: string[] }>;
@@ -67,25 +67,96 @@ export default async function TranscriptPage({ params }: Props) {
   const meeting = await prisma.meeting.findUnique({
     where: { slug },
     include: {
-      city: true,
+      // Only id/stateCode/slug/name are rendered (breadcrumb + subscribe
+      // form); City.summary and recentMeetingsSummary are @db.Text and
+      // unused here — dropping them avoids re-shipping city-wide prose on
+      // every transcript-page hit.
+      city: { select: { id: true, stateCode: true, slug: true, name: true } },
       lines: {
         orderBy: { lineIndex: "asc" },
+        select: {
+          id: true,
+          speaker: true,
+          speakerName: true,
+          globalSpeakerUuid: true,
+          startTime: true,
+          endTime: true,
+          text: true,
+        },
       },
       summaryItems: {
         orderBy: { sortOrder: "asc" },
       },
-      documents: true,
+      documents: {
+        select: {
+          id: true,
+          title: true,
+          url: true,
+          documentType: true,
+          associatedAgendaItem: true,
+        },
+      },
+      // discrepancies/sourcesUsed/source*Available/provider/model/
+      // generatedAt are internal generation metadata never rendered.
       segments: {
         orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          itemNumber: true,
+          title: true,
+          startTime: true,
+          endTime: true,
+          durationSeconds: true,
+          skip: true,
+          skipReason: true,
+          discussionSummary: true,
+          officialAction: true,
+          tags: true,
+          speakerPositions: true,
+          keyQuotes: true,
+          publicComments: true,
+        },
       },
+      // topicId/endTime/speakerPositions/tags/provider/model/generatedAt
+      // are unused by the TL;DR summary cards below.
       topicSummaries: {
         orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          startTime: true,
+          summaryText: true,
+          keyPoints: true,
+          speakers: true,
+          outcome: true,
+        },
       },
+      // segmentCount/provider/model/generatedAt are unused by the panel.
       speakerSummaries: {
         orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          speakerUuid: true,
+          speakerName: true,
+          speakingTime: true,
+          summaryText: true,
+          keyQuotes: true,
+          actionsOrMotions: true,
+          positionsByTopic: true,
+        },
       },
+      // revision/scrapedAt only drive the latest-revision-per-item
+      // dedup/ordering above; not rendered.
       agendaItemVersions: {
         orderBy: [{ sourceItemId: "asc" }, { revision: "desc" }],
+        select: {
+          id: true,
+          sourceItemId: true,
+          itemNumber: true,
+          title: true,
+          description: true,
+          documentUrls: true,
+        },
       },
     },
   });
