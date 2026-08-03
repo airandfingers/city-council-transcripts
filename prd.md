@@ -9,10 +9,10 @@
 - ✅ FEAT-EMAIL-UPCOMING-NOAGENDA-001 — Collapse redundant no-agenda copy in UpcomingMeeting email
 - ✅ FEAT-MEETINGCARD-STATUS-CTA-001 — Gate "View summary & transcript" CTA on meeting status
 - ✅ FEAT-MEETINGFILTER-STATUS-001 — Add status/upcoming filter to city meeting list (client-side scope)
-- 📋 US-ALERT-001 — Subscribe to a city's upcoming agenda items
-- 📋 US-ALERT-002 — Notify ahead of an upcoming vote
-- 📋 US-ALERT-003 — Topic watch alerts
-- 📋 US-PREF-001 — Optional topic preferences
+- ✅ US-ALERT-001 — Subscribe to a city's upcoming agenda items
+- 🔄 US-ALERT-002 — Notify ahead of an upcoming vote (core mechanism shipped; no guaranteed lead time)
+- ✅ US-ALERT-003 — Topic watch alerts
+- 📋 US-PREF-001 — Optional topic preferences (distinct from US-ALERT-003 — see note)
 - 📋 US-PREF-002 — "What's new since you last checked" digest
 - 📋 US-PREF-003 — Tune suggestions from behavior, not just stated preference
 - 📋 US-SUMMARY-TOPIC-LINKS-001 — Hyperlink topic mentions in summaries to interest-area pages
@@ -159,9 +159,9 @@ Root cause: `createMeetingUpdateAlert()` (`app/lib/alerts.ts:120-139`) has no id
 
 ---
 
-## Backlog: PoC feedback Phases 4–6 (not yet built)
+## Backlog: PoC feedback Phases 4–6
 
-The PoC feedback session (2026-06) surfaced themes beyond what shipped in Phases 0–3 (homepage/nav/affordance cleanup, TLDR-first meeting pages, council member vote transparency, search/filter, and the slug-vs-filename naming fix). These stories capture the remaining themes as a backlog, sequenced behind Phase 3. They are intentionally **not implemented yet** — scope each into its own pass before building.
+The PoC feedback session (2026-06) surfaced themes beyond what shipped in Phases 0–3 (homepage/nav/affordance cleanup, TLDR-first meeting pages, council member vote transparency, search/filter, and the slug-vs-filename naming fix). **Phase 4 (alerts & subscriptions) shipped** across PRs #7, #11, #12, #13, #17, #18, #21–23 (2026-06-26 through 2026-07-17) — the statuses below were reconciled 2026-07-27 after they were found still marked "Not started" despite being live on `main`. Phases 5–6 remain backlog, **not implemented yet** — scope each into its own pass before building.
 
 ### Phase 4 — Alerts & subscriptions
 
@@ -169,20 +169,20 @@ Builds on the existing module spec at `specs/subscription/requirements.md` and `
 
 #### US-ALERT-001 — Subscribe to a city's upcoming agenda items
 
-**Status:** 📋 Not started
+**Status:** ✅ Done (reconciled 2026-07-27 — shipped, PRD was stale)
 
 **As a** resident who doesn't check the site regularly
 **I want** to subscribe to a city and get notified about upcoming meetings
 **So that** I don't have to remember to come back and check
 
 **Acceptance Criteria:**
-- [ ] AC-1.1: Builds on the `Subscriber` model from `specs/subscription/design.md` (email, cityId, confirmed, status).
-- [ ] AC-1.2: A subscribed, confirmed resident receives an email digest before each upcoming meeting for their city, once an agenda is available.
-- [ ] AC-1.3: Digest lists agenda items in plain language (reuse `app/lib/labels.ts` terminology), not raw agenda codes.
+- [x] AC-1.1: `Subscriber`/`Subscription` models (`prisma/schema.prisma`) — superset of the original spec (adds `AlertFrequency`, `kind`, per-subscription `unsubscribeToken`).
+- [x] AC-1.2: `MEETING_UPCOMING` alerts (`app/lib/alerts.ts::createMeetingUpcomingAlert`) fire once an agenda is available, fanned out per subscriber frequency via `publishAlertToSubscribers`; sourced from the transcriber's `POST /api/admin/upcoming-alert` (`agenda_available` gate — a no-agenda placeholder is admin-only, not sent to subscribers).
+- [x] AC-1.3: Email body (`emails/UpcomingMeeting.tsx`) renders LLM-generated "bite/snack/meal" plain-language tiers (`city-council-transcriber/src/upcoming_summarizer.py::generate_alert_tiers`), not raw agenda codes — satisfies the intent, though implemented via LLM summarization rather than the originally-suggested `app/lib/labels.ts` term substitution.
 
 #### US-ALERT-002 — Notify ahead of an upcoming vote
 
-**Status:** 📋 Not started
+**Status:** 🔄 Partially done (reconciled 2026-07-27) — core mechanism shipped; no guaranteed minimum lead time
 
 **As a** resident concerned about a specific issue (e.g. data centers, housing)
 **I want** to be told *before* the council votes on it
@@ -191,22 +191,22 @@ Builds on the existing module spec at `specs/subscription/requirements.md` and `
 PoC feedback was explicit that this is the single most valuable feature: *"the biggest thing is to alert AHEAD of time. If something already happened, what are you going to do about it?"*
 
 **Acceptance Criteria:**
-- [ ] AC-2.1: Requires agenda data to exist before the meeting (currently agenda/segment data is generated from the transcript *after* the meeting — this story needs an upstream agenda-ingestion path, scoped separately in `city-council-transcriber`).
-- [ ] AC-2.2: A scheduled job detects newly-published agenda items matching a subscriber's watched topics/city and triggers a notification at least 48h before the meeting.
-- [ ] AC-2.3: Notification states the item, the date, and a direct link to the (not-yet-held) meeting page.
+- [x] AC-2.1: Agenda data now exists before the meeting — `city-council-transcriber`'s `upcoming_scraper.py` pre-fetches agendas and upserts a pre-transcription `Meeting`/`AgendaItemVersion` stub into Neon.
+- [ ] AC-2.2: A background job (`interest_area_notifier.py` → `POST /api/admin/interest-area-alert`, preview phase) does detect newly-published agenda items matching a subscriber's watched topic/city and notifies before the meeting — but **there is no enforced minimum lead time**; whether it lands 48h ahead depends entirely on how far ahead the source city posts its agenda and how quickly the scraper notices (today's flat scrape interval, being tightened by `US-CADENCE-PREDICT-001` in the sibling repo). A city that posts its agenda the same day gets a same-day alert, not a blocked one. If a hard 48h floor is actually wanted, that's unbuilt — file as a follow-up rather than assuming it's covered.
+- [x] AC-2.3: `emails/InterestAreaUpdated.tsx`/`UpcomingMeeting.tsx` include the item/topic name, the meeting date, and a direct link (`areaUrl`/`meetingUrl`) to the not-yet-held meeting page.
 
 #### US-ALERT-003 — Topic watch alerts
 
-**Status:** 📋 Not started
+**Status:** ✅ Done (reconciled 2026-07-27 — shipped, PRD was stale)
 
 **As a** resident who cares about specific issues, not every meeting
 **I want** to watch a topic (e.g. "housing", "data centers") across all meetings for my city
 **So that** I only get notified when something relevant comes up, not every meeting
 
 **Acceptance Criteria:**
-- [ ] AC-3.1: Extends the `Subscriber` model with a topic-tagging mechanism (free text or a fixed taxonomy — TBD during design).
-- [ ] AC-3.2: Matches watched topics against `MeetingSummaryItem`/`MeetingSegment` tags or text at ingestion time.
-- [ ] AC-3.3: A subscriber can manage (add/remove) watched topics without re-subscribing from scratch.
+- [x] AC-3.1: `InterestArea` model (per-city topic, `slug`/`name`/`globalTopicId` cross-link) — a first-class model rather than free-text tagging on `Subscriber`, since a topic needs its own page/URL on the site (`app/[state]/[city]/topics/[slug]/page.tsx`), not just an alert-matching key.
+- [x] AC-3.2: Matched at ingestion by `city-council-transcriber`'s `interest_area_summarizer.py` (both premeeting/preview and postmeeting phases), written to `InterestAreaMeetingStatus`.
+- [x] AC-3.3: `app/subscriptions/page.tsx` lists each `Subscription` row (including `TOPIC_IN_CITY_UPDATES`) individually and unsubscribes by row (`unsubscribe(token, subscriptionId)`) — removing one watched topic doesn't require re-subscribing to the rest; adding a new topic happens via that topic's page (`SubscribeForm.tsx`), not this management page.
 
 ---
 
@@ -215,6 +215,8 @@ PoC feedback was explicit that this is the single most valuable feature: *"the b
 #### US-PREF-001 — Optional topic preferences
 
 **Status:** 📋 Not started
+
+**Note (added 2026-07-27):** don't conflate this with US-ALERT-003, which is done. US-ALERT-003 is an opt-in **email subscription** to a specific topic (explicit commitment, sends mail). This story is a lighter-touch, skippable **on-site preference** that reorders/highlights content for an anonymous visitor without sending anything — a genuinely different surface, and grepping the codebase (`app/`) turns up no "preference"-named UI or reordering logic anywhere. Still unbuilt.
 
 **As a** new visitor
 **I want** to optionally tell the site what I care about (housing, environment, public safety, etc.)
