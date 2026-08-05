@@ -43,7 +43,15 @@ const SUMMARY_TYPE_ORDER = [
   "PUBLIC_COMMENT",
 ];
 
-export const revalidate = 604800; // 7 days — transcript content is immutable once published
+// Cache indefinitely; invalidated on demand by POST /api/revalidate, which
+// the publisher (src/publish.py) calls unconditionally for every meeting
+// that passes its content-hash gate. Was a 7-day time-based window
+// (FIX-NEON-EGRESS-CLIENT-001) — that still let every path go cold on any
+// ISR-purging deploy, which a crawler with a full sitemap then re-reads
+// from Neon in full (FIX-NEON-EGRESS-MEASURE-001). Publish-driven
+// invalidation ties the Neon read to actual content changes instead of
+// wall-clock time or deploy frequency.
+export const revalidate = false;
 
 type Props = {
   params: Promise<{ slug: string[] }>;
@@ -84,8 +92,25 @@ export default async function TranscriptPage({ params }: Props) {
           text: true,
         },
       },
+      // linkStatus/confidence/endTimeSeconds/segmentIndex/segmentIndexEnd/
+      // meetingId are internal generation/linking metadata never rendered
+      // (see the render loop below and AnnotatedText's title reference).
+      // This was the one remaining bare `include:` on this query — every
+      // sibling include here is select:-projected (FIX-NEON-EGRESS-CLIENT-001).
       summaryItems: {
         orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          type: true,
+          text: true,
+          sortOrder: true,
+          startTimeSeconds: true,
+          timecodeLabel: true,
+          speaker: true,
+          position: true,
+          notes: true,
+          references: true,
+        },
       },
       documents: {
         select: {

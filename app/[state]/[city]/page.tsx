@@ -10,7 +10,10 @@ import MeetingFilter from "@/app/components/MeetingFilter";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 
-export const revalidate = 3600;
+// Cache indefinitely; invalidated on demand by POST /api/revalidate on
+// every meeting publish for this city (see app/transcripts/[...slug]/
+// page.tsx for the full rationale — FIX-NEON-EGRESS-MEASURE-001).
+export const revalidate = false;
 
 type Props = {
   params: Promise<{ state: string; city: string }>;

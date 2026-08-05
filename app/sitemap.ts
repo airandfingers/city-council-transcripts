@@ -4,10 +4,6 @@ import { getCitySlugsOnly, getMeetingSlugsForCity } from "@/app/lib/cityData";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://transcripts.ayoshitake.com";
 
-// Not build-time prerendered: unlike the content pages, this route's
-// queries are cheap (slugs/dates, not full transcript text), and forcing
-// it dynamic avoids the deploy build depending on database availability.
-//
 // This route is unauthenticated and directly linked from robots.ts, so
 // every query it runs is crawler-facing traffic — keep all of them
 // select-projected to slug/date only (FIX-NEON-EGRESS-CLIENT-001). An
@@ -15,7 +11,15 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://transcripts.ayoshi
 // getInterestAreasForCity, which return full rows (summary, statusSummary,
 // description, etc.) — that was a regression this route itself introduced
 // while fixing egress elsewhere.
-export const dynamic = "force-dynamic";
+//
+// Was `dynamic = "force-dynamic"`: every crawler fetch enumerated every
+// meeting/interest-area across every city from Neon. Cached daily now, with
+// POST /api/revalidate calling revalidatePath("/sitemap.xml") on every
+// publish so it doesn't lag the real content by up to 24h
+// (FIX-NEON-EGRESS-MEASURE-001). Not build-time prerendered: the daily
+// fallback still means a deploy never *requires* DB availability to build,
+// same reasoning as the original force-dynamic choice.
+export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const cities = await getCitySlugsOnly();
