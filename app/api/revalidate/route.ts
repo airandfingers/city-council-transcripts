@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import prisma from "@/app/lib/prisma";
 import { isAuthorized } from "@/app/lib/publish";
+import { getMeetingSlugsForCity } from "@/app/lib/cityData";
 
 /**
  * POST /api/revalidate
@@ -27,7 +28,15 @@ import { isAuthorized } from "@/app/lib/publish";
  *    that city's sweep — after `_update_city_recent_summary`,
  *    `_publish_interest_areas`, `_publish_roster_members`, which run once
  *    per city *after* the per-meeting loop, not per meeting. Invalidates
- *    the city page and its topics listing, which read that rolled-up data.
+ *    the city page and its topics listing, which read that rolled-up data
+ *    — AND every transcript page for the city, since
+ *    `_publish_roster_members` writes `RosterMember` rows and
+ *    `app/transcripts/[...slug]/page.tsx` resolves each speaker's title
+ *    as-of the meeting date from that table (FEAT-ROSTER-TITLES-OVER-TIME-001)
+ *    without being tied to any single meeting's own publish. Missing this
+ *    was caught in review: under `revalidate = false`, a roster change
+ *    (e.g. a mayor rotation) would otherwise have no invalidation trigger
+ *    at all and go stale forever on every transcript page in the city.
  *
  * Interest-area detail pages (`/[state]/[city]/topics/[slug]`) are left on
  * their existing 1h time-based `revalidate` window rather than moved to
@@ -48,7 +57,21 @@ const RevalidateBody = z.union([
 
 function revalidateCityPaths(stateCode: string, slug: string): string[] {
   const cityPath = `/${stateCode}/${slug}`;
-  const paths = [cityPath, `${cityPath}/topics`, "/sitemap.xml"];
+  const paths = [cityPath, `${cityPath}/topics`];
+  for (const path of paths) revalidatePath(path);
+  return paths;
+}
+
+/** Revalidates every transcript page for a city — see the roster-staleness
+ * note above. Narrow slug-only query, same one the sitemap uses. */
+async function revalidateCityTranscriptPaths(
+  stateCode: string,
+  slug: string,
+): Promise<string[]> {
+  const meetings = await getMeetingSlugsForCity(stateCode, slug);
+  const paths = meetings.map(
+    (m) => `/transcripts/${m.slug.split("/").map(encodeURIComponent).join("/")}`,
+  );
   for (const path of paths) revalidatePath(path);
   return paths;
 }
@@ -110,5 +133,6 @@ export async function POST(req: Request) {
   }
 
   const cityPaths = revalidateCityPaths(city_state_code, city_slug);
-  return NextResponse.json({ ok: true, revalidated: cityPaths });
+  const transcriptPaths = await revalidateCityTranscriptPaths(city_state_code, city_slug);
+  return NextResponse.json({ ok: true, revalidated: [...cityPaths, ...transcriptPaths] });
 }
