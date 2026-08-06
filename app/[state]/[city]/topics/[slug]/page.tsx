@@ -6,6 +6,7 @@ import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import CopyTimecode from "@/app/components/CopyTimecode";
 import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
+import { formatMeetingDate } from "@/app/lib/formatDate";
 
 // Time-based, not moved to indefinite+invalidate like its siblings:
 // interest-area rollups (write_interest_areas) are written by a separate
@@ -145,11 +146,7 @@ export default async function TopicDetailPage({ params }: Props) {
                 <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white dark:border-gray-900 bg-gray-400 dark:bg-gray-500" />
 
                 <time className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-                  {new Date(m.date).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {formatMeetingDate(new Date(m.date), { month: "long", day: "numeric", year: "numeric" })}
                 </time>
 
                 <div className="flex items-center gap-2 mt-0.5 mb-1 flex-wrap">
