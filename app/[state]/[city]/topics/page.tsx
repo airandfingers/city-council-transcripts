@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCityByParams, getInterestAreasForCity } from "@/app/lib/cityData";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
+import { formatMeetingDate } from "@/app/lib/formatDate";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate's
 // city-level call, which already revalidates this exact path (see
@@ -85,10 +86,7 @@ export default async function TopicsIndexPage({ params }: Props) {
                       )}
                       {lastDate && (
                         <div>
-                          {new Date(lastDate).toLocaleDateString("en-US", {
-                            month: "short",
-                            year: "numeric",
-                          })}
+                          {formatMeetingDate(new Date(lastDate), { month: "short", year: "numeric" })}
                         </div>
                       )}
                     </div>

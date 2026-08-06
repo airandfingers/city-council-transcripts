@@ -9,6 +9,7 @@ import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
+import { formatMeetingDate } from "@/app/lib/formatDate";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate on
 // every meeting publish for this city (see app/transcripts/[...slug]/
@@ -64,11 +65,7 @@ export default async function CityPage({ params }: Props) {
         <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 p-4 max-w-prose">
           <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
             Recent activity — updated{" "}
-            {cityData.updatedAt.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {formatMeetingDate(cityData.updatedAt)}
           </p>
           <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
             {cityData.recentMeetingsSummary}
@@ -82,12 +79,7 @@ export default async function CityPage({ params }: Props) {
           >
             <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
               Latest meeting —{" "}
-              {latestMeeting.date.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-                timeZone: "UTC",
-              })}
+              {formatMeetingDate(latestMeeting.date)}
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
               {latestMeeting.logline}
