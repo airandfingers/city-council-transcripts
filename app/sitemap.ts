@@ -4,10 +4,6 @@ import { getCitySlugsOnly, getMeetingSlugsForCity } from "@/app/lib/cityData";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://transcripts.ayoshitake.com";
 
-// Not build-time prerendered: unlike the content pages, this route's
-// queries are cheap (slugs/dates, not full transcript text), and forcing
-// it dynamic avoids the deploy build depending on database availability.
-//
 // This route is unauthenticated and directly linked from robots.ts, so
 // every query it runs is crawler-facing traffic — keep all of them
 // select-projected to slug/date only (FIX-NEON-EGRESS-CLIENT-001). An
@@ -15,6 +11,18 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://transcripts.ayoshi
 // getInterestAreasForCity, which return full rows (summary, statusSummary,
 // description, etc.) — that was a regression this route itself introduced
 // while fixing egress elsewhere.
+//
+// Tried switching this to a time-based `revalidate` window
+// (FIX-NEON-EGRESS-MEASURE-001) to stop every crawler fetch from
+// re-enumerating every meeting/interest-area from Neon. Reverted: a
+// metadata route with no dynamic segments and a `revalidate` value gets
+// statically prerendered at *build* time, not just cached at runtime —
+// confirmed via `npm run build`, which failed outright with a Prisma
+// connection error while trying to prerender this route with the local DB
+// unreachable. That's the exact failure mode `dynamic = "force-dynamic"`
+// was added for originally (commit 9239431 — /admin/alerts broke builds
+// the same way). Coupling every deploy to Neon being reachable is worse
+// than the egress this route generates; leaving it dynamic.
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

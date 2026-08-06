@@ -260,10 +260,29 @@ export async function getInterestAreasForCity(
     where: {
       city: { stateCode, slug: citySlug },
     },
-    include: {
+    // select:-projected to the fields the mapping below actually reads
+    // (cityId/runId/sortOrder/createdAt/updatedAt are internal bookkeeping,
+    // never rendered) — was a bare `include:`, the last one on this page's
+    // read path (FIX-NEON-EGRESS-CLIENT-001 covered the transcript page;
+    // this is its city/topics-page counterpart).
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      description: true,
+      source: true,
+      statusSummary: true,
+      meetingsDiscussed: true,
+      totalMeetings: true,
+      mostRecentActivity: true,
+      generatedAt: true,
       meetingStatuses: {
         where: { discussed: true },
-        include: {
+        select: {
+          summary: true,
+          confidence: true,
+          startTimeSeconds: true,
+          timecodeLabel: true,
           meeting: {
             select: { id: true, slug: true, title: true, date: true, videoProvider: true },
           },
@@ -321,9 +340,24 @@ export const getInterestArea = cache(async function getInterestArea(
       slug: areaSlug,
       city: { stateCode, slug: citySlug },
     },
-    include: {
+    // Same select: projection as getInterestAreasForCity above.
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      description: true,
+      source: true,
+      statusSummary: true,
+      meetingsDiscussed: true,
+      totalMeetings: true,
+      mostRecentActivity: true,
+      generatedAt: true,
       meetingStatuses: {
-        include: {
+        select: {
+          summary: true,
+          confidence: true,
+          startTimeSeconds: true,
+          timecodeLabel: true,
           meeting: {
             select: { id: true, slug: true, title: true, date: true, videoProvider: true },
           },

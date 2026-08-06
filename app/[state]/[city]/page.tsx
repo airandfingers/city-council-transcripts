@@ -10,7 +10,21 @@ import MeetingFilter from "@/app/components/MeetingFilter";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 
-export const revalidate = 3600;
+// Cache indefinitely; invalidated on demand by POST /api/revalidate on
+// every meeting publish for this city (see app/transcripts/[...slug]/
+// page.tsx for the full rationale — FIX-NEON-EGRESS-MEASURE-001).
+export const revalidate = false;
+
+// REQUIRED — see app/transcripts/[...slug]/page.tsx's generateStaticParams
+// comment. Without this, `revalidate` above silently does nothing and
+// every request re-renders from Neon; confirmed live in production that
+// this was the case for /transcripts/* since PR #29 merged. `return []`
+// is deliberate — do not populate it (reintroduces a build-time DB
+// dependency); dynamicParams defaults to true so every city still renders
+// and caches on first request.
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ state: string; city: string }>;
