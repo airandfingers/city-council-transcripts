@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import prisma from "@/app/lib/prisma";
 import TopicsPanel from "@/app/components/TopicsPanel";
 import type { Topic, Bullet } from "@/app/components/TopicsPanel";
@@ -52,6 +53,24 @@ const SUMMARY_TYPE_ORDER = [
 // invalidation ties the Neon read to actual content changes instead of
 // wall-clock time or deploy frequency.
 export const revalidate = false;
+
+// REQUIRED for `revalidate` to do anything at all on a route with no
+// static segments known at build time — without this, Next.js classifies
+// the route as fully dynamic (`ƒ` in the build output) and re-renders on
+// every single request regardless of the `revalidate` value above, which
+// silently no-ops it. Confirmed live against production (2026-08-06):
+// every /transcripts/* request showed `x-vercel-cache: MISS` and `age: 0`
+// since PR #29 merged (2026-08-03) — the original ISR fix has never
+// cached anything. Root cause: this route never exported
+// generateStaticParams. `return []` is deliberate, not a placeholder to
+// "improve" later — a real param list here would reintroduce the exact
+// build-time DB dependency `dynamic = "force-dynamic"` exists to avoid on
+// app/sitemap.ts (confirmed by a failed build during this fix's
+// verification). `dynamicParams` defaults to true, so every path still
+// renders on first request and is cached from then on (FIX-NEON-EGRESS-MEASURE-001).
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ slug: string[] }>;
@@ -589,7 +608,18 @@ export default async function TranscriptPage({ params }: Props) {
           {videoUrl && videoProvider && (
             <section className="lg:col-span-1 min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
-              <VideoPlayer videoUrl={videoUrl} videoProvider={videoProvider} />
+              {/* VideoPlayer uses useSearchParams() (offset-model query-param
+                  overrides). Client hooks like this require a Suspense
+                  boundary — without one, Next.js bails the *entire page*
+                  out to full client-side rendering, which is silently
+                  tolerated on a fully dynamic (`ƒ`) route but becomes a
+                  hard 500 once the route is statically generated (`●`,
+                  via generateStaticParams — FIX-NEON-EGRESS-MEASURE-001).
+                  Surfaced by adding generateStaticParams during that fix's
+                  local verification; this bug predates it. */}
+              <Suspense fallback={<div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />}>
+                <VideoPlayer videoUrl={videoUrl} videoProvider={videoProvider} />
+              </Suspense>
             </section>
           )}
 

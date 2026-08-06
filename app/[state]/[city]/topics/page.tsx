@@ -4,7 +4,21 @@ import { notFound } from "next/navigation";
 import { getCityByParams, getInterestAreasForCity } from "@/app/lib/cityData";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 
-export const revalidate = 3600;
+// Cache indefinitely; invalidated on demand by POST /api/revalidate's
+// city-level call, which already revalidates this exact path (see
+// app/api/revalidate/route.ts). Was 3600s, and — like every other route in
+// this family before this fix — never actually cached anything, since it
+// had no generateStaticParams (see below). Never touched by the original
+// FIX-NEON-EGRESS-CLIENT-001 ISR pass; caught during
+// FIX-NEON-EGRESS-MEASURE-001 review since /api/revalidate already
+// invalidates it.
+export const revalidate = false;
+
+// REQUIRED — see app/transcripts/[...slug]/page.tsx's generateStaticParams
+// comment. `return []` deliberate; dynamicParams defaults to true.
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ state: string; city: string }>;

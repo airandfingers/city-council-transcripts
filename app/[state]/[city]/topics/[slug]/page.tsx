@@ -7,7 +7,23 @@ import AIDisclaimer from "@/app/components/AIDisclaimer";
 import CopyTimecode from "@/app/components/CopyTimecode";
 import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
 
+// Time-based, not moved to indefinite+invalidate like its siblings:
+// interest-area rollups (write_interest_areas) are written by a separate
+// path not tied to a single meeting or city-level revalidate call, so
+// there is no invalidation trigger for this specific route yet — caching
+// indefinitely with nothing to invalidate it would silently serve stale
+// content forever (FIX-NEON-EGRESS-MEASURE-001).
 export const revalidate = 3600;
+
+// REQUIRED for the revalidate value above to do anything at all — see
+// app/transcripts/[...slug]/page.tsx's generateStaticParams comment for
+// the full explanation. This route had the same silent no-op as every
+// other route in this family before this fix. `return []` deliberate;
+// dynamicParams defaults to true so paths still render and cache on first
+// request within the 3600s window.
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ state: string; city: string; slug: string }>;
