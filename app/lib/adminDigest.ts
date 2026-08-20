@@ -108,7 +108,9 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
         items.push({
           groupKey: `city:${meeting.cityName}`,
           groupHeading: meeting.cityName,
-          title: `Upcoming (no agenda yet): ${content.subject}`,
+          title: content.agendaAvailable
+            ? `Upcoming: ${content.subject}`
+            : `Upcoming (no agenda yet): ${content.subject}`,
           summary: content.snack,
           url: buildMeetingUrl(meeting.slug),
         });
