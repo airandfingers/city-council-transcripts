@@ -101,16 +101,6 @@ export default async function CityPage({ params }: Props) {
         />
       </div>
 
-      <div className="mb-6">
-        <Link
-          href={`/${state}/${citySlug}/topics`}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-        >
-          <span aria-hidden="true">📋</span>
-          View tracked topics for {cityData.name}
-        </Link>
-      </div>
-
       <section>
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
         <MeetingFilter meetings={meetings} />
