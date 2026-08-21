@@ -32,8 +32,53 @@ import type {
 export type AdminDigestResult = {
   adminsEmailed: number;
   alertsBundled: number;
+  staleAgendasFlagged: number;
   failed: { email: string; error: string }[];
 };
+
+/**
+ * Days ahead a SCHEDULED meeting must be within to be checked for the
+ * false-green condition below. Meetings further out are still routinely
+ * missing an agenda for entirely legitimate reasons (not posted yet).
+ */
+const STALE_AGENDA_LOOKAHEAD_DAYS = 3;
+
+/**
+ * Find SCHEDULED meetings whose `agendaLastFetchedAt` looks fresh (a scrape
+ * ran recently) but that have zero `AgendaItemVersion`/`MeetingDocument`
+ * rows underneath them — the exact false-green that hid Monterey Park's
+ * 2026-08-19 Regular Meeting agenda. Nothing previously read
+ * `ScrapeState.last_error` or noticed a zero-yield fetch on the Python side,
+ * so `agendaLastFetchedAt` read as healthy while `_build_agenda_items_from_meeting_dir()`
+ * silently returned `[]` (see FIX-MP-SAMEDAY-MEETING-COLLISION-001). This
+ * check runs entirely against Neon, which both the scraper and this digest
+ * already share, rather than needing new plumbing to ship the Python side's
+ * on-disk `ScrapeState.last_error` across processes.
+ *
+ * Deliberately excludes meetings with `agendaLastFetchedAt: null` — those
+ * simply haven't been scraped yet at all, a different (and already visible)
+ * condition, not the "scraped but silently empty" one this guards against.
+ */
+async function findStaleAgendaMeetings(now: Date) {
+  const lookaheadEnd = new Date(now.getTime() + STALE_AGENDA_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
+  const candidates = await prisma.meeting.findMany({
+    where: {
+      status: "SCHEDULED",
+      date: { gte: now, lte: lookaheadEnd },
+      agendaLastFetchedAt: { not: null },
+    },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      date: true,
+      agendaLastFetchedAt: true,
+      city: { select: { name: true } },
+      _count: { select: { agendaItemVersions: true, documents: true } },
+    },
+  });
+  return candidates.filter((m) => m._count.agendaItemVersions === 0 && m._count.documents === 0);
+}
 
 export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminDigestResult> {
   const pending = await prisma.alert.findMany({
@@ -48,9 +93,11 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     orderBy: { createdAt: "asc" },
   });
 
-  if (pending.length === 0) {
-    return { adminsEmailed: 0, alertsBundled: 0, failed: [] };
-  }
+  // Deliberately not an early-return on `pending.length === 0` (unlike the
+  // Alert-driven path below) — the stale-agenda check further down must
+  // still run even when there's nothing else to bundle, or a scrape that's
+  // been silently zero-yielding for a city with no pending Alert of its own
+  // would never surface. See findStaleAgendaMeetings's docstring.
 
   const meetingCache = new Map<number, { slug: string; cityName: string } | null>();
   async function getMeeting(meetingId: number) {
@@ -136,8 +183,28 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     }
   }
 
-  if (bundledAlertIds.length === 0) {
-    return { adminsEmailed: 0, alertsBundled: 0, failed: [] };
+  // Runs regardless of whether any Alert rows are pending — a persistent
+  // zero-yield scrape doesn't necessarily raise an Alert of its own (an
+  // "upcoming, no agenda yet" placeholder alert fires once and then waits
+  // silently for a real agenda; if the agenda actually posted upstream but
+  // never made it into Neon, nothing re-fires), so gating this on
+  // bundledAlertIds would recreate the same blind spot it exists to close.
+  const staleAgendas = await findStaleAgendaMeetings(now);
+  for (const meeting of staleAgendas) {
+    items.push({
+      groupKey: `city:${meeting.city.name}`,
+      groupHeading: meeting.city.name,
+      title: `⚠️ Agenda fetch looks stuck: ${meeting.title}`,
+      summary:
+        `Scraped ${meeting.agendaLastFetchedAt?.toISOString() ?? "recently"} but has 0 agenda ` +
+        `items and 0 documents — meets on ${meeting.date.toISOString().slice(0, 10)}. ` +
+        `Likely a silently-failed or misrouted fetch, not "nothing posted yet."`,
+      url: buildMeetingUrl(meeting.slug),
+    });
+  }
+
+  if (bundledAlertIds.length === 0 && staleAgendas.length === 0) {
+    return { adminsEmailed: 0, alertsBundled: 0, staleAgendasFlagged: 0, failed: [] };
   }
 
   const groupsByKey = new Map<string, DigestGroup>();
@@ -186,5 +253,10 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     data: { sentToAdminsAt: now },
   });
 
-  return { adminsEmailed, alertsBundled: bundledAlertIds.length, failed };
+  return {
+    adminsEmailed,
+    alertsBundled: bundledAlertIds.length,
+    staleAgendasFlagged: staleAgendas.length,
+    failed,
+  };
 }
