@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import prisma from "@/app/lib/prisma";
+import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
 import type { Topic, Bullet } from "@/app/components/TopicsPanel";
 import DocumentsPanel from "@/app/components/DocumentsPanel";
@@ -242,6 +243,38 @@ export default async function TranscriptPage({ params }: Props) {
   })();
   const showPreMeetingAgenda = meeting.segments.length === 0 && latestAgendaItems.length > 0;
 
+  // Pre-meeting, agenda-based TL;DR/summary (bite/snack/meal tiers). Already
+  // generated for the subscriber alert email by the transcriber's
+  // upcoming_summarizer.py and persisted as a MEETING_UPCOMING Alert's
+  // content -- this reads the same content rather than regenerating it.
+  // createMeetingUpcomingAlert() (city-council-transcripts/app/lib/alerts.ts)
+  // cancels any prior non-terminal alert before creating a fresh one, so the
+  // latest non-CANCELED row is always the freshest tiers; excluding CANCELED
+  // explicitly rather than relying on createdAt ordering alone guards against
+  // a future manual cancellation with no superseding create.
+  //
+  // Regeneration is one-shot: the scraper's upcoming_alert_sent.json
+  // sentinel means tiers are generated once, ever, per meeting, and never
+  // refreshed if the agenda is later amended -- see
+  // FIX-MP-SAMEDAY-MEETING-COLLISION-001's follow-up plan. That's a
+  // pre-existing property of the alert pipeline (the subscriber email has
+  // the same limitation); the caption on this content says so explicitly
+  // rather than presenting it as a verified recap.
+  const preMeetingSummary = await (async () => {
+    if (meeting.status !== "SCHEDULED") return null;
+    const alert = await prisma.alert.findFirst({
+      where: { meetingId: meeting.id, type: "MEETING_UPCOMING", status: { not: "CANCELED" } },
+      orderBy: { createdAt: "desc" },
+      select: { content: true },
+    });
+    if (!alert) return null;
+    const content = alert.content as MeetingUpcomingContent;
+    // agendaAvailable: false is the "on the calendar, nothing posted yet"
+    // placeholder tier -- it adds no information over the existing
+    // "hasn't happened yet" copy, so it's treated the same as no alert.
+    return content.agendaAvailable ? content : null;
+  })();
+
   // Group consecutive lines by the same speaker.
   // Use a double newline as separator when there is a gap of 2.5 s+.
   const groupedLines = meeting.lines.reduce<GroupedLine[]>((groups, line) => {
@@ -423,6 +456,15 @@ export default async function TranscriptPage({ params }: Props) {
                 />
               )}
             </div>
+          ) : preMeetingSummary ? (
+            <div className="space-y-2">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
+                {preMeetingSummary.bite}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Based on the published agenda — check back after the meeting for the reviewed summary.
+              </p>
+            </div>
           ) : (
             <p className="text-gray-500 dark:text-gray-400">
               No summary available for this meeting yet.
@@ -544,6 +586,24 @@ export default async function TranscriptPage({ params }: Props) {
                 </div>
               );
             })}
+          </div>
+        ) : meeting.status === "SCHEDULED" && preMeetingSummary ? (
+          <div className="max-w-prose">
+            <div className="space-y-3 text-gray-700 dark:text-gray-300 mb-3">
+              {preMeetingSummary.meal.split(/\n\n+/).map((para, i) => (
+                <p key={i}>{para}</p>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              Based on the published agenda, not yet reviewed against what actually happened —
+              check back after the meeting for the transcript-verified summary.
+            </p>
+            <SubscribeForm
+              kind="CITY_UPDATES"
+              cityId={meeting.city.id}
+              cityName={meeting.city.name}
+              compact
+            />
           </div>
         ) : meeting.status === "SCHEDULED" ? (
           <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
