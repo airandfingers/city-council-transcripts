@@ -32,12 +32,11 @@ The default Docker credentials are `postgresql://ccc:ccc@localhost:5432/ccc_dev`
 and match the commented-out block in `.env.example`. For production, replace the
 `DATABASE_URL` / `DIRECT_URL` values with your Neon connection strings.
 
-**Caution:** if `.env` has `DATABASE_URL` pointed at prod Neon (common for local
-verification against real data), a bare `prisma studio` or `prisma db push` hits
-production. An open Studio session left running against prod was found to be a
-significant, silent contributor to Neon egress — use `npm run db:studio:local`
-/ `npm run db:push:local` (which force the Docker config via
-`prisma.config.docker.ts`) for local work instead.
+**Caution:** `.env` has `DATABASE_URL` pointed at prod Neon (common for local
+verification against real data), and it does not override a shell-set value. A
+bare `prisma studio` or `prisma db push` therefore hits **production**. Use
+`npm run db:studio:local` / `npm run db:push:local` (which force the Docker
+config via `prisma.config.docker.ts`) for local work instead.
 
 ## NPM Scripts
 
