@@ -5,6 +5,7 @@
  */
 
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
 
@@ -86,6 +87,32 @@ export function getCitySlugsOnly(): Promise<Array<{ stateCode: string; slug: str
     select: { stateCode: true, slug: true },
   });
 }
+
+export type CityNavEntry = { stateCode: string; slug: string; name: string; stateName: string };
+
+/**
+ * Cities list for the persistent header's city switcher (SiteHeader), which
+ * renders on every single page — unlike getCities()/getCitySlugsOnly()
+ * (called once per page load by their own routes), fetching this uncached
+ * would mean a Neon round-trip on every navigation across the whole site.
+ * Wrapped in unstable_cache with a 1h revalidate: the city directory changes
+ * approximately never (new cities are a manual onboarding event, not a
+ * runtime one), so a page load momentarily not reflecting a city added
+ * minutes ago is an acceptable trade-off for not re-querying on every
+ * request. See the many FIX-NEON-EGRESS-* stories in city-council-
+ * transcriber's prd.md for why this codebase treats per-request DB calls
+ * from a widely-shared component as worth avoiding.
+ */
+export const getCitiesForNav = unstable_cache(
+  async (): Promise<CityNavEntry[]> => {
+    return prisma.city.findMany({
+      orderBy: [{ stateCode: "asc" }, { name: "asc" }],
+      select: { stateCode: true, slug: true, name: true, stateName: true },
+    });
+  },
+  ["cities-for-nav"],
+  { revalidate: 3600 },
+);
 
 /**
  * Returns a city by state code and city slug, or null if not found.
