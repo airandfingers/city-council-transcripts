@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- ✅ FIX-STALE-SITE-URL-DOMAIN-001 — Stale `transcripts.ayoshitake.com` fallbacks + repeated/mislabeled "agenda fetch looks stuck" digest alert
 - ✅ US-LOCALDB-001 — Local Postgres for development
 - ✅ FIX-ALERT-AGEGATE-NULLMEETING-001 — Age-gate interest-area alerts with no meetingId
 - ✅ FEAT-ADMIN-DIGEST-ALWAYS-001 — Route all automated admin alerts through the daily digest only
@@ -21,6 +22,89 @@
 - 📋 US-REEL-003 — Social-ready clip exports
 
 ## Active Stories
+
+### FIX-STALE-SITE-URL-DOMAIN-001 — Fix stale domain links + the "agenda fetch looks stuck" digest alert
+
+**Status:** ✅ Done
+
+**As an** admin, **I want** digest emails to link to the current domain and
+report agenda problems accurately and only once, **so that** I can trust and
+act on what the digest tells me.
+
+User forwarded a daily admin digest reporting two problems: an email link to
+`transcripts.ayoshitake.com` instead of the current domain, and a repeated
+"⚠️ Agenda fetch looks stuck" alert for a Fort Collins meeting. Full
+investigation and root cause at
+`/Users/bob/.claude/plans/i-want-to-flag-linear-river.md` (shared with the
+companion `city-council-transcriber` story
+`FIX-AGENDA-ITEMS-NEVER-EXTRACTED-001`, which does the actual scraper-side
+fix this alert was correctly complaining about).
+
+**Domain links:** `getSiteUrl()` (`app/lib/email.ts`) throws when
+`NEXT_PUBLIC_SITE_URL` is unset, and emails are sending — so the var isn't
+missing, it's **set to the old domain in production**. Confirmed
+independently live: `robots.txt`/`sitemap.xml` both emitted
+`transcripts.ayoshitake.com`. The actual fix is a Vercel env var change +
+redeploy (`NEXT_PUBLIC_*` is build-time inlined), not code — flagged to the
+user, not applied here. Fixed the three hardcoded legacy-domain fallbacks
+that would silently resurrect the old host if the env var were ever cleared
+(`app/robots.ts`, `app/sitemap.ts`, `app/transcripts/[...slug]/page.tsx`'s
+`SUMMARY_REQUEST_EMAIL`), centralized into new `app/lib/siteUrl.ts`.
+
+**Digest alert:** `findStaleAgendaMeetings()` (`app/lib/adminDigest.ts`)
+flags SCHEDULED meetings with `agendaLastFetchedAt` set but zero
+`AgendaItemVersion`/`MeetingDocument` rows. Its stated diagnosis ("likely a
+silently-failed or misrouted fetch") was wrong — confirmed live against prod
+Neon that **all 53 Fort Collins and all 84 Seattle meetings** were zero-yield
+(a city-wide scraper gap, now fixed in `city-council-transcriber`), not a
+one-off failure. Its underlying complaint was right, though, so this story
+does NOT suppress the check — it corrects the message and adds dedupe/
+re-escalation so a genuine future recurrence is reported once, not every
+day it sits in the 3-day lookahead window.
+
+**Corrected a stale claim**: `FIX-MP-SAMEDAY-MEETING-COLLISION-001` states
+this check "correctly flags 3 real Seattle zero-yield meetings," framing
+them as validating true positives. All 84 Seattle meetings were zero-yield
+at the time — those 3 were this same structural gap, only visible because
+they fell inside the lookahead window, not evidence the check was already
+working correctly.
+
+**Acceptance Criteria:**
+
+- [x] `app/robots.ts`, `app/sitemap.ts`, `app/transcripts/[...slug]/page.tsx`
+      use a shared `FALLBACK_SITE_URL`/`FALLBACK_ADMIN_EMAIL`
+      (`app/lib/siteUrl.ts`) pointing at `counciloris.com`, not the retired
+      `transcripts.ayoshitake.com`
+- [x] Digest alert text states the observed fact (agenda source scraped, no
+      items/documents extracted) without asserting a cause it can't confirm
+- [x] New `Meeting.staleAgendaNotifiedAt` column + migration
+      (`20260824194129_add_meeting_stale_agenda_notified_at`) — deliberately
+      NOT routed through the subscriber-facing `Alert`/`AlertStatus` table
+      (which includes `PUBLISHED`); an internal admin diagnostic must never
+      reach a real subscriber
+- [x] `selectStaleAgendaMeetingsToNotify()`: suppress a meeting already
+      flagged once unless it's now within 24h of happening (re-escalation
+      window for a genuinely still-broken agenda), mirroring
+      `createMeetingUpdateAlert`'s dedupe rationale
+- [x] `tsc --noEmit`, `npm run lint`, `npm run build` all clean; build
+      confirmed to still succeed with no database reachable (this repo's
+      established convention — `generateStaticParams() => []` + ISR, see
+      `FIX-NEON-EGRESS-*`), previously-static routes (`/_not-found`,
+      `/icon.svg`, `/apple-icon.png`, `/robots.txt`) unchanged
+- [ ] **Deployment step, not done here**: `npx prisma migrate deploy`
+      against prod Neon before merge takes effect — confirmed live that the
+      column does not exist in prod yet (a read-only query against it
+      failed as expected). Also: set `NEXT_PUBLIC_SITE_URL` to the current
+      domain in Vercel and redeploy (the actual link fix); update the
+      `PROD_SITE_URL` GitHub Actions repo variable; update
+      `city-council-transcriber/.env`'s `SITE_URL_PROD`. None of these are
+      code changes and were not applied unilaterally — outward-facing
+      production changes flagged to the user.
+- [ ] This repo has no test runner beyond typecheck/lint
+      (`npm run test:quick`); the query logic was instead verified by direct
+      read-only execution against prod Neon (same result as the
+      investigation: 1 stale candidate, Fort Collins 2026-08-25) rather than
+      a mocked unit test
 
 ### US-LOCALDB-001 — Local Postgres for development
 
