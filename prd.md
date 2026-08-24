@@ -91,10 +91,23 @@ working correctly.
       established convention — `generateStaticParams() => []` + ISR, see
       `FIX-NEON-EGRESS-*`), previously-static routes (`/_not-found`,
       `/icon.svg`, `/apple-icon.png`, `/robots.txt`) unchanged
+- [x] `findStaleAgendaMeetings()` wraps its query in try/catch, degrading
+      to "no stale-agenda items this run" (logged, non-fatal) if the
+      migration below hasn't been applied yet — added after review: without
+      this, deploying this PR before the migration runs would make the
+      unknown-column error kill the *entire* digest send (including real
+      Alert-backed items), not just the stale-agenda section. This repo has
+      hit exactly this failure mode before: the `add_roster_member`
+      migration (PR #19) shipped un-applied and 500'd every transcript page
+      until noticed (documented in `city-council-transcriber/prd.md`'s
+      `FIX-AUTODL-CROSS-SOURCE-DUP-001`) — this guard exists specifically so
+      that can't repeat.
 - [ ] **Deployment step, not done here**: `npx prisma migrate deploy`
-      against prod Neon before merge takes effect — confirmed live that the
-      column does not exist in prod yet (a read-only query against it
-      failed as expected). Also: set `NEXT_PUBLIC_SITE_URL` to the current
+      against prod Neon — confirmed live that the column does not exist in
+      prod yet (a read-only query against it failed as expected; the guard
+      above means this is now a degrade, not an outage, if merged first
+      anyway, but the migration should still run promptly so the feature
+      actually works). Also: set `NEXT_PUBLIC_SITE_URL` to the current
       domain in Vercel and redeploy (the actual link fix); update the
       `PROD_SITE_URL` GitHub Actions repo variable; update
       `city-council-transcriber/.env`'s `SITE_URL_PROD`. None of these are
@@ -105,6 +118,16 @@ working correctly.
       read-only execution against prod Neon (same result as the
       investigation: 1 stale candidate, Fort Collins 2026-08-25) rather than
       a mocked unit test
+- [ ] **Caveat on the "alert goes to zero" verification**: Municode's
+      `fetch_for_meeting()` only (re-)writes `agenda.json` when it doesn't
+      already exist (or `force=True`). If production's
+      `storage/fort-collins/2026-08-25/.../agenda.json` already exists from
+      before the companion fix, the new parser won't run for that specific
+      meeting on its normal cadence, and `findStaleAgendaMeetings()` will
+      keep returning that one row until either it naturally re-scrapes past
+      that gate or someone forces a re-fetch. A non-zero result for that one
+      meeting isn't automatically evidence the fix is broken — check whether
+      that meeting's `agenda.json` predates the fix before concluding that.
 
 ### US-LOCALDB-001 — Local Postgres for development
 

@@ -70,24 +70,43 @@ const STALE_AGENDA_LOOKAHEAD_DAYS = 3;
  */
 async function findStaleAgendaMeetings(now: Date) {
   const lookaheadEnd = new Date(now.getTime() + STALE_AGENDA_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
-  const candidates = await prisma.meeting.findMany({
-    where: {
-      status: "SCHEDULED",
-      date: { gte: now, lte: lookaheadEnd },
-      agendaLastFetchedAt: { not: null },
-    },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      date: true,
-      agendaLastFetchedAt: true,
-      staleAgendaNotifiedAt: true,
-      city: { select: { name: true } },
-      _count: { select: { agendaItemVersions: true, documents: true } },
-    },
-  });
-  return candidates.filter((m) => m._count.agendaItemVersions === 0 && m._count.documents === 0);
+  // Best-effort, non-fatal: selects Meeting.staleAgendaNotifiedAt, added by
+  // migration 20260824194129. If this deploys before that migration is
+  // applied to prod (`npx prisma migrate deploy`), Prisma throws on the
+  // unknown column — degrade to "no stale-agenda items this run" rather
+  // than let the whole admin digest (including real Alert-backed items)
+  // fail to send. Mirrors this repo's existing pattern for a stale/missing
+  // migration: PR #19's `add_roster_member` migration shipped un-applied
+  // and 500'd every transcript page until noticed (see prd.md), which is
+  // exactly the blast radius this guard is here to shrink.
+  try {
+    const candidates = await prisma.meeting.findMany({
+      where: {
+        status: "SCHEDULED",
+        date: { gte: now, lte: lookaheadEnd },
+        agendaLastFetchedAt: { not: null },
+      },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        date: true,
+        agendaLastFetchedAt: true,
+        staleAgendaNotifiedAt: true,
+        city: { select: { name: true } },
+        _count: { select: { agendaItemVersions: true, documents: true } },
+      },
+    });
+    return candidates.filter((m) => m._count.agendaItemVersions === 0 && m._count.documents === 0);
+  } catch (err) {
+    console.error(
+      "findStaleAgendaMeetings query failed (has migration " +
+        "20260824194129_add_meeting_stale_agenda_notified_at been applied " +
+        "to this database?) — continuing digest without stale-agenda items",
+      err,
+    );
+    return [];
+  }
 }
 
 /** Once a meeting's already been flagged once, only resurface it again this
