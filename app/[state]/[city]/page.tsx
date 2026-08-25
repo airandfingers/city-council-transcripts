@@ -9,8 +9,23 @@ import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
+import { formatMeetingDate } from "@/app/lib/formatDate";
 
-export const revalidate = 3600;
+// Cache indefinitely; invalidated on demand by POST /api/revalidate on
+// every meeting publish for this city (see app/transcripts/[...slug]/
+// page.tsx for the full rationale — FIX-NEON-EGRESS-MEASURE-001).
+export const revalidate = false;
+
+// REQUIRED — see app/transcripts/[...slug]/page.tsx's generateStaticParams
+// comment. Without this, `revalidate` above silently does nothing and
+// every request re-renders from Neon; confirmed live in production that
+// this was the case for /transcripts/* since PR #29 merged. `return []`
+// is deliberate — do not populate it (reintroduces a build-time DB
+// dependency); dynamicParams defaults to true so every city still renders
+// and caches on first request.
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ state: string; city: string }>;
@@ -50,11 +65,7 @@ export default async function CityPage({ params }: Props) {
         <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 p-4 max-w-prose">
           <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
             Recent activity — updated{" "}
-            {cityData.updatedAt.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {formatMeetingDate(cityData.updatedAt)}
           </p>
           <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
             {cityData.recentMeetingsSummary}
@@ -68,12 +79,7 @@ export default async function CityPage({ params }: Props) {
           >
             <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
               Latest meeting —{" "}
-              {latestMeeting.date.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-                timeZone: "UTC",
-              })}
+              {formatMeetingDate(latestMeeting.date)}
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
               {latestMeeting.logline}
@@ -93,16 +99,6 @@ export default async function CityPage({ params }: Props) {
           cityId={cityData.id}
           cityName={cityData.name}
         />
-      </div>
-
-      <div className="mb-6">
-        <Link
-          href={`/${state}/${citySlug}/topics`}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-        >
-          <span aria-hidden="true">📋</span>
-          View tracked topics for {cityData.name}
-        </Link>
       </div>
 
       <section>

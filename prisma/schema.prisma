@@ -68,6 +68,14 @@ model Meeting {
   // column explicitly. Only the new stub-upsert path sets SCHEDULED.
   status                 MeetingStatus               @default(PUBLISHED)
   agendaLastFetchedAt    DateTime?
+  // Dedupe/escalation marker for the admin digest's "agenda fetch looks
+  // stuck" check (findStaleAgendaMeetings in adminDigest.ts,
+  // FIX-AGENDA-ITEMS-NEVER-EXTRACTED-001). Set when a meeting is first
+  // flagged; suppresses repeat daily flags for the same meeting unless it's
+  // now inside the final-24h re-escalation window. Deliberately NOT the
+  // subscriber-facing Alert table/AlertStatus — this is an internal admin
+  // diagnostic and must never reach a real subscriber.
+  staleAgendaNotifiedAt  DateTime?
   // External source/agenda-listing page for this meeting (Legistar in-site
   // page, Municode webpage, or the agenda file itself as a fallback when no
   // distinct portal page exists -- see city-council-transcriber's

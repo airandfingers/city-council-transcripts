@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { MeetingCardData } from "@/app/lib/cityData";
+import { formatMeetingDate } from "@/app/lib/formatDate";
 
 export type MeetingCardProps = {
   meeting: MeetingCardData;
@@ -11,11 +12,11 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
     .map(encodeURIComponent)
     .join("/")}`;
   const isPublished = meeting.status === "PUBLISHED";
-  const dateStr = meeting.date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  // This component is rendered from MeetingFilter ("use client"), so this
+  // formatting genuinely executes in the viewer's browser — must pin to
+  // UTC or a meeting stored as e.g. 2026-08-05T00:00:00Z displays as
+  // "Aug 4" for any US-timezone viewer. See app/lib/formatDate.ts.
+  const dateStr = formatMeetingDate(meeting.date);
 
   // The whole card is clickable (not just a small text link below the
   // summary) and styled with hover/focus affordances so it reads as an

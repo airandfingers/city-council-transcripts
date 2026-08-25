@@ -32,8 +32,108 @@ import type {
 export type AdminDigestResult = {
   adminsEmailed: number;
   alertsBundled: number;
+  staleAgendasFlagged: number;
   failed: { email: string; error: string }[];
 };
+
+/**
+ * Days ahead a SCHEDULED meeting must be within to be checked for the
+ * false-green condition below. Meetings further out are still routinely
+ * missing an agenda for entirely legitimate reasons (not posted yet).
+ */
+const STALE_AGENDA_LOOKAHEAD_DAYS = 3;
+
+/**
+ * Find SCHEDULED meetings that have been scraped at all
+ * (`agendaLastFetchedAt` is set — deliberately excludes meetings that
+ * simply haven't been scraped yet, a different and already-visible
+ * condition) but have zero `AgendaItemVersion`/`MeetingDocument` rows
+ * underneath them.
+ *
+ * Note this does NOT check that the scrape was *recent* — only that it
+ * happened at all — despite an earlier version of this docstring claiming
+ * otherwise. That was deliberate even then (any zero-yield scrape is worth
+ * surfacing, not just a fresh one), just imprecisely described.
+ *
+ * FIX-AGENDA-ITEMS-NEVER-EXTRACTED-001 correction: this check was
+ * originally believed to be Fort-Collins/Monterey-Park-specific plumbing
+ * that "correctly flags 3 real Seattle zero-yield meetings" (see
+ * FIX-MP-SAMEDAY-MEETING-COLLISION-001) — i.e. those 3 were treated as
+ * validating true positives. Confirmed live against prod Neon that this
+ * was never Seattle-specific: **all 84** Seattle meetings (and all 53 Fort
+ * Collins meetings) were zero-yield at the time, a structural gap in the
+ * Python-side scrapers for those two cities, not isolated bad luck. The 3
+ * were only visible because they happened to fall inside this check's
+ * lookahead window. That scraper-side gap is now fixed
+ * (city-council-transcriber), so this check firing at all going forward is
+ * a genuine signal again, not a permanent false-green source.
+ */
+async function findStaleAgendaMeetings(now: Date) {
+  const lookaheadEnd = new Date(now.getTime() + STALE_AGENDA_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
+  // Best-effort, non-fatal: selects Meeting.staleAgendaNotifiedAt, added by
+  // migration 20260824194129. If this deploys before that migration is
+  // applied to prod (`npx prisma migrate deploy`), Prisma throws on the
+  // unknown column — degrade to "no stale-agenda items this run" rather
+  // than let the whole admin digest (including real Alert-backed items)
+  // fail to send. Mirrors this repo's existing pattern for a stale/missing
+  // migration: PR #19's `add_roster_member` migration shipped un-applied
+  // and 500'd every transcript page until noticed (see prd.md), which is
+  // exactly the blast radius this guard is here to shrink.
+  try {
+    const candidates = await prisma.meeting.findMany({
+      where: {
+        status: "SCHEDULED",
+        date: { gte: now, lte: lookaheadEnd },
+        agendaLastFetchedAt: { not: null },
+      },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        date: true,
+        agendaLastFetchedAt: true,
+        staleAgendaNotifiedAt: true,
+        city: { select: { name: true } },
+        _count: { select: { agendaItemVersions: true, documents: true } },
+      },
+    });
+    return candidates.filter((m) => m._count.agendaItemVersions === 0 && m._count.documents === 0);
+  } catch (err) {
+    console.error(
+      "findStaleAgendaMeetings query failed (has migration " +
+        "20260824194129_add_meeting_stale_agenda_notified_at been applied " +
+        "to this database?) — continuing digest without stale-agenda items",
+      err,
+    );
+    return [];
+  }
+}
+
+/** Once a meeting's already been flagged once, only resurface it again this
+ * close to the meeting actually happening — a persistently-broken agenda
+ * this near the meeting is worth one more nudge, not silence purely because
+ * it was reported days earlier. */
+const RE_ESCALATE_WITHIN_HOURS = 24;
+
+/**
+ * Of the stale-agenda candidates, which should actually appear in *this*
+ * digest. Mirrors `createMeetingUpdateAlert`'s dedupe rationale (`alerts.ts`)
+ * — "an old meeting caught in reprocessing doesn't resurface in admin
+ * digests day after day" — but stores its own marker on `Meeting` rather
+ * than routing through the `Alert` table, since `AlertStatus` includes
+ * `PUBLISHED` and published Alerts are subscriber-facing; this is an
+ * internal admin diagnostic that must never reach a real subscriber.
+ */
+function selectStaleAgendaMeetingsToNotify(
+  candidates: Awaited<ReturnType<typeof findStaleAgendaMeetings>>,
+  now: Date,
+) {
+  return candidates.filter((meeting) => {
+    if (!meeting.staleAgendaNotifiedAt) return true;
+    const hoursUntilMeeting = (meeting.date.getTime() - now.getTime()) / (60 * 60 * 1000);
+    return hoursUntilMeeting <= RE_ESCALATE_WITHIN_HOURS;
+  });
+}
 
 export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminDigestResult> {
   const pending = await prisma.alert.findMany({
@@ -48,9 +148,11 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     orderBy: { createdAt: "asc" },
   });
 
-  if (pending.length === 0) {
-    return { adminsEmailed: 0, alertsBundled: 0, failed: [] };
-  }
+  // Deliberately not an early-return on `pending.length === 0` (unlike the
+  // Alert-driven path below) — the stale-agenda check further down must
+  // still run even when there's nothing else to bundle, or a scrape that's
+  // been silently zero-yielding for a city with no pending Alert of its own
+  // would never surface. See findStaleAgendaMeetings's docstring.
 
   const meetingCache = new Map<number, { slug: string; cityName: string } | null>();
   async function getMeeting(meetingId: number) {
@@ -108,7 +210,9 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
         items.push({
           groupKey: `city:${meeting.cityName}`,
           groupHeading: meeting.cityName,
-          title: `Upcoming (no agenda yet): ${content.subject}`,
+          title: content.agendaAvailable
+            ? `Upcoming: ${content.subject}`
+            : `Upcoming (no agenda yet): ${content.subject}`,
           summary: content.snack,
           url: buildMeetingUrl(meeting.slug),
         });
@@ -134,8 +238,36 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     }
   }
 
-  if (bundledAlertIds.length === 0) {
-    return { adminsEmailed: 0, alertsBundled: 0, failed: [] };
+  // Runs regardless of whether any Alert rows are pending — a persistent
+  // zero-yield scrape doesn't necessarily raise an Alert of its own (an
+  // "upcoming, no agenda yet" placeholder alert fires once and then waits
+  // silently for a real agenda; if the agenda actually posted upstream but
+  // never made it into Neon, nothing re-fires), so gating this on
+  // bundledAlertIds would recreate the same blind spot it exists to close.
+  const staleAgendaCandidates = await findStaleAgendaMeetings(now);
+  const staleAgendas = selectStaleAgendaMeetingsToNotify(staleAgendaCandidates, now);
+  for (const meeting of staleAgendas) {
+    items.push({
+      groupKey: `city:${meeting.city.name}`,
+      groupHeading: meeting.city.name,
+      title: `⚠️ Agenda fetch looks stuck: ${meeting.title}`,
+      summary:
+        `Scraped ${meeting.agendaLastFetchedAt?.toISOString() ?? "recently"} but has 0 agenda ` +
+        `items and 0 documents — meets on ${meeting.date.toISOString().slice(0, 10)}. ` +
+        // Not necessarily a failed or misrouted fetch — the agenda source
+        // itself may have been fetched successfully with nothing extracted
+        // from it. Confirmed live (FIX-AGENDA-ITEMS-NEVER-EXTRACTED-001)
+        // that this was previously true of every Fort Collins and Seattle
+        // meeting, not a per-meeting failure — state the observed fact,
+        // not a diagnosis this check can't actually confirm.
+        `The agenda source was scraped, but no agenda items or documents ` +
+        `were extracted from it.`,
+      url: buildMeetingUrl(meeting.slug),
+    });
+  }
+
+  if (bundledAlertIds.length === 0 && staleAgendas.length === 0) {
+    return { adminsEmailed: 0, alertsBundled: 0, staleAgendasFlagged: 0, failed: [] };
   }
 
   const groupsByKey = new Map<string, DigestGroup>();
@@ -184,5 +316,21 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     data: { sentToAdminsAt: now },
   });
 
-  return { adminsEmailed, alertsBundled: bundledAlertIds.length, failed };
+  // Stamp the dedupe marker for every stale-agenda meeting actually
+  // included in this digest — regardless of per-admin send failures above,
+  // matching the Alert-stamping rationale: the content included in this
+  // digest attempt is the same "reviewed" snapshot either way.
+  if (staleAgendas.length > 0) {
+    await prisma.meeting.updateMany({
+      where: { id: { in: staleAgendas.map((m) => m.id) } },
+      data: { staleAgendaNotifiedAt: now },
+    });
+  }
+
+  return {
+    adminsEmailed,
+    alertsBundled: bundledAlertIds.length,
+    staleAgendasFlagged: staleAgendas.length,
+    failed,
+  };
 }

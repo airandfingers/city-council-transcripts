@@ -6,8 +6,25 @@ import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import CopyTimecode from "@/app/components/CopyTimecode";
 import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
+import { formatMeetingDate } from "@/app/lib/formatDate";
 
+// Time-based, not moved to indefinite+invalidate like its siblings:
+// interest-area rollups (write_interest_areas) are written by a separate
+// path not tied to a single meeting or city-level revalidate call, so
+// there is no invalidation trigger for this specific route yet — caching
+// indefinitely with nothing to invalidate it would silently serve stale
+// content forever (FIX-NEON-EGRESS-MEASURE-001).
 export const revalidate = 3600;
+
+// REQUIRED for the revalidate value above to do anything at all — see
+// app/transcripts/[...slug]/page.tsx's generateStaticParams comment for
+// the full explanation. This route had the same silent no-op as every
+// other route in this family before this fix. `return []` deliberate;
+// dynamicParams defaults to true so paths still render and cache on first
+// request within the 3600s window.
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ state: string; city: string; slug: string }>;
@@ -129,11 +146,7 @@ export default async function TopicDetailPage({ params }: Props) {
                 <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white dark:border-gray-900 bg-gray-400 dark:bg-gray-500" />
 
                 <time className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-                  {new Date(m.date).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {formatMeetingDate(new Date(m.date), { month: "long", day: "numeric", year: "numeric" })}
                 </time>
 
                 <div className="flex items-center gap-2 mt-0.5 mb-1 flex-wrap">
