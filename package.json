@@ -12,6 +12,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:push:local": "prisma db push --config prisma.config.docker.ts",
+    "db:studio:local": "prisma studio --config prisma.config.docker.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "db:import": "tsx scripts/import-transcription-export.mjs",

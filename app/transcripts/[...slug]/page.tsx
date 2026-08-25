@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import prisma from "@/app/lib/prisma";
+import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
 import type { Topic, Bullet } from "@/app/components/TopicsPanel";
 import DocumentsPanel from "@/app/components/DocumentsPanel";
@@ -21,6 +23,7 @@ import type { GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
 import { buildTitleByUuid, type RosterMemberRow } from "@/app/lib/roster";
+import { FALLBACK_ADMIN_EMAIL } from "@/app/lib/siteUrl";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
@@ -28,7 +31,7 @@ const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY
 /** Mailbox for "request this summary" links when topic summaries aren't ready yet. */
 const SUMMARY_REQUEST_EMAIL =
   process.env.EMAIL_FROM?.match(/[\w.+-]+@[\w.-]+/)?.[0] ??
-  "info@transcripts.ayoshitake.com";
+  FALLBACK_ADMIN_EMAIL;
 
 /**
  * Display order for the TLDR tabs — decisions and votes lead because
@@ -43,7 +46,33 @@ const SUMMARY_TYPE_ORDER = [
   "PUBLIC_COMMENT",
 ];
 
-export const revalidate = 604800; // 7 days — transcript content is immutable once published
+// Cache indefinitely; invalidated on demand by POST /api/revalidate, which
+// the publisher (src/publish.py) calls unconditionally for every meeting
+// that passes its content-hash gate. Was a 7-day time-based window
+// (FIX-NEON-EGRESS-CLIENT-001) — that still let every path go cold on any
+// ISR-purging deploy, which a crawler with a full sitemap then re-reads
+// from Neon in full (FIX-NEON-EGRESS-MEASURE-001). Publish-driven
+// invalidation ties the Neon read to actual content changes instead of
+// wall-clock time or deploy frequency.
+export const revalidate = false;
+
+// REQUIRED for `revalidate` to do anything at all on a route with no
+// static segments known at build time — without this, Next.js classifies
+// the route as fully dynamic (`ƒ` in the build output) and re-renders on
+// every single request regardless of the `revalidate` value above, which
+// silently no-ops it. Confirmed live against production (2026-08-06):
+// every /transcripts/* request showed `x-vercel-cache: MISS` and `age: 0`
+// since PR #29 merged (2026-08-03) — the original ISR fix has never
+// cached anything. Root cause: this route never exported
+// generateStaticParams. `return []` is deliberate, not a placeholder to
+// "improve" later — a real param list here would reintroduce the exact
+// build-time DB dependency `dynamic = "force-dynamic"` exists to avoid on
+// app/sitemap.ts (confirmed by a failed build during this fix's
+// verification). `dynamicParams` defaults to true, so every path still
+// renders on first request and is cached from then on (FIX-NEON-EGRESS-MEASURE-001).
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ slug: string[] }>;
@@ -84,8 +113,25 @@ export default async function TranscriptPage({ params }: Props) {
           text: true,
         },
       },
+      // linkStatus/confidence/endTimeSeconds/segmentIndex/segmentIndexEnd/
+      // meetingId are internal generation/linking metadata never rendered
+      // (see the render loop below and AnnotatedText's title reference).
+      // This was the one remaining bare `include:` on this query — every
+      // sibling include here is select:-projected (FIX-NEON-EGRESS-CLIENT-001).
       summaryItems: {
         orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          type: true,
+          text: true,
+          sortOrder: true,
+          startTimeSeconds: true,
+          timecodeLabel: true,
+          speaker: true,
+          position: true,
+          notes: true,
+          references: true,
+        },
       },
       documents: {
         select: {
@@ -197,6 +243,38 @@ export default async function TranscriptPage({ params }: Props) {
     return items.sort((a, b) => a.sourceItemId.localeCompare(b.sourceItemId));
   })();
   const showPreMeetingAgenda = meeting.segments.length === 0 && latestAgendaItems.length > 0;
+
+  // Pre-meeting, agenda-based TL;DR/summary (bite/snack/meal tiers). Already
+  // generated for the subscriber alert email by the transcriber's
+  // upcoming_summarizer.py and persisted as a MEETING_UPCOMING Alert's
+  // content -- this reads the same content rather than regenerating it.
+  // createMeetingUpcomingAlert() (city-council-transcripts/app/lib/alerts.ts)
+  // cancels any prior non-terminal alert before creating a fresh one, so the
+  // latest non-CANCELED row is always the freshest tiers; excluding CANCELED
+  // explicitly rather than relying on createdAt ordering alone guards against
+  // a future manual cancellation with no superseding create.
+  //
+  // Regeneration is one-shot: the scraper's upcoming_alert_sent.json
+  // sentinel means tiers are generated once, ever, per meeting, and never
+  // refreshed if the agenda is later amended -- see
+  // FIX-MP-SAMEDAY-MEETING-COLLISION-001's follow-up plan. That's a
+  // pre-existing property of the alert pipeline (the subscriber email has
+  // the same limitation); the caption on this content says so explicitly
+  // rather than presenting it as a verified recap.
+  const preMeetingSummary = await (async () => {
+    if (meeting.status !== "SCHEDULED") return null;
+    const alert = await prisma.alert.findFirst({
+      where: { meetingId: meeting.id, type: "MEETING_UPCOMING", status: { not: "CANCELED" } },
+      orderBy: { createdAt: "desc" },
+      select: { content: true },
+    });
+    if (!alert) return null;
+    const content = alert.content as MeetingUpcomingContent;
+    // agendaAvailable: false is the "on the calendar, nothing posted yet"
+    // placeholder tier -- it adds no information over the existing
+    // "hasn't happened yet" copy, so it's treated the same as no alert.
+    return content.agendaAvailable ? content : null;
+  })();
 
   // Group consecutive lines by the same speaker.
   // Use a double newline as separator when there is a gap of 2.5 s+.
@@ -379,6 +457,15 @@ export default async function TranscriptPage({ params }: Props) {
                 />
               )}
             </div>
+          ) : preMeetingSummary ? (
+            <div className="space-y-2">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
+                {preMeetingSummary.bite}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Based on the published agenda — check back after the meeting for the reviewed summary.
+              </p>
+            </div>
           ) : (
             <p className="text-gray-500 dark:text-gray-400">
               No summary available for this meeting yet.
@@ -501,6 +588,24 @@ export default async function TranscriptPage({ params }: Props) {
               );
             })}
           </div>
+        ) : meeting.status === "SCHEDULED" && preMeetingSummary ? (
+          <div className="max-w-prose">
+            <div className="space-y-3 text-gray-700 dark:text-gray-300 mb-3">
+              {preMeetingSummary.meal.split(/\n\n+/).map((para, i) => (
+                <p key={i}>{para}</p>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              Based on the published agenda, not yet reviewed against what actually happened —
+              check back after the meeting for the transcript-verified summary.
+            </p>
+            <SubscribeForm
+              kind="CITY_UPDATES"
+              cityId={meeting.city.id}
+              cityName={meeting.city.name}
+              compact
+            />
+          </div>
         ) : meeting.status === "SCHEDULED" ? (
           <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
             <p className="text-gray-700 dark:text-gray-300 mb-3">
@@ -564,7 +669,18 @@ export default async function TranscriptPage({ params }: Props) {
           {videoUrl && videoProvider && (
             <section className="lg:col-span-1 min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
-              <VideoPlayer videoUrl={videoUrl} videoProvider={videoProvider} />
+              {/* VideoPlayer uses useSearchParams() (offset-model query-param
+                  overrides). Client hooks like this require a Suspense
+                  boundary — without one, Next.js bails the *entire page*
+                  out to full client-side rendering, which is silently
+                  tolerated on a fully dynamic (`ƒ`) route but becomes a
+                  hard 500 once the route is statically generated (`●`,
+                  via generateStaticParams — FIX-NEON-EGRESS-MEASURE-001).
+                  Surfaced by adding generateStaticParams during that fix's
+                  local verification; this bug predates it. */}
+              <Suspense fallback={<div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />}>
+                <VideoPlayer videoUrl={videoUrl} videoProvider={videoProvider} />
+              </Suspense>
             </section>
           )}
 
