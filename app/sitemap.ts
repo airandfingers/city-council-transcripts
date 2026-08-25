@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
 import prisma from "@/app/lib/prisma";
 import { getCitySlugsOnly, getMeetingSlugsForCity } from "@/app/lib/cityData";
+import { FALLBACK_SITE_URL } from "@/app/lib/siteUrl";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://transcripts.ayoshitake.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? FALLBACK_SITE_URL;
 
 // This route is unauthenticated and directly linked from robots.ts, so
 // every query it runs is crawler-facing traffic — keep all of them
