@@ -26,3 +26,26 @@ export function formatMeetingDate(
 ): string {
   return date.toLocaleDateString("en-US", { ...options, timeZone: "UTC" });
 }
+
+/**
+ * Does `title` already spell out a "Month Day, Year"-shaped date somewhere
+ * in it? Some cities' scraped titles do (Monterey Park: "City Council
+ * Meeting — July 15, 2026"); others don't (Fort Collins:
+ * "City Council Regular Meeting"). Used to decide whether to render a
+ * *separate* date alongside the title — display suppression only, so a
+ * title that already shows its date doesn't get a redundant one appended.
+ *
+ * This never feeds `Meeting.date` itself — that column stays the single
+ * authoritative source, populated upstream by the transcriber's own
+ * never-guess title/upload-date parsing (see `parse_meeting_date_from_title`
+ * in city-council-transcriber/src/meeting_scraper.py). This is a much
+ * looser pattern than that parser on purpose: false positives here just
+ * hide a redundant date, where false positives there would risk minting a
+ * wrong meeting directory.
+ */
+const _TITLE_DATE_PATTERN =
+  /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{4}\b/i;
+
+export function titleIncludesDate(title: string): boolean {
+  return _TITLE_DATE_PATTERN.test(title);
+}
