@@ -119,6 +119,7 @@ export type MeetingPublishedEmailParams = {
   to: string;
   meetingTitle: string;
   cityName: string;
+  meetingDate: Date;
   tldr: string | null;
   keyDecisions: string[];
   meetingUrl: string;
@@ -132,6 +133,7 @@ export async function sendMeetingPublishedEmail({
   to,
   meetingTitle,
   cityName,
+  meetingDate,
   tldr,
   keyDecisions,
   meetingUrl,
@@ -146,6 +148,7 @@ export async function sendMeetingPublishedEmail({
     react: MeetingPublished({
       meetingTitle,
       cityName,
+      meetingDate,
       tldr,
       keyDecisions,
       meetingUrl,
