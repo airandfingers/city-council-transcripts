@@ -2,6 +2,7 @@ import prisma from "@/app/lib/prisma";
 import { buildMeetingUrl, sendDigestEmail } from "@/app/lib/email";
 import type { DigestGroup } from "@/emails/DigestEmail";
 import { getAdminRecipients } from "@/app/lib/publish";
+import { titleWithDate } from "@/app/lib/formatDate";
 import type {
   InterestAreaUpdatedContent,
   MeetingUpcomingContent,
@@ -154,16 +155,16 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
   // been silently zero-yielding for a city with no pending Alert of its own
   // would never surface. See findStaleAgendaMeetings's docstring.
 
-  const meetingCache = new Map<number, { slug: string; cityName: string } | null>();
+  const meetingCache = new Map<number, { slug: string; date: Date; cityName: string } | null>();
   async function getMeeting(meetingId: number) {
     if (!meetingCache.has(meetingId)) {
       const meeting = await prisma.meeting.findUnique({
         where: { id: meetingId },
-        select: { slug: true, city: { select: { name: true } } },
+        select: { slug: true, date: true, city: { select: { name: true } } },
       });
       meetingCache.set(
         meetingId,
-        meeting ? { slug: meeting.slug, cityName: meeting.city.name } : null,
+        meeting ? { slug: meeting.slug, date: meeting.date, cityName: meeting.city.name } : null,
       );
     }
     return meetingCache.get(meetingId) ?? null;
@@ -195,7 +196,7 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
         items.push({
           groupKey: `city:${meeting.cityName}`,
           groupHeading: meeting.cityName,
-          title: content.subject,
+          title: titleWithDate(content.subject, meeting.date),
           summary: content.tldr,
           url: buildMeetingUrl(meeting.slug),
         });
@@ -207,12 +208,13 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
         const meeting = await getMeeting(alert.meetingId);
         if (!meeting) continue;
         const content = alert.content as MeetingUpcomingContent;
+        const subject = titleWithDate(content.subject, meeting.date);
         items.push({
           groupKey: `city:${meeting.cityName}`,
           groupHeading: meeting.cityName,
           title: content.agendaAvailable
-            ? `Upcoming: ${content.subject}`
-            : `Upcoming (no agenda yet): ${content.subject}`,
+            ? `Upcoming: ${subject}`
+            : `Upcoming (no agenda yet): ${subject}`,
           summary: content.snack,
           url: buildMeetingUrl(meeting.slug),
         });

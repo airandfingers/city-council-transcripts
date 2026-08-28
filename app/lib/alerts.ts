@@ -530,7 +530,7 @@ async function sendAlertEmails(
       if (!alert.meetingId) throw new Error(`Alert ${alert.id} is missing meetingId`);
       const meeting = await prisma.meeting.findUniqueOrThrow({
         where: { id: alert.meetingId },
-        select: { slug: true, city: { select: { name: true } } },
+        select: { slug: true, date: true, city: { select: { name: true } } },
       });
       const content = alert.content as MeetingUpdatedContent;
       const meetingUrl = buildMeetingUrl(meeting.slug);
@@ -540,6 +540,7 @@ async function sendAlertEmails(
             to: recipient.email,
             meetingTitle: content.subject,
             cityName: meeting.city.name,
+            meetingDate: meeting.date,
             tldr: content.tldr,
             keyDecisions: content.keyDecisions,
             meetingUrl,

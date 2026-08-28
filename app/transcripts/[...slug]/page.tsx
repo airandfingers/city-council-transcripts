@@ -24,7 +24,7 @@ import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
 import { buildTitleByUuid, type RosterMemberRow } from "@/app/lib/roster";
 import { FALLBACK_ADMIN_EMAIL } from "@/app/lib/siteUrl";
-import { formatMeetingDate, titleIncludesDate } from "@/app/lib/formatDate";
+import { formatMeetingDate, titleIncludesDate, titleWithDate } from "@/app/lib/formatDate";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
@@ -93,10 +93,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // date from the authoritative `date` column when the title doesn't
   // already show one, so the tab/search/link-preview title always
   // distinguishes same-titled meetings without duplicating an existing date.
-  const title = titleIncludesDate(meeting.title)
-    ? meeting.title
-    : `${meeting.title} — ${formatMeetingDate(meeting.date)}`;
-  return { title };
+  return { title: titleWithDate(meeting.title, meeting.date) };
 }
 
 export default async function TranscriptPage({ params }: Props) {

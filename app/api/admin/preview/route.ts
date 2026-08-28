@@ -73,6 +73,7 @@ export async function POST(req: Request) {
           to: send_to,
           meetingTitle: content.subject,
           cityName: alert.meeting.city.name,
+          meetingDate: alert.meeting.date,
           tldr: content.tldr,
           keyDecisions: content.keyDecisions,
           meetingUrl: buildMeetingUrl(alert.meeting.slug),

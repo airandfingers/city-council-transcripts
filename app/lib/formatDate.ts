@@ -49,3 +49,16 @@ const _TITLE_DATE_PATTERN =
 export function titleIncludesDate(title: string): boolean {
   return _TITLE_DATE_PATTERN.test(title);
 }
+
+/**
+ * `title`, with the meeting date appended when the title doesn't already
+ * show one. Shared by the transcript page and the admin/subscriber digest
+ * builders so a date-less title ("City Council Regular Meeting") reads the
+ * same everywhere it's surfaced, not just on the transcript page itself —
+ * digest emails render `Alert.content.subject` (a title snapshot taken at
+ * alert-creation time), which is exactly as date-less as the source title
+ * was and needs the same suppression-aware append.
+ */
+export function titleWithDate(title: string, date: Date): string {
+  return titleIncludesDate(title) ? title : `${title} — ${formatMeetingDate(date)}`;
+}

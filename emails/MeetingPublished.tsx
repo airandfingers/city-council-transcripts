@@ -9,12 +9,17 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
+import { formatMeetingDate, titleIncludesDate } from "@/app/lib/formatDate";
 
 type Props = {
   /** Meeting title, e.g. "City Council Regular Meeting". */
   meetingTitle: string;
   /** City the meeting belongs to, e.g. "Palo Alto". */
   cityName: string;
+  /** The meeting's calendar date. Shown next to the title unless the title
+   *  already spells one out (some cities' titles do) — see
+   *  titleIncludesDate in app/lib/formatDate.ts. */
+  meetingDate: Date;
   /** One-paragraph TL;DR (the meeting logline). */
   tldr: string | null;
   /** Bulleted key decisions from the meeting. */
@@ -28,6 +33,7 @@ type Props = {
 export function MeetingPublished({
   meetingTitle,
   cityName,
+  meetingDate,
   tldr,
   keyDecisions,
   meetingUrl,
@@ -42,7 +48,10 @@ export function MeetingPublished({
       <Body style={{ fontFamily: "system-ui, sans-serif", backgroundColor: "#f6f6f6", padding: "24px" }}>
         <Container style={{ backgroundColor: "#ffffff", padding: "32px", borderRadius: "8px", maxWidth: "560px" }}>
           <Heading style={{ fontSize: "20px", marginTop: 0 }}>{meetingTitle}</Heading>
-          <Text style={{ color: "#6b7280", marginTop: 0 }}>{cityName}</Text>
+          <Text style={{ color: "#6b7280", marginTop: 0 }}>
+            {cityName}
+            {!titleIncludesDate(meetingTitle) && ` · ${formatMeetingDate(meetingDate)}`}
+          </Text>
 
           <Heading as="h2" style={{ fontSize: "16px", marginBottom: "4px" }}>
             TL;DR

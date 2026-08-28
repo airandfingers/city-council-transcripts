@@ -2,6 +2,7 @@ import prisma from "@/app/lib/prisma";
 import type { AlertFrequency } from "@prisma/client";
 import { buildManageUrl, buildMeetingUrl, sendDigestEmail } from "@/app/lib/email";
 import type { DigestGroup } from "@/emails/DigestEmail";
+import { titleWithDate } from "@/app/lib/formatDate";
 import type {
   InterestAreaUpdatedContent,
   MeetingUpcomingContent,
@@ -157,7 +158,7 @@ export async function sendDueDigests(
           groupKey: `city:${meeting.cityName}`,
           groupHeading: meeting.cityName,
           item: {
-            title: content.subject,
+            title: titleWithDate(content.subject, meeting.date),
             summary: content.tldr,
             url: buildMeetingUrl(meeting.slug),
           },
@@ -180,7 +181,7 @@ export async function sendDueDigests(
           groupKey: `city:${meeting.cityName}`,
           groupHeading: meeting.cityName,
           item: {
-            title: `Upcoming: ${content.subject}`,
+            title: `Upcoming: ${titleWithDate(content.subject, meeting.date)}`,
             summary: content.snack,
             url: buildMeetingUrl(meeting.slug),
           },
