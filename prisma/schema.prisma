@@ -511,3 +511,14 @@ model CronAuthToken {
   label     String?  @db.VarChar(200)
   createdAt DateTime @default(now())
 }
+
+/// Singleton row tracking cadence for once-a-week sections of the daily
+/// admin digest (currently just the subscriber-count summary —
+/// FEAT-ADMIN-DIGEST-SUBSCRIBER-SUMMARY-001). A dedicated marker field per
+/// weekly section, mirroring Meeting.staleAgendaNotifiedAt's single-purpose
+/// dedupe-marker pattern, rather than parsing digest send history. Always
+/// exactly one row (id = 1).
+model AdminDigestState {
+  id                        Int       @id @default(1)
+  subscriberSummarySentAt   DateTime?
+}

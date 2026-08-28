@@ -10,6 +10,7 @@
 - ✅ FEAT-EMAIL-UPCOMING-NOAGENDA-001 — Collapse redundant no-agenda copy in UpcomingMeeting email
 - ✅ FEAT-MEETINGCARD-STATUS-CTA-001 — Gate "View summary & transcript" CTA on meeting status
 - ✅ FEAT-MEETINGFILTER-STATUS-001 — Add status/upcoming filter to city meeting list (client-side scope)
+- ✅ FEAT-ADMIN-DIGEST-SUBSCRIBER-SUMMARY-001 — Weekly subscriber-count summary (no PII) appended to the admin digest
 - ✅ US-ALERT-001 — Subscribe to a city's upcoming agenda items
 - 🔄 US-ALERT-002 — Notify ahead of an upcoming vote (core mechanism shipped; no guaranteed lead time)
 - ✅ US-ALERT-003 — Topic watch alerts
@@ -22,6 +23,94 @@
 - 📋 US-REEL-003 — Social-ready clip exports
 
 ## Active Stories
+
+### FEAT-ADMIN-DIGEST-SUBSCRIBER-SUMMARY-001 — Weekly subscriber-count summary in the admin digest
+
+**Status:** ✅ Done
+
+**As an** admin,
+**I want** a once-a-week summary of active subscription counts per city/topic
+and how they changed since last week,
+**so that** I can gauge growth/attrition without querying the database
+directly, and without any subscriber PII appearing in the email.
+
+**Design:**
+- Appended to the existing daily `sendDueAdminDigest()` (`app/lib/adminDigest.ts`)
+  as one more `DigestGroup`, gated to fire only once every 7 days — not a
+  separate cron route, since the admin digest already runs daily and the
+  weekly cadence is purely a "should this section be included today" check.
+- Cadence state: a new nullable `AdminDigestState.subscriberSummarySentAt`
+  singleton row (mirrors the existing single-purpose-marker pattern used by
+  `Meeting.staleAgendaNotifiedAt` — a small dedicated field/table rather than
+  parsing digest history). Section included when
+  `now - subscriberSummarySentAt >= 7 days` (or never sent).
+- **Counts only, zero PII**: `Subscription.status = "ACTIVE"` grouped by
+  `cityId` (city subscriptions) and by `interestAreaId` (topic
+  subscriptions) via `groupBy`/`_count` — no `Subscriber.email` or any other
+  per-person field is read for this feature.
+- **Weekly change**, without a new snapshot table: for the same trailing
+  7-day window, count `Subscription` rows with `confirmedAt >= weekAgo` as
+  new, and rows with `unsubscribedAt >= weekAgo` as lost, per group; net
+  delta = new − lost. Rendered as `+2` / `−1` / `±0` next to each count.
+- One compact section, one row per city and one row per topic — e.g.
+  `Monterey Park: 41 subscribers (+2 this week)` /
+  `Bike Lanes · Monterey Park: 9 (+1)`. Cities/topics with zero active
+  subscriptions and zero change are omitted, keeping it short even as the
+  subscriber base grows.
+
+**Acceptance Criteria:**
+- [x] New `AdminDigestState` singleton (migration
+      `20260827180000_add_admin_digest_state`) with
+      `subscriberSummarySentAt DateTime?`.
+- [x] New `buildSubscriberSummaryGroup(now)` in `app/lib/adminDigest.ts` —
+      returns `DigestGroup | null` (null when not due this week, or when
+      there is nothing to report).
+- [x] `sendDueAdminDigest()` appends the group when due, and — independent
+      of whether any other alerts/stale-agenda items exist that day —
+      stamps `subscriberSummarySentAt = now` once actually sent, only after
+      a real digest went out (mirrors the existing stale-agenda/Alert
+      stamping rationale: same snapshot regardless of per-admin send
+      failures). Does not block on `pending.length === 0`, matching the
+      existing stale-agenda check.
+- [x] No `Subscriber.email` (or any other subscriber-identifying field) is
+      queried or rendered anywhere in this feature — the entire code path
+      is `groupBy`/`_count` against `Subscription`, plus `City`/`InterestArea`
+      name lookups for display labels; confirmed by grep.
+- [x] Zero-count/zero-change groups are omitted from the section (a
+      city/topic only appears when it has active subscribers or nonzero
+      weekly new/lost activity).
+- [x] `npx tsc --noEmit` and `npm run lint` clean; `npm run build` succeeds.
+- [x] Verified against local Postgres (Docker `ccc-postgres`, via
+      `prisma.config.docker.ts`/`.env.docker` — `db:push:local`) with
+      seeded `Subscription` rows spanning both sides of the 7-day boundary:
+      3 city subs (2 >7d old, 1 confirmed 2 days ago) + 1 unsubscribed 3
+      days ago produced the correct `±0` net delta against the pre-existing
+      baseline; 1 topic sub confirmed yesterday produced `+1`. Also
+      confirmed the weekly-cadence gate: stamping
+      `subscriberSummarySentAt = now` then rebuilding returns `null`, reset
+      afterward. Verification script was temporary (deleted after use, per
+      this repo not having a persistent script-retention convention like
+      the transcriber repo's).
+
+**Notes:** background/context from the user: "no PII, just counts of
+subscriptions per city/topic, and any changes that week e.g. +2
+subscribers" — deliberately concise per that instruction, one section, not
+a full analytics breakdown. This repo requires a branch + PR (not
+direct-to-main) per its own convention — shipped on
+`feat/admin-digest-subscriber-summary`.
+
+**Incident during implementation:** `npx prisma migrate deploy` was run
+once without an explicit `DATABASE_URL` override; `prisma.config.ts` loads
+`.env` (not `.env.local`), whose `DATABASE_URL`/`DIRECT_URL` point at
+production Neon — so that command applied the `AdminDigestState`
+`CREATE TABLE` migration to production before any of this story's app code
+existed. Confirmed the table landed empty (0 rows) and no other table was
+touched. Flagged to the user immediately; their call was to leave it
+(additive, harmless) rather than roll back. All subsequent schema/data work
+for this story used `prisma.config.docker.ts` explicitly, which correctly
+scopes to local Postgres via `.env.docker`.
+
+---
 
 ### FIX-STALE-SITE-URL-DOMAIN-001 — Fix stale domain links + the "agenda fetch looks stuck" digest alert
 
