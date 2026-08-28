@@ -30,10 +30,141 @@ import type {
  * @module adminDigest
  */
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Once-a-week subscriber-count summary appended to the admin digest —
+ * FEAT-ADMIN-DIGEST-SUBSCRIBER-SUMMARY-001. Counts only, grouped by city and
+ * by topic, with the net new/lost delta over the trailing 7 days. No
+ * `Subscriber.email` or any other subscriber-identifying field is queried
+ * here — every count comes from `groupBy`/`_count` against `Subscription`.
+ *
+ * Cadence is tracked by the `AdminDigestState` singleton row rather than by
+ * parsing digest send history, mirroring `Meeting.staleAgendaNotifiedAt`'s
+ * single-purpose dedupe-marker pattern. Returns `null` when the section
+ * isn't due yet, or when there is nothing active to report (keeps the
+ * digest from growing a permanent all-zero section for a brand-new
+ * deployment).
+ */
+export async function buildSubscriberSummaryGroup(now: Date): Promise<DigestGroup | null> {
+  const state = await prisma.adminDigestState.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1 },
+  });
+
+  if (state.subscriberSummarySentAt && now.getTime() - state.subscriberSummarySentAt.getTime() < WEEK_MS) {
+    return null;
+  }
+
+  const weekAgo = new Date(now.getTime() - WEEK_MS);
+
+  const [cityActive, cityNew, cityLost, topicActive, topicNew, topicLost] = await Promise.all([
+    prisma.subscription.groupBy({
+      by: ["cityId"],
+      where: { kind: "CITY_UPDATES", status: "ACTIVE", cityId: { not: null } },
+      _count: { _all: true },
+    }),
+    prisma.subscription.groupBy({
+      by: ["cityId"],
+      where: { kind: "CITY_UPDATES", cityId: { not: null }, confirmedAt: { gte: weekAgo } },
+      _count: { _all: true },
+    }),
+    prisma.subscription.groupBy({
+      by: ["cityId"],
+      where: { kind: "CITY_UPDATES", cityId: { not: null }, unsubscribedAt: { gte: weekAgo } },
+      _count: { _all: true },
+    }),
+    prisma.subscription.groupBy({
+      by: ["interestAreaId"],
+      where: { kind: "TOPIC_IN_CITY_UPDATES", status: "ACTIVE", interestAreaId: { not: null } },
+      _count: { _all: true },
+    }),
+    prisma.subscription.groupBy({
+      by: ["interestAreaId"],
+      where: { kind: "TOPIC_IN_CITY_UPDATES", interestAreaId: { not: null }, confirmedAt: { gte: weekAgo } },
+      _count: { _all: true },
+    }),
+    prisma.subscription.groupBy({
+      by: ["interestAreaId"],
+      where: { kind: "TOPIC_IN_CITY_UPDATES", interestAreaId: { not: null }, unsubscribedAt: { gte: weekAgo } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  type GroupCount = { _count: { _all: number } } & Record<string, unknown>;
+  const deltaFor = (id: number, added: GroupCount[], removed: GroupCount[], key: "cityId" | "interestAreaId") =>
+    (added.find((r) => r[key] === id)?._count._all ?? 0) - (removed.find((r) => r[key] === id)?._count._all ?? 0);
+
+  const formatDelta = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `${n}` : "±0");
+
+  const cityIds = cityActive.filter((r) => r.cityId !== null).map((r) => r.cityId as number);
+  const interestAreaIds = topicActive.filter((r) => r.interestAreaId !== null).map((r) => r.interestAreaId as number);
+
+  const [cities, interestAreas] = await Promise.all([
+    cityIds.length
+      ? prisma.city.findMany({ where: { id: { in: cityIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    interestAreaIds.length
+      ? prisma.interestArea.findMany({
+          where: { id: { in: interestAreaIds } },
+          select: { id: true, name: true, city: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+  const cityNameById = new Map(cities.map((c) => [c.id, c.name]));
+  const areaById = new Map(interestAreas.map((a) => [a.id, a]));
+
+  const items: DigestGroup["items"] = [];
+
+  // Cities: any with active subscribers, or any with zero-but-nonzero
+  // activity this week (a city that lost its last subscriber this week is
+  // worth reporting once, even at 0 active).
+  const cityIdsToReport = new Set<number>([
+    ...cityActive.filter((r) => r.cityId !== null && r._count._all > 0).map((r) => r.cityId as number),
+    ...cityNew.filter((r) => r.cityId !== null && r._count._all > 0).map((r) => r.cityId as number),
+    ...cityLost.filter((r) => r.cityId !== null && r._count._all > 0).map((r) => r.cityId as number),
+  ]);
+  for (const cityId of cityIdsToReport) {
+    const name = cityNameById.get(cityId) ?? `city #${cityId}`;
+    const active = cityActive.find((r) => r.cityId === cityId)?._count._all ?? 0;
+    const delta = deltaFor(cityId, cityNew, cityLost, "cityId");
+    items.push({
+      title: name,
+      summary: `${active} subscriber${active === 1 ? "" : "s"} (${formatDelta(delta)} this week)`,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}`,
+    });
+  }
+
+  const topicIdsToReport = new Set<number>([
+    ...topicActive.filter((r) => r.interestAreaId !== null && r._count._all > 0).map((r) => r.interestAreaId as number),
+    ...topicNew.filter((r) => r.interestAreaId !== null && r._count._all > 0).map((r) => r.interestAreaId as number),
+    ...topicLost.filter((r) => r.interestAreaId !== null && r._count._all > 0).map((r) => r.interestAreaId as number),
+  ]);
+  for (const areaId of topicIdsToReport) {
+    const area = areaById.get(areaId);
+    const label = area ? `${area.name} · ${area.city.name}` : `topic #${areaId}`;
+    const active = topicActive.find((r) => r.interestAreaId === areaId)?._count._all ?? 0;
+    const delta = deltaFor(areaId, topicNew, topicLost, "interestAreaId");
+    items.push({
+      title: label,
+      summary: `${active} subscriber${active === 1 ? "" : "s"} (${formatDelta(delta)} this week)`,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}`,
+    });
+  }
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return { heading: "Subscriber summary (weekly)", items };
+}
+
 export type AdminDigestResult = {
   adminsEmailed: number;
   alertsBundled: number;
   staleAgendasFlagged: number;
+  subscriberSummaryIncluded: boolean;
   failed: { email: string; error: string }[];
 };
 
@@ -268,8 +399,20 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     });
   }
 
-  if (bundledAlertIds.length === 0 && staleAgendas.length === 0) {
-    return { adminsEmailed: 0, alertsBundled: 0, staleAgendasFlagged: 0, failed: [] };
+  // Also runs regardless of whether any Alert rows are pending or any
+  // stale-agenda meetings were found — it's on its own independent weekly
+  // cadence (see buildSubscriberSummaryGroup), not conditioned on the
+  // daily alert volume.
+  const subscriberSummaryGroup = await buildSubscriberSummaryGroup(now);
+
+  if (bundledAlertIds.length === 0 && staleAgendas.length === 0 && !subscriberSummaryGroup) {
+    return {
+      adminsEmailed: 0,
+      alertsBundled: 0,
+      staleAgendasFlagged: 0,
+      subscriberSummaryIncluded: false,
+      failed: [],
+    };
   }
 
   const groupsByKey = new Map<string, DigestGroup>();
@@ -284,6 +427,9 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     });
   }
   const groups = Array.from(groupsByKey.values());
+  if (subscriberSummaryGroup) {
+    groups.push(subscriberSummaryGroup);
+  }
 
   const admins = await getAdminRecipients();
   const failed: AdminDigestResult["failed"] = [];
@@ -329,10 +475,22 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
     });
   }
 
+  // Same rationale as the two stamps above: the content included in this
+  // digest attempt is the same snapshot regardless of per-admin send
+  // failures, so the weekly cadence advances once the section was actually
+  // built and sent — not retried tomorrow just because one admin bounced.
+  if (subscriberSummaryGroup) {
+    await prisma.adminDigestState.update({
+      where: { id: 1 },
+      data: { subscriberSummarySentAt: now },
+    });
+  }
+
   return {
     adminsEmailed,
     alertsBundled: bundledAlertIds.length,
     staleAgendasFlagged: staleAgendas.length,
+    subscriberSummaryIncluded: subscriberSummaryGroup !== null,
     failed,
   };
 }
