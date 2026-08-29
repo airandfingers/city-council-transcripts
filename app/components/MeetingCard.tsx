@@ -67,6 +67,11 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
               Transcript pending
             </span>
           )}
+          {meeting.status === "NO_RECORDING" && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+              No recording published
+            </span>
+          )}
           {meeting.status === "CANCELED" && (
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
               Canceled

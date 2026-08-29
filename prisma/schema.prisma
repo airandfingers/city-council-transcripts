@@ -52,6 +52,17 @@ model RosterMember {
 enum MeetingStatus {
   SCHEDULED
   OCCURRED
+  // Meeting convened but no recording was ever published (e.g. a
+  // documents-only / no-video meeting, or a video the source never
+  // posted). Distinct from OCCURRED ("transcript pending" -- a recording
+  // is expected) and CANCELED (wrong -- the meeting did happen). Set by
+  // city-council-transcriber's status-aging sweep once a meeting is past
+  // its date, has a real agenda/discovery record, and has gone without a
+  // video for the sweep's grace period. Reversible: the normal publish
+  // path (writer.write_meeting) always sets PUBLISHED unconditionally, so
+  // a recording that shows up later overwrites this with no manual
+  // cleanup. See FEAT-MEETING-NO-RECORDING-STATE-001.
+  NO_RECORDING
   PUBLISHED
   CANCELED
 }
