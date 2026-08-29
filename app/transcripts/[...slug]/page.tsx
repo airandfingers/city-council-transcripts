@@ -408,6 +408,11 @@ export default async function TranscriptPage({ params }: Props) {
             Meeting held — transcript pending
           </span>
         )}
+        {meeting.status === "NO_RECORDING" && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 whitespace-nowrap">
+            No recording published
+          </span>
+        )}
         {meeting.status === "CANCELED" && (
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 whitespace-nowrap">
             Canceled
@@ -629,6 +634,20 @@ export default async function TranscriptPage({ params }: Props) {
             <p className="text-gray-700 dark:text-gray-300 mb-3">
               This meeting hasn&apos;t happened yet, so there&apos;s nothing to summarize —
               once it&apos;s held and transcribed, a summary will appear here.
+            </p>
+            <SubscribeForm
+              kind="CITY_UPDATES"
+              cityId={meeting.city.id}
+              cityName={meeting.city.name}
+              compact
+            />
+          </div>
+        ) : meeting.status === "NO_RECORDING" ? (
+          <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
+            <p className="text-gray-700 dark:text-gray-300 mb-3">
+              This meeting was held, but no recording was ever published — there&apos;s no
+              video or transcript to summarize. Check the Documents tab for the agenda and
+              any minutes the city posted.
             </p>
             <SubscribeForm
               kind="CITY_UPDATES"
