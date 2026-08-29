@@ -16,6 +16,12 @@
  * NEXT_PUBLIC_SITE_URL is unset, robots.ts/sitemap.ts cannot throw — they
  * must always render something for crawlers, so a real (if not env-driven)
  * default is the right shape here.
+ *
+ * FIX-STALE-SITE-URL-STILL-LIVE-001 (2026-08-29): the old domain was still
+ * appearing in production digest emails, because NEXT_PUBLIC_SITE_URL is
+ * build-time inlined — a Vercel dashboard env var update alone does nothing
+ * until the next deploy. This comment-only change exists to trigger that
+ * deploy once the dashboard value is corrected.
  */
 export const FALLBACK_SITE_URL = "https://counciloris.com";
 
