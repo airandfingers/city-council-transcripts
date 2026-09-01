@@ -112,20 +112,31 @@ export default async function CityPage({ params }: Props) {
       </div>
 
       {/*
-        Mobile: upcoming block comes first in source order (so it's also
-        first visually — DOM order, not a grid `order-*`, controls the
-        single-column stack) but only shows the next meeting by default,
-        leaving room for past meetings to appear above the fold. Desktop
-        (lg+): becomes a 2-column grid with past meetings on the left and
-        the full upcoming list as a 2nd column on the right.
+        Single "Meetings" section/header for both upcoming and past —
+        upcoming isn't a separate top-level block. Mobile: the upcoming
+        subsection (next meeting + expand toggle) sits right under the
+        "Meetings" header, above the search/filter and past-meetings list.
+        Desktop (lg+): the two become equal-width columns side by side.
+        No SCHEDULED meetings at all -> no split, no empty column — past
+        meetings just take the full width.
       */}
-      <section className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-8">
-        <div className="order-1 lg:order-2 mb-8 lg:mb-0">
-          <UpcomingMeetings meetings={upcomingMeetings} />
-        </div>
-        <div className="order-2 lg:order-1 min-w-0">
-          <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
-          <MeetingFilter meetings={pastMeetings} />
+      <section>
+        <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
+        <div
+          className={
+            upcomingMeetings.length > 0
+              ? "lg:grid lg:grid-cols-2 lg:items-start lg:gap-8"
+              : undefined
+          }
+        >
+          {upcomingMeetings.length > 0 && (
+            <div className="mb-8 lg:mb-0 lg:order-2">
+              <UpcomingMeetings meetings={upcomingMeetings} />
+            </div>
+          )}
+          <div className="min-w-0 lg:order-1">
+            <MeetingFilter meetings={pastMeetings} />
+          </div>
         </div>
       </section>
 
