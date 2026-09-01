@@ -4,6 +4,7 @@ import {
   getCityByParams,
   getMeetingsForCity,
   getLatestMeetingSummary,
+  splitUpcomingMeetings,
 } from "@/app/lib/cityData";
 import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
@@ -52,14 +53,10 @@ export default async function CityPage({ params }: Props) {
     getLatestMeetingSummary(state, citySlug),
   ]);
 
-  // Split out upcoming (SCHEDULED) meetings for the dedicated column/section
-  // — see UpcomingMeetings for the mobile "next meeting + expand" behavior
-  // and the desktop 2nd-column placement below. Soonest-first, since that's
-  // the meeting a visitor most likely wants.
-  const upcomingMeetings = meetings
-    .filter((m) => m.status === "SCHEDULED")
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const pastMeetings = meetings.filter((m) => m.status !== "SCHEDULED");
+  // Split out upcoming meetings for the dedicated subsection — see
+  // splitUpcomingMeetings for why status alone isn't enough, and
+  // UpcomingMeetings for the "next meeting(s) + expand" behavior.
+  const { upcomingMeetings, pastMeetings } = splitUpcomingMeetings(meetings);
 
   return (
     <main className="p-8">
@@ -113,31 +110,22 @@ export default async function CityPage({ params }: Props) {
 
       {/*
         Single "Meetings" section/header for both upcoming and past —
-        upcoming isn't a separate top-level block. Mobile: the upcoming
-        subsection (next meeting + expand toggle) sits right under the
-        "Meetings" header, above the search/filter and past-meetings list.
-        Desktop (lg+): the two become equal-width columns side by side.
-        No SCHEDULED meetings at all -> no split, no empty column — past
-        meetings just take the full width.
+        upcoming isn't a separate top-level block, and this is single-
+        column at every width (a side-by-side desktop column read badly
+        with only a couple of short cards in it). The upcoming subsection
+        sits right under the "Meetings" header, above the search/filter
+        and past-meetings list, and stays collapsed the same way on
+        mobile and desktop — see UpcomingMeetings. No SCHEDULED meetings
+        at all -> no "Upcoming" subsection at all.
       */}
       <section>
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
-        <div
-          className={
-            upcomingMeetings.length > 0
-              ? "lg:grid lg:grid-cols-2 lg:items-start lg:gap-8"
-              : undefined
-          }
-        >
-          {upcomingMeetings.length > 0 && (
-            <div className="mb-8 lg:mb-0 lg:order-2">
-              <UpcomingMeetings meetings={upcomingMeetings} />
-            </div>
-          )}
-          <div className="min-w-0 lg:order-1">
-            <MeetingFilter meetings={pastMeetings} />
+        {upcomingMeetings.length > 0 && (
+          <div className="mb-8">
+            <UpcomingMeetings meetings={upcomingMeetings} />
           </div>
-        </div>
+        )}
+        <MeetingFilter meetings={pastMeetings} />
       </section>
 
       <AIDisclaimer />
