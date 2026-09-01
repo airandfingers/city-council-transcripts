@@ -7,6 +7,7 @@ import {
 } from "@/app/lib/cityData";
 import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
+import UpcomingMeetings from "@/app/components/UpcomingMeetings";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import { formatMeetingDate } from "@/app/lib/formatDate";
@@ -50,6 +51,15 @@ export default async function CityPage({ params }: Props) {
     getMeetingsForCity(state, citySlug),
     getLatestMeetingSummary(state, citySlug),
   ]);
+
+  // Split out upcoming (SCHEDULED) meetings for the dedicated column/section
+  // — see UpcomingMeetings for the mobile "next meeting + expand" behavior
+  // and the desktop 2nd-column placement below. Soonest-first, since that's
+  // the meeting a visitor most likely wants.
+  const upcomingMeetings = meetings
+    .filter((m) => m.status === "SCHEDULED")
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const pastMeetings = meetings.filter((m) => m.status !== "SCHEDULED");
 
   return (
     <main className="p-8">
@@ -101,9 +111,22 @@ export default async function CityPage({ params }: Props) {
         />
       </div>
 
-      <section>
-        <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
-        <MeetingFilter meetings={meetings} />
+      {/*
+        Mobile: upcoming block comes first in source order (so it's also
+        first visually — DOM order, not a grid `order-*`, controls the
+        single-column stack) but only shows the next meeting by default,
+        leaving room for past meetings to appear above the fold. Desktop
+        (lg+): becomes a 2-column grid with past meetings on the left and
+        the full upcoming list as a 2nd column on the right.
+      */}
+      <section className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-8">
+        <div className="order-1 lg:order-2 mb-8 lg:mb-0">
+          <UpcomingMeetings meetings={upcomingMeetings} />
+        </div>
+        <div className="order-2 lg:order-1 min-w-0">
+          <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
+          <MeetingFilter meetings={pastMeetings} />
+        </div>
       </section>
 
       <AIDisclaimer />

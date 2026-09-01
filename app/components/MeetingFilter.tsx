@@ -5,7 +5,7 @@ import MeetingCard from "./MeetingCard";
 import type { MeetingCardData } from "@/app/lib/cityData";
 
 /**
- * Client-side search & filter over a city's meeting list.
+ * Client-side search & filter over a city's past/non-upcoming meeting list.
  *
  * PoC feedback: "at some point there will be a hundred meetings... filter
  * and search, so it's easier." Meetings for a single city are a small,
@@ -13,8 +13,13 @@ import type { MeetingCardData } from "@/app/lib/cityData";
  * is the right scope for now; if a city's meeting count grows large
  * enough that this becomes sluggish, move the same matching logic into
  * a server-side query in app/lib/cityData.ts instead.
+ *
+ * SCHEDULED meetings are split out by the city page into their own
+ * UpcomingMeetings column/section before `meetings` ever reaches here, so
+ * there's no "upcoming" status filter — everything in this list already
+ * happened or is awaiting a transcript.
  */
-type StatusFilter = "all" | "published" | "upcoming" | "pending";
+type StatusFilter = "all" | "published" | "pending";
 
 export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[] }) {
   const [query, setQuery] = useState("");
@@ -32,8 +37,6 @@ export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[
 
     if (statusFilter === "published") {
       matched = matched.filter((m) => m.status === "PUBLISHED");
-    } else if (statusFilter === "upcoming") {
-      matched = matched.filter((m) => m.status === "SCHEDULED");
     } else if (statusFilter === "pending") {
       matched = matched.filter((m) => m.status === "OCCURRED");
     }
@@ -74,7 +77,6 @@ export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[
         >
           <option value="all">All meetings</option>
           <option value="published">Published only</option>
-          <option value="upcoming">Upcoming</option>
           <option value="pending">Awaiting transcript</option>
         </select>
       </div>
