@@ -4,11 +4,10 @@ import {
   getCityByParams,
   getMeetingsForCity,
   getLatestMeetingSummary,
-  splitUpcomingMeetings,
+  getUpcomingMeetingSlugs,
 } from "@/app/lib/cityData";
 import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
-import UpcomingMeetings from "@/app/components/UpcomingMeetings";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import { formatMeetingDate } from "@/app/lib/formatDate";
@@ -53,10 +52,11 @@ export default async function CityPage({ params }: Props) {
     getLatestMeetingSummary(state, citySlug),
   ]);
 
-  // Split out upcoming meetings for the dedicated subsection — see
-  // splitUpcomingMeetings for why status alone isn't enough, and
-  // UpcomingMeetings for the "next meeting(s) + expand" behavior.
-  const { upcomingMeetings, pastMeetings } = splitUpcomingMeetings(meetings);
+  // Upcoming meetings stay in the same filterable list as everything
+  // else — MeetingFilter groups them under an "Upcoming" subheader using
+  // this set rather than raw status, since status alone isn't a safe
+  // signal (see getUpcomingMeetingSlugs).
+  const upcomingSlugs = getUpcomingMeetingSlugs(meetings);
 
   return (
     <main className="p-8">
@@ -109,23 +109,15 @@ export default async function CityPage({ params }: Props) {
       </div>
 
       {/*
-        Single "Meetings" section/header for both upcoming and past —
-        upcoming isn't a separate top-level block, and this is single-
-        column at every width (a side-by-side desktop column read badly
-        with only a couple of short cards in it). The upcoming subsection
-        sits right under the "Meetings" header, above the search/filter
-        and past-meetings list, and stays collapsed the same way on
-        mobile and desktop — see UpcomingMeetings. No SCHEDULED meetings
-        at all -> no "Upcoming" subsection at all.
+        Upcoming meetings are ordinary entries in the same searchable/
+        sortable/filterable list as everything else — same MeetingCard,
+        same size and shape, true siblings in one flex column — not a
+        separate widget. MeetingFilter groups them under an "Upcoming"
+        subheader using upcomingSlugs; see MeetingFilter for how.
       */}
       <section>
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
-        {upcomingMeetings.length > 0 && (
-          <div className="mb-8">
-            <UpcomingMeetings meetings={upcomingMeetings} />
-          </div>
-        )}
-        <MeetingFilter meetings={pastMeetings} />
+        <MeetingFilter meetings={meetings} upcomingSlugs={upcomingSlugs} />
       </section>
 
       <AIDisclaimer />

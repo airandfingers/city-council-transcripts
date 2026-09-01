@@ -5,7 +5,14 @@ import MeetingCard from "./MeetingCard";
 import type { MeetingCardData } from "@/app/lib/cityData";
 
 /**
- * Client-side search & filter over a city's past/non-upcoming meeting list.
+ * Client-side search & filter over a city's full meeting list, including
+ * upcoming ones — they're ordinary entries here (same MeetingCard, same
+ * size/shape, real siblings in one list), just grouped under an
+ * "Upcoming" subheader via `upcomingSlugs` rather than pulled out into a
+ * separate section/component. `upcomingSlugs` (not raw SCHEDULED status)
+ * is what decides that grouping, and what backs the "Upcoming" status
+ * filter below — see getUpcomingMeetingSlugs for why status alone isn't
+ * a safe signal.
  *
  * PoC feedback: "at some point there will be a hundred meetings... filter
  * and search, so it's easier." Meetings for a single city are a small,
@@ -13,15 +20,16 @@ import type { MeetingCardData } from "@/app/lib/cityData";
  * is the right scope for now; if a city's meeting count grows large
  * enough that this becomes sluggish, move the same matching logic into
  * a server-side query in app/lib/cityData.ts instead.
- *
- * SCHEDULED meetings are split out by the city page into their own
- * UpcomingMeetings column/section before `meetings` ever reaches here, so
- * there's no "upcoming" status filter — everything in this list already
- * happened or is awaiting a transcript.
  */
-type StatusFilter = "all" | "published" | "pending";
+type StatusFilter = "all" | "published" | "upcoming" | "pending";
 
-export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[] }) {
+export default function MeetingFilter({
+  meetings,
+  upcomingSlugs,
+}: {
+  meetings: MeetingCardData[];
+  upcomingSlugs: Set<string>;
+}) {
   const [query, setQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -37,6 +45,8 @@ export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[
 
     if (statusFilter === "published") {
       matched = matched.filter((m) => m.status === "PUBLISHED");
+    } else if (statusFilter === "upcoming") {
+      matched = matched.filter((m) => upcomingSlugs.has(m.slug));
     } else if (statusFilter === "pending") {
       matched = matched.filter((m) => m.status === "OCCURRED");
     }
@@ -47,7 +57,13 @@ export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[
     });
 
     return sorted;
-  }, [meetings, query, sortOrder, statusFilter]);
+  }, [meetings, query, sortOrder, statusFilter, upcomingSlugs]);
+
+  // Upcoming meetings lead, under their own subheader; everything else
+  // follows as plain siblings with no header of its own — sort order is
+  // preserved within each group.
+  const upcoming = filtered.filter((m) => upcomingSlugs.has(m.slug));
+  const rest = filtered.filter((m) => !upcomingSlugs.has(m.slug));
 
   return (
     <div>
@@ -77,6 +93,7 @@ export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[
         >
           <option value="all">All meetings</option>
           <option value="published">Published only</option>
+          <option value="upcoming">Upcoming</option>
           <option value="pending">Awaiting transcript</option>
         </select>
       </div>
@@ -89,7 +106,15 @@ export default function MeetingFilter({ meetings }: { meetings: MeetingCardData[
         </p>
       ) : (
         <div className="flex flex-col gap-4 max-w-3xl">
-          {filtered.map((meeting) => (
+          {upcoming.length > 0 && (
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Upcoming
+            </h3>
+          )}
+          {upcoming.map((meeting) => (
+            <MeetingCard key={meeting.slug} meeting={meeting} />
+          ))}
+          {rest.map((meeting) => (
             <MeetingCard key={meeting.slug} meeting={meeting} />
           ))}
         </div>

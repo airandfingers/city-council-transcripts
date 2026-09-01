@@ -181,29 +181,29 @@ export type MeetingCardData = {
 };
 
 /**
- * Splits a city's meetings into upcoming vs. everything else, for the
- * city page's "Upcoming" subsection and past-meetings list.
+ * Slugs of a city's genuinely-upcoming meetings, for MeetingFilter's
+ * "Upcoming" grouping — the meetings themselves stay in one filterable
+ * list (see MeetingFilter) rather than being split into a separate array,
+ * so this only needs to say which ones qualify.
  *
  * A meeting only counts as upcoming if it's SCHEDULED *and* actually in
  * the future: the source data has SCHEDULED rows with dates over a
  * decade in the past (upstream ingestion bug — nothing in this repo sets
- * that status), so status alone isn't a safe signal. Upcoming meetings
- * are soonest-first, since that's the one a visitor most likely wants.
+ * that status), so status alone isn't a safe signal.
  *
  * Lives here rather than inline in the page component so the `Date.now()`
  * call isn't flagged by the react-hooks/purity rule, which treats any
  * component-body call to an impure function as a lint error.
  */
-export function splitUpcomingMeetings(
+export function getUpcomingMeetingSlugs(
   meetings: MeetingCardData[],
   now: number = Date.now()
-): { upcomingMeetings: MeetingCardData[]; pastMeetings: MeetingCardData[] } {
-  const upcomingMeetings = meetings
-    .filter((m) => m.status === "SCHEDULED" && new Date(m.date).getTime() >= now)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const upcomingSlugs = new Set(upcomingMeetings.map((m) => m.slug));
-  const pastMeetings = meetings.filter((m) => !upcomingSlugs.has(m.slug));
-  return { upcomingMeetings, pastMeetings };
+): Set<string> {
+  return new Set(
+    meetings
+      .filter((m) => m.status === "SCHEDULED" && new Date(m.date).getTime() >= now)
+      .map((m) => m.slug)
+  );
 }
 
 export function getMeetingsForCity(
