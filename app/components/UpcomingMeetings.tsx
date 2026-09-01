@@ -5,14 +5,20 @@ import MeetingCard from "./MeetingCard";
 import type { MeetingCardData } from "@/app/lib/cityData";
 
 /**
- * Upcoming (SCHEDULED) meetings, shown as a right-hand sidebar column on
- * desktop and a compact "next meeting + expand" block on mobile.
+ * Upcoming (SCHEDULED) meetings — a subsection nested inside the same
+ * "Meetings" unit as the past-meetings list (not a separate top-level
+ * section), rendered as an equal-width column next to it on desktop and
+ * a compact "next meeting + expand" block on mobile.
  *
  * Mobile constraint: only the single next meeting renders by default so
  * the past-meetings list below still gets some cards above the fold; the
  * rest are revealed with a toggle. Desktop always shows the full list —
  * the `lg:hidden` / `lg:flex` pair below is what keeps that split purely
  * CSS-driven instead of relying on viewport checks in JS.
+ *
+ * The city page only renders this component at all when there's at
+ * least one SCHEDULED meeting, so the empty-list guard below is just a
+ * defensive fallback, not the mechanism that hides the column.
  */
 export default function UpcomingMeetings({ meetings }: { meetings: MeetingCardData[] }) {
   const [expanded, setExpanded] = useState(false);
@@ -23,7 +29,9 @@ export default function UpcomingMeetings({ meetings }: { meetings: MeetingCardDa
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4">Upcoming meetings</h2>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">
+        Upcoming
+      </h3>
       <div className="flex flex-col gap-4">
         <MeetingCard meeting={next} />
         {rest.length > 0 && (
