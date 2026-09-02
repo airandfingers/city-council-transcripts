@@ -27,7 +27,7 @@ type StatusFilter = "all" | "published" | "upcoming" | "pending";
 // commission calendar can have a dozen-plus SCHEDULED meetings at once,
 // which would otherwise push every past meeting below the fold. "Show
 // all" reveals the rest.
-const DEFAULT_VISIBLE_UPCOMING = 2;
+const DEFAULT_VISIBLE_UPCOMING = 1;
 
 export default function MeetingFilter({
   meetings,
@@ -66,9 +66,10 @@ export default function MeetingFilter({
     return sorted;
   }, [meetings, query, sortOrder, statusFilter, upcomingSlugs]);
 
-  // Upcoming meetings lead, under their own subheader; everything else
-  // follows as plain siblings with no header of its own — sort order is
-  // preserved within each group.
+  // Upcoming meetings lead under their own subheader, capped and
+  // expandable; everything else follows under its own "Past Meetings"
+  // subheader — the two never mix, and sort order is preserved within
+  // each group.
   const allUpcoming = filtered.filter((m) => upcomingSlugs.has(m.slug));
   const rest = filtered.filter((m) => !upcomingSlugs.has(m.slug));
   const upcoming = upcomingExpanded
@@ -142,6 +143,11 @@ export default function MeetingFilter({
             >
               Show fewer
             </button>
+          )}
+          {rest.length > 0 && (
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Past Meetings
+            </h3>
           )}
           {rest.map((meeting) => (
             <MeetingCard key={meeting.slug} meeting={meeting} />
