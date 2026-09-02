@@ -180,16 +180,30 @@ export type MeetingCardData = {
   summary: string | null;
 };
 
+// Same 2-day buffer, same reasoning, as the transcriber repo's own
+// SCHEDULED -> OCCURRED aging sweep (NeonWriter.age_scheduled_meetings_
+// to_occurred): `Meeting.date` stores midnight UTC of the meeting's
+// calendar day (see formatDate.ts), not a real timestamp, so a naive
+// `date >= now` goes false shortly after midnight UTC — up to ~7-8 hours
+// *before* a Pacific-timezone evening meeting even starts — demoting a
+// same-day meeting out of "Upcoming" while it's still hours away. Found
+// live: a 2026-09-02 meeting stopped showing as upcoming and appeared
+// under "Past Meetings" (with its "Upcoming meeting" badge still on,
+// since MeetingCard reads raw status) once the UTC clock ticked past
+// midnight into 2026-09-02, well before that evening's Pacific meeting.
+const UPCOMING_MEETING_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
+
 /**
  * Slugs of a city's genuinely-upcoming meetings, for MeetingFilter's
  * "Upcoming" grouping — the meetings themselves stay in one filterable
  * list (see MeetingFilter) rather than being split into a separate array,
  * so this only needs to say which ones qualify.
  *
- * A meeting only counts as upcoming if it's SCHEDULED *and* actually in
- * the future: the source data has SCHEDULED rows with dates over a
- * decade in the past (upstream ingestion bug — nothing in this repo sets
- * that status), so status alone isn't a safe signal.
+ * A meeting only counts as upcoming if it's SCHEDULED *and* still within
+ * the grace window above: the source data also has SCHEDULED rows with
+ * dates over a decade in the past (upstream ingestion bug — nothing in
+ * this repo sets that status), so status alone isn't a safe signal
+ * either way.
  *
  * Lives here rather than inline in the page component so the `Date.now()`
  * call isn't flagged by the react-hooks/purity rule, which treats any
@@ -201,7 +215,11 @@ export function getUpcomingMeetingSlugs(
 ): Set<string> {
   return new Set(
     meetings
-      .filter((m) => m.status === "SCHEDULED" && new Date(m.date).getTime() >= now)
+      .filter(
+        (m) =>
+          m.status === "SCHEDULED" &&
+          new Date(m.date).getTime() >= now - UPCOMING_MEETING_GRACE_MS
+      )
       .map((m) => m.slug)
   );
 }
