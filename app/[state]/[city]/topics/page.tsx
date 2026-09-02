@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCityByParams, getInterestAreasForCity } from "@/app/lib/cityData";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
-import { formatMeetingDate } from "@/app/lib/formatDate";
+import TopicsFilter from "@/app/components/TopicsFilter";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate's
 // city-level call, which already revalidates this exact path (see
@@ -39,6 +39,21 @@ export default async function TopicsIndexPage({ params }: Props) {
 
   const areas = await getInterestAreasForCity(state, citySlug);
 
+  // area.meetings is already ordered date-desc (see getInterestAreasForCity's
+  // orderBy), so [0] is the most recent discussed meeting — the "last
+  // updated" signal TopicsFilter's default sort uses.
+  const topics = areas.map((area) => ({
+    id: area.id,
+    slug: area.slug,
+    name: area.name,
+    statusSummary: area.statusSummary,
+    mostRecentActivity: area.mostRecentActivity,
+    discussedCount: area.meetings.filter(
+      (m) => m.confidence !== null && (m.confidence ?? 0) >= 0.5
+    ).length,
+    lastDate: area.meetings[0]?.date ?? null,
+  }));
+
   return (
     <main className="p-8 max-w-4xl">
       <nav className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -54,53 +69,12 @@ export default async function TopicsIndexPage({ params }: Props) {
         council meetings.
       </p>
 
-      {areas.length === 0 ? (
+      {topics.length === 0 ? (
         <p className="text-gray-500 dark:text-gray-400">
           No topics are being tracked for {cityData.name} yet.
         </p>
       ) : (
-        <ul className="space-y-4">
-          {areas.map((area) => {
-            const discussedCount = area.meetings.filter((m) => m.confidence !== null && (m.confidence ?? 0) >= 0.5).length;
-            const lastDate = area.meetings[0]?.date;
-            return (
-              <li key={area.id}>
-                <Link
-                  href={`/${state}/${citySlug}/topics/${area.slug}`}
-                  className="block rounded-lg border border-gray-200 dark:border-gray-700 p-5 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="font-semibold text-lg leading-tight mb-1">
-                        {area.name}
-                      </h2>
-                      {area.statusSummary && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                          {area.statusSummary}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0 text-sm text-gray-500 dark:text-gray-400">
-                      {discussedCount > 0 && (
-                        <div>{discussedCount} meeting{discussedCount !== 1 ? "s" : ""}</div>
-                      )}
-                      {lastDate && (
-                        <div>
-                          {formatMeetingDate(new Date(lastDate), { month: "short", year: "numeric" })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {area.mostRecentActivity && (
-                    <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                      Last activity: {area.mostRecentActivity}
-                    </p>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <TopicsFilter topics={topics} cityHref={`/${state}/${citySlug}`} />
       )}
 
       <AIDisclaimer />
