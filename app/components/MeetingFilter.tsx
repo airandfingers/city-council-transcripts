@@ -23,6 +23,12 @@ import type { MeetingCardData } from "@/app/lib/cityData";
  */
 type StatusFilter = "all" | "published" | "upcoming" | "pending";
 
+// Only this many upcoming meetings show by default — a city with a busy
+// commission calendar can have a dozen-plus SCHEDULED meetings at once,
+// which would otherwise push every past meeting below the fold. "Show
+// all" reveals the rest.
+const DEFAULT_VISIBLE_UPCOMING = 2;
+
 export default function MeetingFilter({
   meetings,
   upcomingSlugs,
@@ -33,6 +39,7 @@ export default function MeetingFilter({
   const [query, setQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -62,8 +69,12 @@ export default function MeetingFilter({
   // Upcoming meetings lead, under their own subheader; everything else
   // follows as plain siblings with no header of its own — sort order is
   // preserved within each group.
-  const upcoming = filtered.filter((m) => upcomingSlugs.has(m.slug));
+  const allUpcoming = filtered.filter((m) => upcomingSlugs.has(m.slug));
   const rest = filtered.filter((m) => !upcomingSlugs.has(m.slug));
+  const upcoming = upcomingExpanded
+    ? allUpcoming
+    : allUpcoming.slice(0, DEFAULT_VISIBLE_UPCOMING);
+  const hiddenUpcomingCount = allUpcoming.length - upcoming.length;
 
   return (
     <div>
@@ -114,6 +125,24 @@ export default function MeetingFilter({
           {upcoming.map((meeting) => (
             <MeetingCard key={meeting.slug} meeting={meeting} />
           ))}
+          {hiddenUpcomingCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setUpcomingExpanded(true)}
+              className="self-start text-sm font-medium text-blue-600 dark:text-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 rounded"
+            >
+              {`Show ${hiddenUpcomingCount} more upcoming meeting${hiddenUpcomingCount === 1 ? "" : "s"}`}
+            </button>
+          )}
+          {upcomingExpanded && allUpcoming.length > DEFAULT_VISIBLE_UPCOMING && (
+            <button
+              type="button"
+              onClick={() => setUpcomingExpanded(false)}
+              className="self-start text-sm font-medium text-blue-600 dark:text-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 rounded"
+            >
+              Show fewer
+            </button>
+          )}
           {rest.map((meeting) => (
             <MeetingCard key={meeting.slug} meeting={meeting} />
           ))}
