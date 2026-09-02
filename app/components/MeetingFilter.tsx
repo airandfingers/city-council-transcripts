@@ -41,9 +41,9 @@ export default function MeetingFilter({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [upcomingExpanded, setUpcomingExpanded] = useState(false);
 
-  const filtered = useMemo(() => {
+  const matched = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let matched = q
+    let result = q
       ? meetings.filter((m) => {
           const haystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`.toLowerCase();
           return haystack.includes(q);
@@ -51,27 +51,38 @@ export default function MeetingFilter({
       : meetings;
 
     if (statusFilter === "published") {
-      matched = matched.filter((m) => m.status === "PUBLISHED");
+      result = result.filter((m) => m.status === "PUBLISHED");
     } else if (statusFilter === "upcoming") {
-      matched = matched.filter((m) => upcomingSlugs.has(m.slug));
+      result = result.filter((m) => upcomingSlugs.has(m.slug));
     } else if (statusFilter === "pending") {
-      matched = matched.filter((m) => m.status === "OCCURRED");
+      result = result.filter((m) => m.status === "OCCURRED");
     }
 
-    const sorted = [...matched].sort((a, b) => {
-      const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
-      return sortOrder === "newest" ? -diff : diff;
-    });
-
-    return sorted;
-  }, [meetings, query, sortOrder, statusFilter, upcomingSlugs]);
+    return result;
+  }, [meetings, query, statusFilter, upcomingSlugs]);
 
   // Upcoming meetings lead under their own subheader, capped and
   // expandable; everything else follows under its own "Past Meetings"
-  // subheader — the two never mix, and sort order is preserved within
-  // each group.
-  const allUpcoming = filtered.filter((m) => upcomingSlugs.has(m.slug));
-  const rest = filtered.filter((m) => !upcomingSlugs.has(m.slug));
+  // subheader — the two never mix. The Newest/Oldest sort toggle applies
+  // to the past group only; Upcoming always sorts soonest-first
+  // regardless of it, since that's what "the next meeting" (the one that
+  // stays visible when collapsed) has to mean — sorting it by the same
+  // toggle would put the *farthest-out* meeting in that slot under the
+  // default "Newest first" order.
+  const allUpcoming = useMemo(
+    () =>
+      matched
+        .filter((m) => upcomingSlugs.has(m.slug))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [matched, upcomingSlugs]
+  );
+  const rest = useMemo(() => {
+    const nonUpcoming = matched.filter((m) => !upcomingSlugs.has(m.slug));
+    return nonUpcoming.sort((a, b) => {
+      const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      return sortOrder === "newest" ? -diff : diff;
+    });
+  }, [matched, upcomingSlugs, sortOrder]);
   const upcoming = upcomingExpanded
     ? allUpcoming
     : allUpcoming.slice(0, DEFAULT_VISIBLE_UPCOMING);
@@ -110,7 +121,7 @@ export default function MeetingFilter({
         </select>
       </div>
 
-      {filtered.length === 0 ? (
+      {matched.length === 0 ? (
         <p className="text-gray-500 dark:text-gray-400">
           {query
             ? <>No meetings match &ldquo;{query}&rdquo;.</>
