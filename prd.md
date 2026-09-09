@@ -34,7 +34,7 @@
 - 📋 FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
 - 📋 FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup
 - 📋 FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
-- 📋 FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
+- ✅ FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
@@ -618,16 +618,20 @@ User-reported (2026-09-08): "layout could use polish… things are placed in wei
 
 #### FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As a** site visitor
 **I want** the Summary section to render whenever there's summary content to show
 **So that** I don't see a placeholder/fallback when real content exists but wasn't gated correctly
 
-`page.tsx:512` branches on `meeting.summary` but renders `summaryBlocks`. When `summary` is null and `SUMMARY_BLOCK` rows exist, the blocks are dropped and the page falls through to topicSummaries or a placeholder.
+`page.tsx:512` (now `:518`) branches on `meeting.summary` but renders `summaryBlocks`. When `summary` is null and `SUMMARY_BLOCK` rows exist, the blocks are dropped and the page falls through to topicSummaries or a placeholder.
+
+**Investigated the write side before fixing** (same pattern as the two stories above this session): checked whether `city-council-transcriber` can actually produce `SUMMARY_BLOCK` rows (from `summary.overview_blocks`) while leaving `Meeting.summary` (from `summary.overview`) null. Found `_ensure_overview_blocks()` and 3 separate call sites (`src/summarizer.py:1720`, `:1778`, `:2912`) that derive `summary.overview = "\n\n".join(b["text"] for b in summary.overview_blocks)` whenever blocks are populated — so in current code, the two are kept in sync by construction, same "theoretical, not reproduced" shape as this session's other findings. Fixed anyway: the corrected gate is strictly more correct regardless of current reachability (a stale/historical row, or a future pipeline change that breaks the sync, both stay handled), and the change carries zero regression risk — the inner ternary at the original `:558` (now `:520`) already re-checks `summaryBlocks.length > 0` independently before ever touching `meeting.summary!`, so widening the outer gate can't newly reach that non-null assertion with a null value.
 
 **Acceptance Criteria:**
-- [ ] AC-1: The gate tests what is actually rendered (`summaryBlocks.length > 0 || meeting.summary`).
+- [x] AC-1: The gate tests what is actually rendered (`summaryBlocks.length > 0 || meeting.summary`).
+
+**Files Modified:** `app/transcripts/[...slug]/page.tsx`.
 
 ### Parked — write the story, don't build it yet
 
