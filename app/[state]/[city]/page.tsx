@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   getCityByParams,
@@ -8,6 +9,8 @@ import {
 } from "@/app/lib/cityData";
 import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
+import MeetingCard from "@/app/components/MeetingCard";
+import type { MeetingCardData } from "@/app/lib/cityData";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import { formatMeetingDate } from "@/app/lib/formatDate";
@@ -118,10 +121,49 @@ export default async function CityPage({ params }: Props) {
       */}
       <section>
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
-        <MeetingFilter meetings={meetings} upcomingSlugs={upcomingSlugs} />
+        {/* MeetingFilter reads/writes the `q` search param (AC-4,
+            FEAT-SEARCH-SERVERSIDE-SURFACE-001) via useSearchParams(), which
+            requires a Suspense boundary around it in a statically-rendered
+            route — this page is cached (see `revalidate` above), so the
+            fallback below is literally what's in that cached HTML until a
+            visitor's browser hydrates MeetingFilter, not just a brief
+            build-time placeholder. Render the plain unfiltered list rather
+            than a spinner/skeleton, so the page's core content (the
+            meetings themselves) is present and functional without JS. */}
+        <Suspense fallback={<MeetingListFallback meetings={meetings} />}>
+          <MeetingFilter
+            meetings={meetings}
+            upcomingSlugs={upcomingSlugs}
+            stateCode={state}
+            citySlug={citySlug}
+          />
+        </Suspense>
       </section>
 
       <AIDisclaimer />
     </main>
+  );
+}
+
+/**
+ * Suspense fallback for MeetingFilter (see the comment at its call site).
+ * Deliberately not a spinner/skeleton: this page is cached indefinitely
+ * (`revalidate = false`), so this is what ships in that cached HTML until
+ * a visitor's browser hydrates MeetingFilter — plain, newest-first, no
+ * search/sort/status controls, no client JS required. Sorting matches
+ * MeetingFilter's own default ("newest first"); grouping/collapsing
+ * upcoming meetings is MeetingFilter-only polish, not worth duplicating
+ * here for a fallback most visitors will only see for a moment.
+ */
+function MeetingListFallback({ meetings }: { meetings: MeetingCardData[] }) {
+  const sorted = [...meetings].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+  return (
+    <div className="flex flex-col gap-4 max-w-3xl">
+      {sorted.map((meeting) => (
+        <MeetingCard key={meeting.slug} meeting={meeting} />
+      ))}
+    </div>
   );
 }

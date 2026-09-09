@@ -8,6 +8,8 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
+import { tokenizeQuery, matchesAllTokens, buildMatchSnippet } from "@/app/lib/search";
+import { summaryTypeLabel } from "@/app/lib/labels";
 
 export type { City, Meeting, TranscriptLine };
 
@@ -261,6 +263,118 @@ export async function getMeetingsForCity(
     ...rest,
     tldrReferences: summaryItems[0]?.references ?? null,
   }));
+}
+
+export type MeetingSearchResult = {
+  slug: string;
+  /** A short excerpt from a matched field MeetingCard doesn't otherwise
+   * show (a key decision, action item, timeline bullet, or topic) — same
+   * idea as MeetingCard's own `hiddenSummaryMatch`, extended to the wider
+   * surface this adds. Null when the match is already visible in
+   * title/logline/summary; MeetingCard keeps computing that narrower case
+   * itself (it needs the logline-vs-summary distinction this function
+   * doesn't track), so this deliberately doesn't duplicate it. */
+  extraSnippet: { label: string; text: string } | null;
+};
+
+// MeetingSummaryItem types worth searching but not already fetched by
+// MEETING_CARD_SELECT (SUMMARY_BLOCK/TLDR_BLOCK/PUBLIC_COMMENT_SUMMARY are
+// either covered by `summary`/`logline` already or too verbose to be
+// useful as a match reason here).
+const EXTRA_SEARCHABLE_SUMMARY_TYPES = ["KEY_DECISION", "ACTION_ITEM", "TIMELINE_BULLET"] as const;
+
+/**
+ * Server-side search over a city's meetings (FEAT-SEARCH-SERVERSIDE-
+ * SURFACE-001). Reproduces FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001's exact
+ * token-AND/normalization semantics (app/lib/search.ts, reused verbatim —
+ * not reimplemented) but over a broader surface: key decisions, action
+ * items, timeline bullets, and topic titles/key points, none of which
+ * MEETING_CARD_SELECT fetches today (AC-1). A token may match anywhere
+ * across title/logline/summary *and* this broader surface combined — e.g.
+ * "data center vote" can match a meeting whose summary says "data center"
+ * and whose key decisions mention a "vote", even though neither field
+ * alone contains both tokens.
+ *
+ * Deliberately not backed by Postgres FTS or pg_trgm, despite the story's
+ * original framing suggesting one of those. At this data volume (381
+ * meetings, ~9K summary-item/topic rows as of 2026-09-09) a plain
+ * server-side pass over Prisma-fetched text is both simpler and
+ * semantically identical to what's already shipped, where FTS's stemming
+ * or pg_trgm's fuzzy/similarity matching would each quietly change
+ * matching behavior from what FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001's AC-4
+ * scoped out ("no fuzzy/trigram matching"). Revisit if/when a second city
+ * reaches Seattle's volume, or real latency here is profiled and found
+ * wanting — not before.
+ *
+ * Callers (MeetingFilter) should treat this as authoritative for text
+ * matching once a query is non-empty — it already covers
+ * title/logline/summary, so there's no need to separately re-check those
+ * client-side. An empty query returns [] (no meetings "match" nothing);
+ * callers should treat an empty query as "show everything" themselves,
+ * same convention as `matchesAllTokens([])`.
+ */
+export async function searchMeetingsForCity(
+  stateCode: string,
+  citySlug: string,
+  query: string
+): Promise<MeetingSearchResult[]> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) return [];
+  const tokens = tokenizeQuery(query);
+  if (tokens.length === 0) return [];
+
+  const meetings = await prisma.meeting.findMany({
+    where: {
+      city: { stateCode, slug: citySlug },
+    },
+    select: {
+      slug: true,
+      title: true,
+      logline: true,
+      summary: true,
+      summaryItems: {
+        where: { type: { in: [...EXTRA_SEARCHABLE_SUMMARY_TYPES] } },
+        select: { type: true, text: true },
+      },
+      topicSummaries: {
+        select: { title: true, keyPoints: true },
+      },
+    },
+  });
+
+  const results: MeetingSearchResult[] = [];
+  for (const m of meetings) {
+    const visibleHaystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`;
+
+    const extraParts: { label: string; text: string }[] = m.summaryItems.map((item) => ({
+      label: summaryTypeLabel(item.type),
+      text: item.text,
+    }));
+    for (const topic of m.topicSummaries) {
+      const keyPoints = Array.isArray(topic.keyPoints) ? (topic.keyPoints as string[]) : [];
+      extraParts.push({
+        label: `Topic: ${topic.title}`,
+        text: `${topic.title} ${keyPoints.join(" ")}`,
+      });
+    }
+
+    const fullHaystack = [visibleHaystack, ...extraParts.map((p) => p.text)].join(" ");
+    if (!matchesAllTokens(fullHaystack, tokens)) continue;
+
+    let extraSnippet: MeetingSearchResult["extraSnippet"] = null;
+    if (!matchesAllTokens(visibleHaystack, tokens)) {
+      for (const part of extraParts) {
+        const snippet = buildMatchSnippet(part.text, tokens);
+        if (snippet) {
+          extraSnippet = { label: part.label, text: snippet };
+          break;
+        }
+      }
+    }
+
+    results.push({ slug: m.slug, extraSnippet });
+  }
+
+  return results;
 }
 
 /** Narrow slug/date-only variant for the sitemap — that's all it renders
