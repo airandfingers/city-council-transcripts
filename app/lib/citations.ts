@@ -71,6 +71,34 @@ export function findRefCursor(text: string, refs: AnnotatedTextRef[]): number {
   return cursor;
 }
 
+// A citation gap is authored ending in a connector word anticipating the
+// citation that follows (e.g. "...approved the plan at "). When a ref
+// carries no seconds/label/provenance at all (FIX-TIMESTAMP-LABEL-EMPTY-001
+// AC-3), nothing renders after that connector, so printing textBefore as-is
+// leaves a dangling "...approved the plan at Next, the council...". Trimmed
+// here rather than left to the caller, since both renderers hit this case
+// the same way.
+const TRAILING_CONNECTOR_RE = /\s+(?:at|on|in|during|around|near|by|from|starting at|beginning at)\s*$/i;
+
+/**
+ * Trims a trailing connector word (or just whitespace, if none matches) off
+ * `textBefore` for a reference with no content to show after it
+ * (FIX-TIMESTAMP-LABEL-EMPTY-001 AC-3).
+ *
+ * Current backend extraction (`extract_annotated_text`/
+ * `extract_annotated_text_from_citations` in the transcriber) always skips
+ * adding a reference when seconds/label/provenance are all absent, so this
+ * is defensive against malformed/legacy data — same posture as
+ * `findRefCursor` above — not a path exercised by current production data.
+ * The connector list is deliberately small and English-specific; an
+ * unmatched trailing word just gets whitespace-trimmed, which is safe (a
+ * dangling preposition reads awkwardly but not "broken") rather than
+ * guessed at further.
+ */
+export function stripDanglingLeadIn(textBefore: string): string {
+  return textBefore.replace(TRAILING_CONNECTOR_RE, "").trimEnd();
+}
+
 /** Formats a seconds offset as "m:ss" (or "h:mm:ss" past an hour). */
 export function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -109,7 +137,7 @@ export function annotateTextPlain(text: string, references: unknown): string {
     // citation gap ("...partnership at "). Normalize to exactly one space
     // before "(" rather than concatenating blindly, which double-spaces
     // ("at  (33:06)") since a literal " (" gets added on top of it.
-    out += hasContent ? ref.textBefore.trimEnd() + " (" : ref.textBefore;
+    out += hasContent ? ref.textBefore.trimEnd() + " (" : stripDanglingLeadIn(ref.textBefore);
     if (ref.seconds != null) {
       out += ref.label?.trim() || formatTime(ref.seconds);
     } else if (ref.label) {

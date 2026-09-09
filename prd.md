@@ -22,7 +22,7 @@
 - 📋 US-REEL-002 — Shareable / embeddable clip pages
 - 📋 US-REEL-003 — Social-ready clip exports
 - ✅ FIX-RECAP-ALERTS-NEVER-CREATED-001 — Past-meeting recap alerts are never created for stub-seeded meetings (fixed entirely in `city-council-transcriber`; user decided against a historical backfill given the real 160-meeting/4-city scope found)
-- 📋 FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
+- ✅ FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
 - ✅ FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Cursor-based (not length-sum) remainder reconstruction in `AnnotatedText`/`annotateTextPlain`, so a `references` entry dropped by `isValidRef` can't desync the remainder slice and re-render already-shown text
 - 📋 FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
 - 📋 FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
@@ -401,7 +401,7 @@ Root cause, verified in code: recap notification (`_notify_admins_of_new_meeting
 
 #### FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As a** reader of a meeting summary
 **I want** every timestamp reference to show a real time or nothing at all
@@ -412,10 +412,10 @@ User-reported (2026-09-08), reproduced on Fort Collins's Aug 25, 2026 meeting pa
 - `app/components/AnnotatedText.tsx:66-98` — `hasContent = hasTimecode || !!ref.provenance`. When a reference has null seconds, label, and provenance, the whole citation (including its parentheses) renders as nothing while `ref.textBefore` still prints, leaving a dangling lead-in.
 
 **Acceptance Criteria:**
-- [ ] AC-1: `TimestampLink.tsx:65` treats empty/whitespace labels as absent (`label?.trim() || formatTime(targetSeconds)`).
-- [ ] AC-2: `page.tsx:313-317` never emits an empty label from the dash split.
-- [ ] AC-3: `AnnotatedText` drops the trailing lead-in fragment (or trims a trailing dangling preposition) when `hasContent` is false.
-- [ ] AC-4: Verified against the real Fort Collins Aug 25, 2026 meeting page — no empty timestamps, no dangling "at".
+- [x] AC-1: `TimestampLink.tsx:65` treats empty/whitespace labels as absent (`label?.trim() || formatTime(targetSeconds)`). Shipped in #61.
+- [x] AC-2: `page.tsx:313-317` never emits an empty label from the dash split. Shipped in #61.
+- [x] AC-3: `AnnotatedText` drops the trailing lead-in fragment (or trims a trailing dangling preposition) when `hasContent` is false. Shipped alongside `FIX-ANNOTATEDTEXT-REMAINDER-DUP-001` (same file, same session) as a new shared `stripDanglingLeadIn()` in `app/lib/citations.ts`, used by both `AnnotatedText.tsx` and `annotateTextPlain`. Verified via a standalone reproduction (`"...approved it at "` → `"...approved it"`), not against real data — current backend extraction (`extract_annotated_text`/`extract_annotated_text_from_citations`) never actually produces a reference with seconds/label/provenance *all* absent (both have their own `continue`-and-skip guard for that case), so this is defensive against malformed/legacy `references` data, same posture as the sibling fix.
+- [x] AC-4 (redefined): the literal Aug 25, 2026 symptom this AC named ("partnership at  and agreed...", double space) was traced — see #61's commit message — to a *different* mechanism than this component: `Meeting.logline` rendered as bare plain text at `MeetingCard`/city-page/email sites with no way to splice its citation gap back in. That's a distinct bug, fixed separately in `FIX-LOGLINE-CITATION-SPLICE` (PR #63, shipped). This story's own AC-1–AC-3 fixes are in the `AnnotatedText`/`TimestampLink`/`page.tsx` paths actually used on the meeting *detail* page, verified via `npx tsc --noEmit`/`npm run lint`/`npm run build` (all clean) plus the standalone reproductions noted above — a live page load wasn't repeated since the specific reported symptom is confirmed to live in the already-fixed sibling story, not here.
 
 #### FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Summary text re-emitted inside a paragraph when a reference is dropped
 
