@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import MeetingCard from "./MeetingCard";
 import type { MeetingCardData } from "@/app/lib/cityData";
+import { tokenizeQuery, matchesAllTokens } from "@/app/lib/search";
 
 /**
  * Client-side search & filter over a city's full meeting list, including
@@ -41,12 +42,18 @@ export default function MeetingFilter({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [upcomingExpanded, setUpcomingExpanded] = useState(false);
 
+  // FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001: tokens matched with AND semantics
+  // over a normalized haystack (case/hyphen/whitespace-insensitive), not a
+  // single contiguous substring — "data center" now matches "data-center",
+  // "Data Centers", etc. Passed down to MeetingCard for highlighting (AC-2)
+  // and its match-context snippet (AC-3).
+  const tokens = useMemo(() => tokenizeQuery(query), [query]);
+
   const matched = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let result = q
+    let result = tokens.length > 0
       ? meetings.filter((m) => {
-          const haystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`.toLowerCase();
-          return haystack.includes(q);
+          const haystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`;
+          return matchesAllTokens(haystack, tokens);
         })
       : meetings;
 
@@ -59,7 +66,7 @@ export default function MeetingFilter({
     }
 
     return result;
-  }, [meetings, query, statusFilter, upcomingSlugs]);
+  }, [meetings, tokens, statusFilter, upcomingSlugs]);
 
   // Upcoming meetings lead under their own subheader, capped and
   // expandable; everything else follows under its own "Past Meetings"
@@ -135,7 +142,7 @@ export default function MeetingFilter({
             </h3>
           )}
           {upcoming.map((meeting) => (
-            <MeetingCard key={meeting.slug} meeting={meeting} />
+            <MeetingCard key={meeting.slug} meeting={meeting} tokens={tokens} />
           ))}
           {hiddenUpcomingCount > 0 && (
             <button
@@ -161,7 +168,7 @@ export default function MeetingFilter({
             </h3>
           )}
           {rest.map((meeting) => (
-            <MeetingCard key={meeting.slug} meeting={meeting} />
+            <MeetingCard key={meeting.slug} meeting={meeting} tokens={tokens} />
           ))}
         </div>
       )}

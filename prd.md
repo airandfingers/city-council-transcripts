@@ -24,7 +24,7 @@
 - ✅ FIX-RECAP-ALERTS-NEVER-CREATED-001 — Past-meeting recap alerts are never created for stub-seeded meetings (fixed entirely in `city-council-transcriber`; user decided against a historical backfill given the real 160-meeting/4-city scope found)
 - ✅ FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
 - ✅ FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Cursor-based (not length-sum) remainder reconstruction in `AnnotatedText`/`annotateTextPlain`, so a `references` entry dropped by `isValidRef` can't desync the remainder slice and re-render already-shown text
-- 📋 FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
+- ✅ FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
 - 📋 FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
 - 📋 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
 - 🚫 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking (on hold by user decision — needs a per-city source-name design choice first)
@@ -441,24 +441,32 @@ User-reported (2026-09-08), reproduced on Fort Collins's Aug 25, 2026 meeting pa
 
 #### FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As a** site visitor searching a city's meetings or topics
 **I want** my query to match regardless of punctuation, and to see why a result matched
 **So that** I can trust the search instead of wondering if it's broken
 
-User-reported (2026-09-08): searching "data center" doesn't find "data-center"; results don't highlight the matched text; a match in a field not shown on the card ("Poudre" — the river's name) gives no indication of why that result appeared. Current state — `app/components/MeetingFilter.tsx:44-51`:
+User-reported (2026-09-08): searching "data center" doesn't find "data-center"; results don't highlight the matched text; a match in a field not shown on the card ("Poudre" — the river's name) gives no indication of why that result appeared. Previous state — `app/components/MeetingFilter.tsx:44-51`:
 ```ts
 const haystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`.toLowerCase();
 return haystack.includes(q);
 ```
-`app/components/TopicsFilter.tsx:41-48` is the same design over `name + statusSummary + mostRecentActivity`. No fuzzy matching, no tokenization, no highlighting anywhere. This is the cheap, client-side half of the fix — see `FEAT-SEARCH-SERVERSIDE-SURFACE-001` for the larger follow-on.
+`app/components/TopicsFilter.tsx:41-48` was the same design over `name + statusSummary + mostRecentActivity`. No fuzzy matching, no tokenization, no highlighting anywhere.
+
+**Fixed:** new `app/lib/search.ts` — `normalizeForSearch()` folds case and every run of non-alphanumeric characters (hyphens, underscores, punctuation, whitespace) to a single space; `tokenizeQuery()` splits a query into deduped normalized tokens; `matchesAllTokens()` requires every token as a substring somewhere in the normalized haystack (AND semantics, order-free — verified "data center" matches "data-center"/"data  center"/"Data Centers", and "center data" matches "Data Centers" too). `findHighlightRanges()` reuses the same normalized-index → original-index mapping technique built earlier this session for `findRefCursor` (`app/lib/citations.ts`) and the transcriber's whitespace-anchor fallback, so a match found in normalized space (where "data-center" and "data center" look identical) highlights the correct characters in the real, differently-punctuated, unmodified text. New `HighlightedText.tsx` renders any string with `<mark>` around matched ranges — no client-only hooks, safe from a server or client component alike; `tokens` defaults to `[]` so every call site that doesn't pass it renders unchanged.
+
+`MeetingFilter`/`TopicsFilter` both switched their filter predicate from the old `haystack.includes(q)` to `matchesAllTokens`, and now pass `tokens` down to `MeetingCard`/inline card JSX for highlighting. **Correctness trap caught before it shipped** (flagged by review): `MeetingCard` displays `annotateTextPlain(meeting.logline, meeting.tldrReferences)` — the citation-spliced string — not the raw `logline` field `MeetingFilter` matches against. Highlight ranges are computed against the *displayed* string (`displayText`, built once and reused for both rendering and AC-3's snippet check), not the raw field — computing against the raw field and applying to the spliced one would highlight the wrong character offsets once a citation is inserted, the same class of bug as `FIX-ANNOTATEDTEXT-REMAINDER-DUP-001` earlier this session.
+
+AC-3: `MeetingCard` shows title + (logline OR summary, never both) — so `summary` is the one field that can hold a match invisibly when `logline` is present. Rather than trying to attribute which token matched which field (ambiguous when tokens are split across fields), the check is: if `${title} ${displayText}` combined doesn't already satisfy every token — and it's guaranteed the *full* combined haystack does, since `MeetingFilter` only renders matching cards — the match must be hiding in `summary` alone. `buildMatchSnippet()` then excerpts ~50 chars around the first match, with ellipsis, rendered highlighted under a "Matches in summary: …" line. `TopicsFilter`'s three searched fields (`name`/`statusSummary`/`mostRecentActivity`) are all already visible on its card, so no AC-3 case applies there — highlighting alone (AC-2) covers it.
 
 **Acceptance Criteria:**
-- [ ] AC-1: A shared normalization + matching util (new, e.g. `app/lib/search.ts`) used by both `MeetingFilter` and `TopicsFilter`: fold case, hyphens/underscores/punctuation, and runs of whitespace; match query tokens with AND semantics, not one contiguous string. "data center" must match "data-center", "data  center", and "Data Centers"; "center data" must match too.
-- [ ] AC-2: Matched terms are visibly highlighted in the rendered card (`MeetingCard.tsx`, `TopicsFilter.tsx:118`).
-- [ ] AC-3: When a match lands in a fetched field not visible in the card blurb, the card shows a short match-context snippet ("matches in summary: …") — cheap here since `title/summary/logline` are already fetched.
-- [ ] AC-4: Fuzzy (trigram/edit-distance) matching is explicitly out of scope — normalization covers the reported cases. File separately if still wanted after AC-1 lands.
+- [x] AC-1: Shared normalization + matching util (`app/lib/search.ts`), used by both `MeetingFilter` and `TopicsFilter`. Verified via a standalone reproduction script (not committed, no test runner in this repo) covering the exact cases named in this AC, plus a negative case and a highlight-range-across-a-hyphen mapping check.
+- [x] AC-2: Matched terms visibly highlighted (`HighlightedText.tsx`, used in `MeetingCard.tsx` and `TopicsFilter.tsx`).
+- [x] AC-3: A hidden-field match shows a short excerpt (`MeetingCard.tsx`'s `hiddenSummaryMatch`).
+- [x] AC-4: No fuzzy/trigram matching added — exact substring per normalized token, as scoped.
+
+**Files Modified:** `app/lib/search.ts` (new), `app/components/HighlightedText.tsx` (new), `app/components/MeetingFilter.tsx`, `app/components/MeetingCard.tsx`, `app/components/TopicsFilter.tsx`.
 
 #### FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
 
