@@ -199,6 +199,18 @@ const STALE_AGENDA_LOOKAHEAD_DAYS = 3;
  * lookahead window. That scraper-side gap is now fixed
  * (city-council-transcriber), so this check firing at all going forward is
  * a genuine signal again, not a permanent false-green source.
+ *
+ * FIX-STALE-AGENDA-PREDICATE-001: "scraped" in this docstring (and in the
+ * digest copy this feeds) is imprecise in one further way, traced into
+ * city-council-transcriber's src/upcoming_scraper.py:
+ * `agendaLastFetchedAt` is set whenever a document-refresh cycle *ran* for
+ * this meeting without raising — which includes both "the agenda source
+ * was reached and had nothing posted" and "the scraper never resolved this
+ * meeting to a source listing at all" (`fetch_meeting_documents()` returns
+ * that as a logged, non-raised `result["error"]`, and the refresh loop
+ * doesn't branch on it before syncing to Neon). So a firing here proves "a
+ * refresh attempt completed," not "the agenda source was definitely
+ * reached" — the digest copy states only the former.
  */
 async function findStaleAgendaMeetings(now: Date) {
   const lookaheadEnd = new Date(now.getTime() + STALE_AGENDA_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
@@ -385,16 +397,24 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
       groupHeading: meeting.city.name,
       title: `⚠️ Agenda fetch looks stuck: ${meeting.title}`,
       summary:
-        `Scraped ${meeting.agendaLastFetchedAt?.toISOString() ?? "recently"} but has 0 agenda ` +
-        `items and 0 documents — meets on ${meeting.date.toISOString().slice(0, 10)}. ` +
-        // Not necessarily a failed or misrouted fetch — the agenda source
-        // itself may have been fetched successfully with nothing extracted
-        // from it. Confirmed live (FIX-AGENDA-ITEMS-NEVER-EXTRACTED-001)
-        // that this was previously true of every Fort Collins and Seattle
-        // meeting, not a per-meeting failure — state the observed fact,
-        // not a diagnosis this check can't actually confirm.
-        `The agenda source was scraped, but no agenda items or documents ` +
-        `were extracted from it.`,
+        `Last checked ${meeting.agendaLastFetchedAt?.toISOString() ?? "recently"} but has 0 ` +
+        `agenda items and 0 documents — meets on ${meeting.date.toISOString().slice(0, 10)}. ` +
+        // FIX-STALE-AGENDA-PREDICATE-001: `agendaLastFetchedAt` proves a
+        // document-refresh cycle ran, not that the agenda source was
+        // actually reached. Traced (city-council-transcriber,
+        // src/upcoming_scraper.py's run_document_refresh_for_city loop):
+        // fetch_meeting_documents() returns normally (not raising) both
+        // when it fetches the source and finds nothing, AND when it never
+        // resolves the meeting to a source event at all ("Could not
+        // resolve meeting to CivicClerk event" is logged via the success
+        // branch, not raised) — the caller doesn't distinguish the two
+        // before syncing to Neon, so this column can't either. Previously
+        // this copy claimed "the agenda source was scraped," which is only
+        // true of the first case. State only what's provable from here.
+        `A document/agenda refresh ran for this meeting, but nothing has ` +
+        `landed yet — this can mean the source had nothing posted, or that ` +
+        `the scraper couldn't resolve this meeting to a source listing at ` +
+        `all. Check that city's scraper logs for this meeting to tell which.`,
       url: buildMeetingUrl(meeting.slug),
     });
   }

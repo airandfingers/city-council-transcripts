@@ -28,7 +28,7 @@
 - 📋 FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
 - 📋 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
 - 📋 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking
-- 📋 FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" alert overstates its evidence
+- ✅ FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" digest copy corrected to match what `agendaLastFetchedAt` actually proves (investigated the write path across both repos; found a real, narrower gap than the plan suspected)
 - 📋 FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
 - 📋 FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
 - 📋 FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
@@ -508,16 +508,22 @@ User-reported (2026-09-08): didn't know what FCTV was (Fort Collins's city cable
 
 #### FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" alert overstates its evidence
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As an** admin reading the daily digest
-**I want** the "agenda fetch looks stuck" warning to only fire when a fetch was actually attempted
-**So that** I can trust the diagnostic instead of chasing false positives
+**I want** the "agenda fetch looks stuck" warning to only claim what's actually provable
+**So that** I can trust the diagnostic instead of chasing a claim the data doesn't support
 
-`findStaleAgendaMeetings` (`app/lib/adminDigest.ts:203-242`) requires `agendaLastFetchedAt != null`, but `city-council-transcriber/src/neon_writer.py:1283` sets that column to `NOW()` on every stub upsert including the `ON CONFLICT` branch — it means "this row was ever touched," not "a fetch was attempted." The digest copy at `adminDigest.ts:396-397` ("The agenda source was scraped, but no agenda items or documents were extracted") claims more than the data supports.
+**Investigated, and the original framing turned out to be half right.** The plan suspected `agendaLastFetchedAt` meant "this row was ever touched" (set on every stub upsert, `city-council-transcriber/src/neon_writer.py:1283`'s `ON CONFLICT` branch) rather than "a fetch was attempted." Traced every production caller of `_upsert_stub_meeting_row`/`upsert_meeting_documents_batch` in `city-council-transcriber` to check this precisely:
+- The discovery scraper (`upcoming_scraper.py`'s per-city loop) only calls the stub-upsert path after a non-raising `fetch_upcoming_documents()` call, gated by `fetch_documents` — which defaults `True` and is never set `False` by any real caller (only 2 test files do). So this path's `agendaLastFetchedAt` write is always downstream of a real attempt in production. **Not a live bug** — same "correctly gated by its own caller, just looks unconditional in isolation" shape as `FIX-ANNOTATEDTEXT-REMAINDER-DUP-001`'s and `FIX-TIMESTAMP-LABEL-EMPTY-001`'s "theoretical, not reproduced" findings earlier in this same session.
+- The ongoing refresh loop (`run_document_refresh_for_city` → `_sync_docs_refresh_batch_to_neon`) only syncs `synced_this_cycle`, built strictly from candidates whose `fetch_meeting_documents()` call didn't raise this cycle — **but** that function returns normally (not raising) in a second case besides "genuinely fetched, nothing there": when it can't resolve the meeting to a source event at all (`result["error"] = "Could not resolve meeting to CivicClerk event..."`, logged via the success branch, per the codebase's own comment at `upcoming_scraper.py:3762-3766`). The refresh loop's caller doesn't branch on `result.get("error")` before adding to `synced_this_cycle` — so **this is the live gap**: `agendaLastFetchedAt` (and by extension the digest's "the agenda source was scraped" claim) doesn't actually distinguish "reached the source, found nothing" from "never resolved the source at all."
+
+**Fix chosen, scoped deliberately small (per AC-1's own second branch):** rather than restructure the Python refresh loop's success/failure semantics — which several other things key off (`synced_this_cycle` also drives the local backoff-attempt marker, unrelated to this Neon column, so a change there risks widening scope into `FIX-DOCS-REFRESH-DEAD-CANDIDATES-001`'s territory) — corrected the claim in `city-council-transcripts` to state only what's provable from the column: "the agenda source was scraped" (implies reached) became "a document/agenda refresh ran... this can mean the source had nothing posted, or that the scraper couldn't resolve this meeting to a source listing at all." Same correction applied to `findStaleAgendaMeetings`'s own docstring.
 
 **Acceptance Criteria:**
-- [ ] AC-1: Either the predicate uses a column that actually records a fetch attempt, or the digest copy is corrected to match what the column proves.
+- [x] AC-1: the digest copy is corrected to match what the column proves (second branch — the predicate/column itself is left alone, since restructuring the Python write path was judged out of proportion to what this story asked for; the write-path ambiguity is now documented in both places so a future session doesn't have to re-derive it).
+
+**Files Modified:** `app/lib/adminDigest.ts` (digest copy + `findStaleAgendaMeetings` docstring). No changes needed in `city-council-transcriber` — investigated, not touched.
 
 ### Phase 2 — Hot topics on the Fort Collins page (manual curation)
 
