@@ -26,7 +26,7 @@
 - ✅ FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Cursor-based (not length-sum) remainder reconstruction in `AnnotatedText`/`annotateTextPlain`, so a `references` entry dropped by `isValidRef` can't desync the remainder slice and re-render already-shown text
 - ✅ FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
 - 📋 FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
-- 📋 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
+- 🔄 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame (AC-1/AC-3 shipped for YouTube; AC-2 mp4 poster is a real, ~100-meeting Seattle-only gap, blocked on a server-side frame-grab — client-side canvas capture confirmed CORS-blocked against real data)
 - 🚫 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking (on hold by user decision — needs a per-city source-name design choice first)
 - ✅ FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" digest copy corrected to match what `agendaLastFetchedAt` actually proves (investigated the write path across both repos; found a real, narrower gap than the plan suspected)
 - 📋 FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
@@ -487,7 +487,7 @@ User-reported (2026-09-08): "data centers doesn't show up in action items, key d
 
 #### FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
 
-**Status:** 📋 Not started
+**Status:** 🔄 AC-1/AC-3 shipped for YouTube; AC-2 (mp4 poster) investigated, genuinely blocked — see below
 
 **As a** site visitor viewing a meeting page
 **I want** to see a thumbnail before I press play
@@ -495,10 +495,20 @@ User-reported (2026-09-08): "data centers doesn't show up in action items, key d
 
 User-reported (2026-09-08). No poster exists anywhere: `app/components/YouTubePlayer.tsx:85-90` renders an empty `aspect-video` div and injects the iframe from `useEffect` after the IFrame API loads; the mp4 `<video>` at `app/components/VideoPlayer.tsx:71-77` has `preload="metadata"` and no `poster`.
 
+**AC-1 implemented with one deliberate deviation from the literal wording.** "Click-to-load" (a lazy-load facade deferring the IFrame API/player mount until the user clicks) was rejected: `VideoSyncProvider.seekTo()`/`play()` (used by every in-page citation timestamp via `TimestampLink`) silently no-op until `registerPlayer()` has fired from the real player's `onReady`. Deferring that behind a click would break "click a transcript citation before ever pressing play" — a more central feature than the poster is cosmetic, and no smaller in scope than the poster itself to fix in tandem. Instead, the API/player still load eagerly exactly as before (registration timing unchanged), and a real thumbnail (`https://img.youtube.com/vi/<id>/hqdefault.jpg`, via `next/image` with a new `images.remotePatterns` entry in `next.config.ts` — no CSP configured anywhere in this repo, so no conflict) is layered on top of the loading iframe and removed once `onReady` fires. This fully addresses the "looks like a broken black box" complaint without touching load or registration timing.
+
+**AC-2 investigated, genuinely blocked — correcting an initial wrong assumption first.** An early pass at this write-up claimed `videoProvider: "mp4"` was "effectively unused in production," based on a grep of `src/`/`webapp/` in `city-council-transcriber` that found no `"mp4"` assignment. That grep missed the real write path: **`export_transcription_data.py`** (top-level, not under `src/`) is what actually populates `video_provider` before it reaches Neon — `_resolve_video()` (`export_transcription_data.py:375-397`) derives `"mp4"` from a `webpage_url` matching known self-hosted-video hosts. Queried the real Neon data directly rather than trust the grep further: **100 of 381 meetings with a provider set are `mp4`** (`granicus`: 101, `youtube`: 24, `null`: 156) — all 100 sampled point at `video.seattle.gov`. Not a dead path; it's Seattle's entire video provider. Correcting this here rather than leaving the wrong claim standing, per this session's own established practice.
+
+Given that, a client-side fix was worth checking before writing AC-2 off: browsers can grab a video frame into a `<canvas>` and read it back as a poster image (seek past a source's opening black slate, `drawImage`, `toDataURL()`) — no server pipeline needed. Verified empirically against a real URL rather than assumed: `curl -sI -H "Origin: https://<this site>" https://video.seattle.gov/media/council/land_052026_2822617.mp4` returns `Access-Control-Allow-Origin: https://www.seattlechannel.org` — scoped to Seattle's own player origin, not ours. Reading a canvas fed by a cross-origin `<video>` without a matching CORS grant taints the canvas and `toDataURL()`/`toBlob()` throws `SecurityError` — confirmed blocking, not theoretical, for 100/100 of the real mp4 rows sampled.
+
+That leaves only a server-side option: have `city-council-transcriber`'s pipeline ffmpeg-grab a frame a few seconds past the start (avoiding a black opening slate), host it somewhere reachable by the frontend, and add a Prisma column to carry its URL. That's a real, separate scope — a new pipeline step, new storage/hosting decision, and a schema migration — not a "add a `poster` attribute" fix, and not something to fold into this story unilaterally. Flagged as its own follow-up rather than built or waved off.
+
 **Acceptance Criteria:**
-- [ ] AC-1: YouTube shows a click-to-load thumbnail (`img.youtube.com/vi/<id>/hqdefault.jpg`) until the API resolves; check `next.config.ts` image domains/CSP before choosing `<Image>` vs. plain `<img>`.
-- [ ] AC-2: mp4 gets a `poster`, sourced from an existing pipeline artifact if available (`storage/<city>/<date>/<meeting>/` already holds `video.info.json`, `highlights.json`, `reels/`) rather than adding a new frame-grab step.
-- [ ] AC-3: A meeting with no derivable thumbnail degrades to today's behavior, not a broken image.
+- [x] AC-1: YouTube shows a real thumbnail (not click-to-load — see note above) until the API resolves.
+- [ ] AC-2: mp4 poster — not implemented. Client-side frame-capture is blocked by CORS on the real data (verified against `video.seattle.gov`, Seattle's entire mp4 fleet — 100 meetings); a working fix needs a server-side frame-grab step in `city-council-transcriber` plus a new Prisma column, scoped as a follow-up story, not built here.
+- [x] AC-3: A meeting with no derivable thumbnail degrades to today's behavior — true by construction (mp4 path is untouched; YouTube's overlay simply doesn't render once `ready`).
+
+**Files Modified:** `next.config.ts` (`images.remotePatterns` for `img.youtube.com`), `app/components/YouTubePlayer.tsx`.
 
 #### FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking
 
