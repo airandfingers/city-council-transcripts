@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatMeetingDate } from "@/app/lib/formatDate";
+import { tokenizeQuery, matchesAllTokens } from "@/app/lib/search";
+import HighlightedText from "./HighlightedText";
 
 export type TopicCardData = {
   id: number;
@@ -38,12 +40,17 @@ export default function TopicsFilter({
   const [sortOrder, setSortOrder] = useState<SortOrder>("updated");
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
 
+  // FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001: same normalized AND-token matching
+  // as MeetingFilter — see that component's comment. name/statusSummary/
+  // mostRecentActivity are all already rendered in the card below, so
+  // there's no AC-3 "hidden field" case here the way MeetingCard has one.
+  const tokens = useMemo(() => tokenizeQuery(query), [query]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let matched = q
+    let matched = tokens.length > 0
       ? topics.filter((t) => {
-          const haystack = `${t.name} ${t.statusSummary ?? ""} ${t.mostRecentActivity ?? ""}`.toLowerCase();
-          return haystack.includes(q);
+          const haystack = `${t.name} ${t.statusSummary ?? ""} ${t.mostRecentActivity ?? ""}`;
+          return matchesAllTokens(haystack, tokens);
         })
       : topics;
 
@@ -69,7 +76,7 @@ export default function TopicsFilter({
     });
 
     return sorted;
-  }, [topics, query, sortOrder, activityFilter]);
+  }, [topics, tokens, sortOrder, activityFilter]);
 
   return (
     <div>
@@ -121,11 +128,11 @@ export default function TopicsFilter({
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <h2 className="font-semibold text-lg leading-tight mb-1">
-                      {topic.name}
+                      <HighlightedText text={topic.name} tokens={tokens} />
                     </h2>
                     {topic.statusSummary && (
                       <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                        {topic.statusSummary}
+                        <HighlightedText text={topic.statusSummary} tokens={tokens} />
                       </p>
                     )}
                   </div>
@@ -144,7 +151,7 @@ export default function TopicsFilter({
                 </div>
                 {topic.mostRecentActivity && (
                   <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                    Last activity: {topic.mostRecentActivity}
+                    Last activity: <HighlightedText text={topic.mostRecentActivity} tokens={tokens} />
                   </p>
                 )}
               </Link>

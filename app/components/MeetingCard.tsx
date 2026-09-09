@@ -2,12 +2,18 @@ import Link from "next/link";
 import type { MeetingCardData } from "@/app/lib/cityData";
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { annotateTextPlain } from "@/app/lib/citations";
+import HighlightedText from "./HighlightedText";
+import { matchesAllTokens, buildMatchSnippet } from "@/app/lib/search";
 
 export type MeetingCardProps = {
   meeting: MeetingCardData;
+  /** Search tokens to highlight (FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001).
+   * Defaults to [] so every call site that predates search highlighting
+   * renders identically to before. */
+  tokens?: string[];
 };
 
-export default function MeetingCard({ meeting }: MeetingCardProps) {
+export default function MeetingCard({ meeting, tokens = [] }: MeetingCardProps) {
   const href = `/transcripts/${meeting.slug
     .split("/")
     .map(encodeURIComponent)
@@ -18,6 +24,33 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
   // UTC or a meeting stored as e.g. 2026-08-05T00:00:00Z displays as
   // "Aug 4" for any US-timezone viewer. See app/lib/formatDate.ts.
   const dateStr = formatMeetingDate(meeting.date);
+
+  // FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 AC-2/AC-3: highlight ranges are
+  // computed against the *displayed* string, not the raw `logline` field —
+  // annotateTextPlain() splices in citation text ("...approved it (12:34)")
+  // before this ever reaches the DOM, so highlighting the raw logline would
+  // find the right substring but mark the wrong character offsets in the
+  // spliced version actually rendered (same class of bug as
+  // FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — offsets computed against one
+  // string, applied to a different one).
+  const displayText = meeting.logline
+    ? annotateTextPlain(meeting.logline, meeting.tldrReferences)
+    : meeting.summary;
+
+  // AC-3: MeetingFilter only renders this card when `${title} ${summary}
+  // ${logline}` combined satisfies every token — but the card shows title
+  // + (logline OR summary), never summary alongside a present logline. If
+  // the visible text alone doesn't already satisfy every token, the match
+  // must be hiding in `summary` while `logline` is what's shown — surface
+  // why it matched with a short excerpt (the Poudre case: a river name
+  // mentioned in the AI summary paragraph, not the one-line logline).
+  const hiddenSummaryMatch =
+    tokens.length > 0 &&
+    meeting.logline != null &&
+    meeting.summary != null &&
+    !matchesAllTokens(`${meeting.title} ${displayText ?? ""}`, tokens)
+      ? buildMatchSnippet(meeting.summary, tokens)
+      : null;
 
   // The whole card is clickable (not just a small text link below the
   // summary) and styled with hover/focus affordances so it reads as an
@@ -34,7 +67,9 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
       className="group block border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-blue-400 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 transition-all"
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-lg font-medium mb-2">{meeting.title}</h3>
+        <h3 className="text-lg font-medium mb-2">
+          <HighlightedText text={meeting.title} tokens={tokens} />
+        </h3>
         <span
           aria-hidden="true"
           className="text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform shrink-0 mt-1"
@@ -42,15 +77,16 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
           →
         </span>
       </div>
-      {meeting.logline ? (
+      {displayText && (
         <p className="text-gray-600 dark:text-gray-400 mb-3">
-          {annotateTextPlain(meeting.logline, meeting.tldrReferences)}
+          <HighlightedText text={displayText} tokens={tokens} />
         </p>
-      ) : meeting.summary ? (
-        <p className="text-gray-600 dark:text-gray-400 mb-3">
-          {meeting.summary}
+      )}
+      {hiddenSummaryMatch && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 -mt-2">
+          Matches in summary: <HighlightedText text={hiddenSummaryMatch} tokens={tokens} />
         </p>
-      ) : null}
+      )}
       {isPublished ? (
         <span className="inline-block text-sm font-medium text-blue-600 dark:text-blue-400">
           View summary &amp; transcript
