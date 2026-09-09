@@ -21,6 +21,21 @@
 - 📋 US-REEL-001 — Auto-generated highlight clips
 - 📋 US-REEL-002 — Shareable / embeddable clip pages
 - 📋 US-REEL-003 — Social-ready clip exports
+- ✅ FIX-RECAP-ALERTS-NEVER-CREATED-001 — Past-meeting recap alerts are never created for stub-seeded meetings (fixed entirely in `city-council-transcriber`; user decided against a historical backfill given the real 160-meeting/4-city scope found)
+- 📋 FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
+- 📋 FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Summary text re-emitted inside a paragraph when a reference is dropped
+- 📋 FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
+- 📋 FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
+- 📋 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
+- 📋 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking
+- 📋 FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" alert overstates its evidence
+- 📋 FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
+- 📋 FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
+- 📋 FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
+- 📋 FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup
+- 📋 FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
+- 📋 FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
+- 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
 
@@ -352,6 +367,284 @@ Root cause: `createMeetingUpdateAlert()` (`app/lib/alerts.ts:120-139`) has no id
 - [ ] AC-6.2: Deferred — filtering still happens client-side over the already-fetched full list. Worth revisiting if Seattle-scale cities' initial page-load payload becomes the bottleneck (separate from filter UX, which this story addresses).
 - [ ] AC-6.3: Deferred — filter state is local component state, not synced to the URL. Would need a Suspense boundary around `useSearchParams` in the parent page; scoped out to keep this change minimal until bookmarkable filtered views are actually requested.
 - [x] AC-6.4: Verified against Seattle's city page in a running dev server — confirmed the status `<select>` renders and a `SCHEDULED` meeting no longer shows the misleading "View summary & transcript" CTA (see FEAT-MEETINGCARD-STATUS-CTA-001).
+
+---
+
+## Backlog: Aaron's Fort Collins review (2026-09-08 session)
+
+Aaron reviewed the site as a Fort Collins resident. His three headline complaints each had a concrete, verified root cause rather than being vague dissatisfaction: (1) subscriber recap emails for past meetings are never created for any meeting first seen as an upcoming stub — confirmed both in code and on disk against the Fort Collins archive; (2) Fort Collins has zero curated interest areas configured, so the topics page and any "hot topics" surface are empty by construction, even though the underlying `InterestArea` rollup machinery works (Monterey Park has it populated); (3) city/topic search is a client-side literal-substring match with no normalization, highlighting, or match context, and can't see summary items or topic content at all. Full session notes and exploration are in the planning transcript; stories below carry the essential file:line evidence. Phases are ordered by dependency/value, not by the existing Phase 4–6 numbering below (unrelated backlog, left as-is).
+
+### Phase 1 — Email gap and confirmed bugs
+
+#### FIX-RECAP-ALERTS-NEVER-CREATED-001 — Past-meeting recap alerts are never created for stub-seeded meetings
+
+**Status:** ✅ Complete (2026-09-08) — implemented and closed entirely in `city-council-transcriber` (Python/Neon side). See that repo's `CHANGELOG.md` / `prd.md` for the full story, tests, and commits (`4e77aa0`, `c18b4f0`, `cee936e`). No changes were needed in this repo.
+
+**Repo:** `city-council-transcriber` (Python), with a backfill decision touching Neon.
+
+**As a** subscriber to a city's updates
+**I want** an email recap when a meeting I already knew about actually happens and gets published
+**So that** I know what the council decided, not just that a meeting was upcoming
+
+Root cause, verified in code: recap notification (`_notify_admins_of_new_meeting` → `POST /api/publish-to-admins`) fires in `src/publish.py:1259-1281` unconditionally when `created` is true, and only if `notify_updates` when false. `notify_updates` defaults to `False` at every call site (`src/publish.py:949`, `:1499`, `webapp/routes/ai.py:2604`, `:2746-2754`). `created` comes from `(xmax = 0) AS inserted` on an `ON CONFLICT (slug)` upsert (`src/neon_writer.py:1772`). The upcoming scraper already inserts a `status='SCHEDULED'` stub on the same slug (`_upsert_stub_meeting_row`, `src/neon_writer.py:1251-1298`), so the later post-transcription publish always hits the conflict branch, returns `created=False`, and — with `notify_updates` false — never creates a `MEETING_UPDATED` Alert.
+
+**Confirmed on disk**, not just from code: both notify paths write `emailed.json` via `_write_email_marker`/`_merge_marker` (`src/publish.py:633`). Across the Fort Collins archive (`/Volumes/TOSHIBA EXT/city-council-transcriber-storage/fort-collins/`), the last `emailed.json` is dated **2026-07-28**; every meeting from **2026-08-11** onward has none, and the meetings carrying `upcoming_alert_sent.json` (i.e. stub-seeded) are exactly the ones missing a recap marker — the predicted fingerprint, dating the regression to early August 2026.
+
+**Acceptance Criteria:**
+- [x] AC-0: The on-disk evidence above is restated here so the root cause isn't re-litigated before the fix.
+- [x] AC-1: `_upsert_meeting` (`src/neon_writer.py:1592-1780`) returns enough state to distinguish "first real publish" from "re-publish of an already-announced meeting" (e.g. also returns the prior `status`).
+- [x] AC-2: `src/publish.py:1259-1281` notifies on first-real-publish regardless of `created`; `notify_updates` continues to gate re-publishes only. (Also fixed the identical bug independently found in `webapp/routes/ai.py`'s `/api/publish` route.)
+- [x] AC-3 (redefined): a literal dry-run can't validate this — `write_meeting()`'s dry-run path never opens a DB connection, so it can't read prior status. Validated instead via read-only queries against `DATABASE_URL_PROD` (see AC-5).
+- [x] AC-4: Backfill decision made — **user decided (2026-09-08): do nothing retroactively (option c).** The real scope (AC-5) turned out much larger than "Fort Collins, 2026-08-11 onward": 160 already-published meetings across all 4 cities have never had a recap alert, most predating this fix by months (fort-collins back to 2025-07-15, monterey-park back to 2023-07-05), and none of that is recoverable by the code fix alone (every one of those rows already reads `status='PUBLISHED'`, so a republish now correctly does not re-notify). Given only 17 of the 160 sit inside the 30-day alert-age window regardless, the user chose to let the fix apply going forward only — no `Alert` backfill, no catch-up digest, no emails sent for the historical 160. Documented in `_should_notify_admins()`'s docstring (`src/publish.py`) so it isn't mistaken for an oversight later. **If the underlying resident complaint ("I can't find past-meeting content") resurfaces, the next lever is this repo's own site-surfacing work (city-page hot topics / past-meeting summaries, see `FEAT-CITY-HOT-TOPICS-001` below), not a mass historical email backfill.**
+- [x] AC-5: Prod sanity queries run (read-only, no writes): `Alert` counts by type/status found 70 `MEETING_UPDATED` rows total historically, 50 already `CANCELED` (`canceledBy='system:meeting-too-old'` — confirming the 30-day age-gate is live and active, not theoretical). A join of published `Meeting` rows against `MEETING_UPDATED` `Alert` rows found the 160-meeting/4-city scope described in AC-4 above.
+- [x] AC-6: Regression guard — a re-publish of an already-announced meeting does not produce a second alert. Covered by `test_publish_should_notify_admins.py` (pure, ran, passed) and `test_neon_writer_first_real_publish.py` (real-DB, written/reviewed but not run — no Docker in the implementation sandbox; should be run at the next opportunity).
+
+#### FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
+
+**Status:** 📋 Not started
+
+**As a** reader of a meeting summary
+**I want** every timestamp reference to show a real time or nothing at all
+**So that** I don't see broken-looking prose like "…approved it at " with a blank
+
+User-reported (2026-09-08), reproduced on Fort Collins's Aug 25, 2026 meeting page. Two independent producers in `city-council-transcripts`:
+- `app/components/TimestampLink.tsx:65` — `{label ?? formatTime(targetSeconds)}`. `??` does not coalesce `""`, so an empty label renders a clickable but visually empty link. Two feeds supply `""`: `app/transcripts/[...slug]/page.tsx:313-317` splits `ACTION_ITEM` labels on `/\s*-\s*/` and takes `[0]`, yielding `""` for any label starting with a dash; and a stored empty-string `timecodeLabel` survives `?? undefined` at `page.tsx:475` and `:532`.
+- `app/components/AnnotatedText.tsx:66-98` — `hasContent = hasTimecode || !!ref.provenance`. When a reference has null seconds, label, and provenance, the whole citation (including its parentheses) renders as nothing while `ref.textBefore` still prints, leaving a dangling lead-in.
+
+**Acceptance Criteria:**
+- [ ] AC-1: `TimestampLink.tsx:65` treats empty/whitespace labels as absent (`label?.trim() || formatTime(targetSeconds)`).
+- [ ] AC-2: `page.tsx:313-317` never emits an empty label from the dash split.
+- [ ] AC-3: `AnnotatedText` drops the trailing lead-in fragment (or trims a trailing dangling preposition) when `hasContent` is false.
+- [ ] AC-4: Verified against the real Fort Collins Aug 25, 2026 meeting page — no empty timestamps, no dangling "at".
+
+#### FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Summary text re-emitted inside a paragraph when a reference is dropped
+
+**Status:** 📋 Not started
+
+**As a** reader of a meeting summary
+**I want** each sentence to render exactly once
+**So that** I don't see the same words twice in one paragraph
+
+`app/components/AnnotatedText.tsx:51-62`: `consumed` sums `textBefore.length` only over refs surviving `isValidRef` (`:17-23`, which checks nothing but `typeof textBefore === "string"`), then `remainder = text.slice(consumed)`. Any dropped/malformed ref under-counts `consumed`, so the remainder re-emits already-rendered text. This may account for some of what read as tier-level duplication (TL;DR/Summary/Timeline, see `FEAT-MEETING-TIER-DEDUP-001` below) — check this bug first before assuming the tiers themselves are the problem.
+
+**Acceptance Criteria:**
+- [ ] AC-1: `consumed` is derived from the refs actually rendered, or from an explicit cursor advanced during render.
+- [ ] AC-2: A malformed/dropped ref cannot cause text to render twice; covered by a unit test with a ref whose `textBefore` is valid but which is otherwise unrenderable.
+
+#### FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
+
+**Status:** 📋 Not started
+
+**As a** site visitor searching a city's meetings or topics
+**I want** my query to match regardless of punctuation, and to see why a result matched
+**So that** I can trust the search instead of wondering if it's broken
+
+User-reported (2026-09-08): searching "data center" doesn't find "data-center"; results don't highlight the matched text; a match in a field not shown on the card ("Poudre" — the river's name) gives no indication of why that result appeared. Current state — `app/components/MeetingFilter.tsx:44-51`:
+```ts
+const haystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`.toLowerCase();
+return haystack.includes(q);
+```
+`app/components/TopicsFilter.tsx:41-48` is the same design over `name + statusSummary + mostRecentActivity`. No fuzzy matching, no tokenization, no highlighting anywhere. This is the cheap, client-side half of the fix — see `FEAT-SEARCH-SERVERSIDE-SURFACE-001` for the larger follow-on.
+
+**Acceptance Criteria:**
+- [ ] AC-1: A shared normalization + matching util (new, e.g. `app/lib/search.ts`) used by both `MeetingFilter` and `TopicsFilter`: fold case, hyphens/underscores/punctuation, and runs of whitespace; match query tokens with AND semantics, not one contiguous string. "data center" must match "data-center", "data  center", and "Data Centers"; "center data" must match too.
+- [ ] AC-2: Matched terms are visibly highlighted in the rendered card (`MeetingCard.tsx`, `TopicsFilter.tsx:118`).
+- [ ] AC-3: When a match lands in a fetched field not visible in the card blurb, the card shows a short match-context snippet ("matches in summary: …") — cheap here since `title/summary/logline` are already fetched.
+- [ ] AC-4: Fuzzy (trigram/edit-distance) matching is explicitly out of scope — normalization covers the reported cases. File separately if still wanted after AC-1 lands.
+
+#### FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
+
+**Status:** 📋 Not started
+
+**As a** site visitor
+**I want** search to see key decisions and action items, not just the title/summary/logline blurb
+**So that** a topic discussed in the meeting but not mentioned in the blurb still turns up
+
+User-reported (2026-09-08): "data centers doesn't show up in action items, key decisions, or [reference section]" for the Aug 26 meeting. `MEETING_CARD_SELECT` (`app/lib/cityData.ts:165-172`) fetches only `slug, status, date, title, logline, summary` — `MeetingSummaryItem`, `TopicSummary`, and `InterestArea` content are never fetched onto the city page, so they're unsearchable there. Depends on `FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001` shipping first (same matching semantics, larger surface).
+
+**Acceptance Criteria:**
+- [ ] AC-1: Searchable surface includes `MeetingSummaryItem` text (key decisions, action items, timeline bullets) and `TopicSummary` titles/key points.
+- [ ] AC-2: Matching moves server-side into `app/lib/cityData.ts` — closes AC-6.2 above (deferred in `FEAT-MEETINGFILTER-STATUS-001`) and the in-code note at `MeetingFilter.tsx:17-22`. Removes the current cost of serializing every meeting's full `summary`/`logline` (`@db.Text`) into the RSC payload purely to make it searchable — relevant at Seattle's volume.
+- [ ] AC-3: Server-side matching reproduces the token-AND/punctuation-folding semantics from `FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001` — likely Postgres FTS or `pg_trgm`, neither of which exists today (verified: no `to_tsvector`/`tsquery`/`pg_trgm`/`ILIKE`/`$queryRaw`, no Prisma `contains`/`mode: "insensitive"`, no `previewFeatures` on the generator, no text index on `Meeting`). Adding either requires a migration.
+- [ ] AC-4: Filter state syncs to the URL so a search is linkable — closes AC-6.3 above. Needs a Suspense boundary around `useSearchParams` in `app/[state]/[city]/page.tsx`.
+- [ ] AC-5: Match-context snippets extend to the newly searchable fields ("matches in Key Decisions: …").
+
+#### FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
+
+**Status:** 📋 Not started
+
+**As a** site visitor viewing a meeting page
+**I want** to see a thumbnail before I press play
+**So that** the video area doesn't look like a broken black box
+
+User-reported (2026-09-08). No poster exists anywhere: `app/components/YouTubePlayer.tsx:85-90` renders an empty `aspect-video` div and injects the iframe from `useEffect` after the IFrame API loads; the mp4 `<video>` at `app/components/VideoPlayer.tsx:71-77` has `preload="metadata"` and no `poster`.
+
+**Acceptance Criteria:**
+- [ ] AC-1: YouTube shows a click-to-load thumbnail (`img.youtube.com/vi/<id>/hqdefault.jpg`) until the API resolves; check `next.config.ts` image domains/CSP before choosing `<Image>` vs. plain `<img>`.
+- [ ] AC-2: mp4 gets a `poster`, sourced from an existing pipeline artifact if available (`storage/<city>/<date>/<meeting>/` already holds `video.info.json`, `highlights.json`, `reels/`) rather than adding a new frame-grab step.
+- [ ] AC-3: A meeting with no derivable thumbnail degrades to today's behavior, not a broken image.
+
+#### FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking
+
+**Status:** 📋 Not started
+
+**As a** site visitor clicking an external video link
+**I want** to know where it's taking me
+**So that** I'm not confused by an unfamiliar name like "FCTV" or a link that fails silently over VPN
+
+User-reported (2026-09-08): didn't know what FCTV was (Fort Collins's city cable TV); the livestream link was unreachable with VPN on. `VideoPlayer.tsx:129-136` → `ExternalLinkVideo` links out with no context about the destination.
+
+**Acceptance Criteria:**
+- [ ] AC-1: External video links name their source and note that they leave the site (e.g. "Watch on FCTV (Fort Collins city cable) ↗").
+- [ ] AC-2: Copy notes that some city streams block VPN/out-of-region traffic. The VPN block itself is the source city's, not ours — do not attempt to proxy around it.
+
+#### FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" alert overstates its evidence
+
+**Status:** 📋 Not started
+
+**As an** admin reading the daily digest
+**I want** the "agenda fetch looks stuck" warning to only fire when a fetch was actually attempted
+**So that** I can trust the diagnostic instead of chasing false positives
+
+`findStaleAgendaMeetings` (`app/lib/adminDigest.ts:203-242`) requires `agendaLastFetchedAt != null`, but `city-council-transcriber/src/neon_writer.py:1283` sets that column to `NOW()` on every stub upsert including the `ON CONFLICT` branch — it means "this row was ever touched," not "a fetch was attempted." The digest copy at `adminDigest.ts:396-397` ("The agenda source was scraped, but no agenda items or documents were extracted") claims more than the data supports.
+
+**Acceptance Criteria:**
+- [ ] AC-1: Either the predicate uses a column that actually records a fetch attempt, or the digest copy is corrected to match what the column proves.
+
+### Phase 2 — Hot topics on the Fort Collins page (manual curation)
+
+#### FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
+
+**Status:** 📋 Not started
+
+**Repo:** `city-council-transcriber`.
+
+**As a** Fort Collins resident
+**I want** the topics the city cares about (data centers, Flock cameras, etc.) to actually be tracked
+**So that** the topics page isn't empty and hot-issue summaries have something to show
+
+Root cause: `config/cities/fort-collins/interest_areas.json` is `{"schema_version": "2.0.0", "history": [...], "custom": []}` — empty. Zero interest areas configured ⇒ zero generated ⇒ empty topics page. Monterey Park's equivalent is populated (Spending, Barnes Park Pool, Data Centers, Bike Lanes), which is why its topics page works. Note `config/cities/fort-collins/topics.json` is a different, unrelated thing (the generic per-meeting `TopicSummary` taxonomy, not city-level topic rollups).
+
+**Acceptance Criteria:**
+- [ ] AC-1: `config/cities/fort-collins/interest_areas.json` gains curated areas with descriptions (v2.0.0 schema: `id`, `name`, `description`, `version`, `history`, `global_topic_id`). Starting set from the review session: Data Centers (reuse `global_topic_id: "data_centers"`), Flock Cameras / Surveillance, Homelessness & Shelter Siting, Montava, Poudre River. Confirm the list before generating — a bad list is worse than none.
+- [ ] AC-2: `scripts/generate_interest_areas.py` is run across the full Fort Collins archive. Watch the storage root: `--city fort-collins` (`scripts/generate_interest_areas.py:115-130`) resolves `storage_base = STORAGE_BASE / args.city` where `STORAGE_BASE` is the repo-local `storage/` (`:31`) — it does not consult `get_storage_root()`/`storage_config.json`. The repo-local `storage/fort-collins/` holds only 3 meetings; the real archive is on the external drive (`storage_config.json`'s `storage_root`, `/fort-collins/`, 2025-07 → 2026-09). Either invoke as `CITY=fort-collins python scripts/generate_interest_areas.py --storage "<archive>/fort-collins"` (honors `--storage` when `--city` is unset, `CITY` still drives per-city config loading via `interest_area_summarizer.py:48-64`), or — preferred — make `--city` respect `get_storage_root()` (`src/storage.py:109`) so this doesn't trap the next city. Dry-run first (`--dry-run`).
+- [ ] AC-3: Results published to Neon via `write_interest_areas` (`src/neon_writer.py:594`), verified as `InterestArea` rows with non-null `statusSummary`, and `InterestAreaMeetingStatus` rows for meetings that discussed them.
+- [ ] AC-4: `/co/fort-collins/topics` renders the curated areas, and each `/topics/[slug]` shows a cross-meeting timeline.
+- [ ] AC-5: The runbook for adding a city's interest areas is written down (transcriber's `AGENTS.md` or `docs/`) — this gap silently made Fort Collins look broken and will recur for the next city otherwise.
+
+#### FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
+
+**Status:** 📋 Not started
+
+**As a** Fort Collins resident visiting the city page
+**I want** to immediately see what the hot issues are (data centers, Flock cameras) with a one-line summary
+**So that** I don't have to dig through every meeting to find out what's being discussed
+
+`app/[state]/[city]/page.tsx` renders: h1 → `recentMeetingsSummary` card (`:71-80`) → city summary (`:101`) → `SubscribeForm` (`:103-109`) → Meetings section (`:111-121`) → `AIDisclaimer`. It never calls `getInterestAreasForCity` and contains zero links to `/topics` — neither does `MeetingCard.tsx` or `CityCard.tsx`. The only entry point is the header tab (`SiteHeader.tsx:64-69`), which renders only once already inside a city — which is why the topics nav shipped in prior PRs but the user still never found it.
+
+**Acceptance Criteria:**
+- [ ] AC-1: A "What's being talked about" block on the city page, inserted after the recent-activity card (`page.tsx:80`). Each entry: topic name, one-line `statusSummary`, `meetingsDiscussed`/`mostRecentActivity`, linking to `/topics/[slug]`. Ends with a "See all topics →" link — the city page's first path into `/topics`.
+- [ ] AC-2: Reuses the existing `getInterestAreasForCity` (`app/lib/cityData.ts:322-390`) added to the `Promise.all` at `page.tsx:50-53`, with a narrowed select (it currently returns the full meeting-status join).
+- [ ] AC-3: Curation is expressed through the existing `InterestArea.sortOrder` (and `source`) columns, set upstream from config. No schema change.
+- [ ] AC-4: Cities with no interest areas (every city before `FEAT-FORTCOLLINS-INTEREST-AREAS-001`-style work runs for them) render nothing — no empty shell.
+- [ ] AC-5: Revalidation — `app/api/revalidate/route.ts:60` revalidates the city path and `/topics` but nothing triggers it on interest-area writes, and the city page is `revalidate = false` (`page.tsx:18-29`). Either the transcriber's interest-area write calls revalidate, or the block gets a time-based revalidate. Same known gap documented at `topics/[slug]/page.tsx:11-17`.
+
+#### FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
+
+**Status:** 📋 Not started
+
+**As a** site visitor comparing a topic's index card to its detail page
+**I want** the same meeting count and the same discussed/not-discussed filter in both places
+**So that** the numbers don't contradict each other
+
+Two inconsistencies, which become visible the moment a city has real topics: `getInterestAreasForCity` filters `meetingStatuses: { where: { discussed: true } }` (`cityData.ts:351`); `getInterestArea` has no such filter (`cityData.ts:426`), so the detail-page timeline includes `PREVIEW`-phase/not-discussed rows whenever they carry a `summary` (`topics/[slug]/page.tsx:69`). Separately, "how many meetings" is computed two ways: the index recomputes client-side as `confidence >= 0.5` (`topics/page.tsx:51-53`), the detail page renders the DB's `area.meetingsDiscussed` (`topics/[slug]/page.tsx:107-115`).
+
+**Acceptance Criteria:**
+- [ ] AC-1: One definition of "discussed," applied in both queries.
+- [ ] AC-2: One count, rendered identically on index and detail.
+
+### Phase 3 — Meeting page polish
+
+#### FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup
+
+**Status:** 📋 Not started
+
+**As a** site visitor reading a meeting page
+**I want** sections to be consistently spaced and sized to their content
+**So that** the page doesn't look unfinished with large blank areas and misaligned headings
+
+User-reported (2026-09-08): "layout could use polish… things are placed in weird spots… lots of blank space and not aligned." All in `app/transcripts/[...slug]/page.tsx` unless noted:
+- Inconsistent padding: `:458` (TL;DR) and `:499` (Topics) are `<section className="p-6">` with no border/background; Summary (`:510`), Transcript (`:690`), Video (`:708`), Reference (`:725`) have none — the top two headings are inset 24px from every heading below with nothing visible to justify it.
+- Blank space under TL;DR: `TopicsPanel.tsx:81` pins `contentClassName="md:h-[220px] md:overflow-y-auto"`. The left grid cell holds a 1–3 sentence logline and stretches to that row height — directly reversing `TabbedPanel.tsx:65-67`'s own comment that only the active panel renders "so the container sizes to the tab in view rather than reserving the height of the tallest tab."
+- Mostly-empty first column: `:685` is `lg:grid-cols-3` where column 1 is a collapsed `<details>` (a single "▶ Transcript" line) next to a tall Reference column — ~90% whitespace on load.
+- Empty third column with no video: the header link at `:425` needs only `videoUrl`; the player at `:706` needs `videoUrl && videoProvider`. A row with a generic `videoUrl` but no `videoProvider`/legacy URL renders the header link and no player.
+- `DocumentsPanel.tsx:121-123` uses an `h-full min-h-0` chain but its parent `<section>` (`:725`) sets no height, so tab content scrolls in an arbitrary box instead of sizing to content.
+- `<p className="flex gap-2 items-start">` at `:519` combined with `max-w-prose` at `:513` lets the timestamp column eat into the text measure.
+
+**Acceptance Criteria:**
+- [ ] AC-1: One padding/container convention across all top-level sections.
+- [ ] AC-2: The Topics panel sizes to content; no fixed `md:h-[220px]`.
+- [ ] AC-3: The bottom grid reflows so a collapsed transcript and a missing video don't leave dead columns.
+- [ ] AC-4: Verified against the real Fort Collins Sept 1, 2026 meeting page (has video, unreviewed transcript).
+
+#### FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
+
+**Status:** 📋 Not started
+
+**As a** site visitor
+**I want** the section labeled "Reference" to have a name that describes Documents/Minutes/Agenda/Votes
+**So that** I understand what it holds before clicking in
+
+`<section id="reference"><h2>Reference</h2>` (`page.tsx:725-726`) holds Documents/Minutes/Agenda/Council Members & Votes tabs — source material, not citations. The only in-page link to it (`page.tsx:604-609`) already reads "View documents & minutes ↓" — the heading and its own anchor disagree.
+
+**Acceptance Criteria:**
+- [ ] AC-1: The heading matches the anchor text ("Documents & Minutes") — or is dropped and the tabs are promoted/enlarged instead.
+- [ ] AC-2: `id="reference"` is preserved or redirected so the `:604` anchor and any external links still land.
+- [ ] AC-3: Note for the implementer — `MeetingSummaryItem.references` (the inline-citation JSON, `AnnotatedText.tsx:4-10`) is a different thing with the same name and is never labeled in the UI. Don't conflate them.
+
+#### FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
+
+**Status:** 📋 Not started
+
+**As a** site visitor
+**I want** the Summary section to render whenever there's summary content to show
+**So that** I don't see a placeholder/fallback when real content exists but wasn't gated correctly
+
+`page.tsx:512` branches on `meeting.summary` but renders `summaryBlocks`. When `summary` is null and `SUMMARY_BLOCK` rows exist, the blocks are dropped and the page falls through to topicSummaries or a placeholder.
+
+**Acceptance Criteria:**
+- [ ] AC-1: The gate tests what is actually rendered (`summaryBlocks.length > 0 || meeting.summary`).
+
+### Parked — write the story, don't build it yet
+
+#### FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content
+
+**Status:** 📋 Parked by decision (2026-09-08) — revisit as an alternate view, not a replacement, so the current page is never regressed.
+
+**As a** reader of a meeting page
+**I want** the TL;DR, Summary, and Timeline to each add something new
+**So that** I'm not reading the same fact (e.g. the Montava project) restated three times
+
+User-reported (2026-09-08): "TLDR and timeline and summary — e.g. Montava is in all 3… doesn't make sense for a user to read all 3 things, there is repetition," plus a request to apply "bite/snack/meal" content design — a high-level list that expands for detail, rather than a wall of text.
+
+Facts for whoever picks this up:
+- `Meeting.logline` → "TL;DR" (`page.tsx:460-482`). `Meeting.summary` → "Summary" (`page.tsx:512-554`). The "Timeline" tab is `MeetingSummaryItem` rows of type `TIMELINE_BULLET` (`page.tsx:310-342` → `TopicsPanel`).
+- `Meeting.timelineBullets` is a dead column — referenced only in `prisma/schema.prisma:99`, one migration, and a comment at `cityData.ts:161`. Changing the timeline means touching `SUMMARY_TYPE_ORDER` (`page.tsx:42-48`), `HIDDEN_SUMMARY_TYPES` (`page.tsx:30`), and `labels.ts:42` — not that column.
+- The adjacency is what makes it read as repetition: `TIMELINE_BULLET` sorts first (`page.tsx:43, :335-342`) and `TabbedPanel.tsx:26` defaults to tab 0, so a chronological retelling renders immediately right of the TL;DR, and the prose Summary repeats it again below.
+- The bite/snack/meal vocabulary already exists in this product — `city-council-transcriber/src/upcoming_summarizer.py::generate_alert_tiers` feeds `emails/UpcomingMeeting.tsx`. An alternate meeting view could reuse that framing.
+- Check `FIX-ANNOTATEDTEXT-REMAINDER-DUP-001` first — some of the perceived duplication may be that bug, not the tier design.
+
+Direction if built: give each field one job — `logline` = the one line, `TIMELINE_BULLET` = the navigational spine with timestamps, `summary` = collapsed/secondary — with progressive disclosure. Whether generation prompts also change (transcriber side, requires regenerating existing meetings) is a separate decision, deliberately not taken now.
+
+### Product questions raised in this session — not planned work
+
+Recorded so they aren't silently converted into engineering without a product decision:
+- Who is Counciloris for — a resident who wants "what's going on" vs. an organizer who wants "are there protest plans, is anyone showing up"? Possibly a different product.
+- Alert fatigue vs. coverage — "the problem of constant updates is you stop reading it." Idea: a "tell me when it's a hot issue" subscription tier distinct from per-meeting alerts (builds on `AlertFrequency`, needs a definition of "hot" first).
+- Using search queries as a curation signal for future users — requires query logging, which doesn't exist; also a privacy decision (cf. `US-PREF-003`'s stated bar).
+- How much topic curation should be manual vs. AI vs. supervised — `FEAT-FORTCOLLINS-INTEREST-AREAS-001` answers this as "manual for now" for one city; it doesn't answer it at scale.
+- Hyperlocal relevance (e.g. a homeless shelter across the street mattering only to immediate neighbors, who'd search a landmark name like "church") — a search-quality problem, covered by `FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001`/`FEAT-SEARCH-SERVERSIDE-SURFACE-001`, not a curation problem.
+- Distribution — posting summaries to the Fort Collins subreddit/Nextdoor, both to gauge interest and to reach people. Not engineering work; a go-to-market decision.
 
 ---
 
