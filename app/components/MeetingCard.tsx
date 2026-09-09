@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { MeetingCardData } from "@/app/lib/cityData";
 import { formatMeetingDate } from "@/app/lib/formatDate";
+import { annotateTextPlain } from "@/app/lib/citations";
 
 export type MeetingCardProps = {
   meeting: MeetingCardData;
@@ -43,7 +44,7 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
       </div>
       {meeting.logline ? (
         <p className="text-gray-600 dark:text-gray-400 mb-3">
-          {meeting.logline}
+          {annotateTextPlain(meeting.logline, meeting.tldrReferences)}
         </p>
       ) : meeting.summary ? (
         <p className="text-gray-600 dark:text-gray-400 mb-3">

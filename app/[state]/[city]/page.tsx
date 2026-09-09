@@ -11,6 +11,7 @@ import MeetingFilter from "@/app/components/MeetingFilter";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import { formatMeetingDate } from "@/app/lib/formatDate";
+import { annotateTextPlain } from "@/app/lib/citations";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate on
 // every meeting publish for this city (see app/transcripts/[...slug]/
@@ -89,7 +90,7 @@ export default async function CityPage({ params }: Props) {
               {formatMeetingDate(latestMeeting.date)}
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              {latestMeeting.logline}
+              {annotateTextPlain(latestMeeting.logline, latestMeeting.tldrReferences)}
             </p>
             <span className="inline-block mt-1 text-xs text-blue-500 dark:text-blue-400">
               Read the full summary →
