@@ -169,6 +169,15 @@ const MEETING_CARD_SELECT = {
   title: true,
   logline: true,
   summary: true,
+  // logline is authored as a template with inline citation gaps (see
+  // app/lib/citations.ts) — only the TL;DR's own references can complete
+  // it. Narrowed to just `references` (not startTimeSeconds/timecodeLabel,
+  // unused here) to keep the per-meeting payload small.
+  summaryItems: {
+    where: { type: "TLDR_BLOCK" },
+    select: { references: true },
+    take: 1,
+  },
 } as const;
 
 export type MeetingCardData = {
@@ -178,6 +187,10 @@ export type MeetingCardData = {
   title: string;
   logline: string | null;
   summary: string | null;
+  /** The logline's own citation references (see MEETING_CARD_SELECT) —
+   * pass to annotateTextPlain() alongside `logline`, never render `logline`
+   * bare (FIX-TIMESTAMP-LABEL-EMPTY-001). */
+  tldrReferences: unknown;
 };
 
 // Same 2-day buffer, same reasoning, as the transcriber repo's own
@@ -224,16 +237,16 @@ export function getUpcomingMeetingSlugs(
   );
 }
 
-export function getMeetingsForCity(
+export async function getMeetingsForCity(
   stateCode: string,
   citySlug: string
 ): Promise<MeetingCardData[]> {
   // Return empty array for invalid inputs
   if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
-    return Promise.resolve([]);
+    return [];
   }
 
-  return prisma.meeting.findMany({
+  const meetings = await prisma.meeting.findMany({
     where: {
       city: {
         stateCode,
@@ -243,6 +256,11 @@ export function getMeetingsForCity(
     orderBy: [{ date: "desc" }, { id: "desc" }],
     select: MEETING_CARD_SELECT,
   });
+
+  return meetings.map(({ summaryItems, ...rest }) => ({
+    ...rest,
+    tldrReferences: summaryItems[0]?.references ?? null,
+  }));
 }
 
 /** Narrow slug/date-only variant for the sitemap — that's all it renders
@@ -269,6 +287,8 @@ export type LatestMeetingSummary = {
   title: string;
   date: Date;
   logline: string | null;
+  /** Pass to annotateTextPlain() alongside `logline` — see MeetingCardData.tldrReferences. */
+  tldrReferences: unknown;
   startTimeSeconds: number | null;
   timecodeLabel: string | null;
 };
@@ -296,7 +316,7 @@ export async function getLatestMeetingSummary(
       logline: true,
       summaryItems: {
         where: { type: "TLDR_BLOCK" },
-        select: { startTimeSeconds: true, timecodeLabel: true },
+        select: { startTimeSeconds: true, timecodeLabel: true, references: true },
         take: 1,
       },
     },
@@ -310,6 +330,7 @@ export async function getLatestMeetingSummary(
     title: meeting.title,
     date: meeting.date,
     logline: meeting.logline,
+    tldrReferences: tldrBlock?.references ?? null,
     startTimeSeconds: tldrBlock?.startTimeSeconds ?? null,
     timecodeLabel: tldrBlock?.timecodeLabel ?? null,
   };

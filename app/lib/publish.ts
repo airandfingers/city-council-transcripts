@@ -1,6 +1,7 @@
 import { z } from "zod";
 import prisma from "@/app/lib/prisma";
 import type { AlertFrequency } from "@prisma/client";
+import { annotateTextPlain } from "@/app/lib/citations";
 
 /**
  * Shared logic for the publish endpoints (`/api/publish` and
@@ -65,15 +66,25 @@ export async function getPublishMeeting(
       logline: true,
       date: true,
       city: { select: { name: true } },
+      // Both KEY_DECISION and TLDR_BLOCK in one query, partitioned below by
+      // type — Prisma can't apply two different `where` filters to the same
+      // relation field in a single select. `references` is needed on both:
+      // logline/text are authored as templates with inline citation gaps
+      // (see app/lib/citations.ts) that must be spliced back in before this
+      // reaches the email, or subscribers see the raw, unfilled gap
+      // (FIX-TIMESTAMP-LABEL-EMPTY-001).
       summaryItems: {
-        where: { type: "KEY_DECISION" },
+        where: { type: { in: ["KEY_DECISION", "TLDR_BLOCK"] } },
         orderBy: { sortOrder: "asc" },
-        select: { text: true },
+        select: { type: true, text: true, references: true },
       },
     },
   });
 
   if (!meeting) return null;
+
+  const tldrBlock = meeting.summaryItems.find((item) => item.type === "TLDR_BLOCK");
+  const keyDecisions = meeting.summaryItems.filter((item) => item.type === "KEY_DECISION");
 
   return {
     id: meeting.id,
@@ -81,8 +92,10 @@ export async function getPublishMeeting(
     slug: meeting.slug,
     cityId: meeting.cityId,
     cityName: meeting.city.name,
-    tldr: meeting.logline,
-    keyDecisions: meeting.summaryItems.map((item) => cleanBullet(item.text)),
+    tldr: meeting.logline != null ? annotateTextPlain(meeting.logline, tldrBlock?.references) : null,
+    keyDecisions: keyDecisions.map((item) =>
+      cleanBullet(annotateTextPlain(item.text, item.references)),
+    ),
     date: meeting.date,
   };
 }

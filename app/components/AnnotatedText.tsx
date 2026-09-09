@@ -1,25 +1,12 @@
 import TimestampLink from "./TimestampLink";
 import type { OffsetModel } from "@/app/lib/offset";
+import { isValidRef, type AnnotatedTextRef } from "@/app/lib/citations";
 
-export type AnnotatedTextRef = {
-  textBefore: string;
-  seconds: number | null;
-  label: string | null;
-  provenance: "minutes" | "transcript" | "mixed" | null;
-  linkStatus?: string | null;
-};
+export type { AnnotatedTextRef };
 
 /** Strips a trailing provenance tag from legacy (pre-references) text. */
 function stripLegacyTrailingTag(text: string): string {
   return text.replace(/\s*\[(?:minutes|transcript|mixed)\]\s*$/i, "");
-}
-
-function isValidRef(r: unknown): r is AnnotatedTextRef {
-  return (
-    typeof r === "object" &&
-    r !== null &&
-    typeof (r as AnnotatedTextRef).textBefore === "string"
-  );
 }
 
 /**
@@ -68,7 +55,11 @@ export default function AnnotatedText({
         const hasContent = hasTimecode || !!ref.provenance;
         return (
           <span key={i}>
-            {ref.textBefore}
+            {/* textBefore is authored ending in its own trailing space
+                before the citation gap ("...partnership at "). Trim it when
+                a citation follows so the added " (" doesn't double-space
+                ("at  (33:06)") -- left untouched when nothing follows. */}
+            {hasContent ? ref.textBefore.trimEnd() : ref.textBefore}
             {hasContent && <span className="text-gray-400 dark:text-gray-500">{" ("}</span>}
             {ref.seconds != null ? (
               <TimestampLink
