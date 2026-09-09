@@ -515,7 +515,7 @@ export default async function TranscriptPage({ params }: Props) {
           in the video/transcript. */}
       <section className="mb-10">
         <h2 className="text-2xl font-semibold mb-4">Summary</h2>
-        {meeting.summary ? (
+        {summaryBlocks.length > 0 || meeting.summary ? (
           <div className="space-y-3 text-gray-700 dark:text-gray-300 max-w-prose">
             {summaryBlocks.length > 0
               ? summaryBlocks.map((block) => {
