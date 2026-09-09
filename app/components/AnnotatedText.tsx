@@ -1,6 +1,6 @@
 import TimestampLink from "./TimestampLink";
 import type { OffsetModel } from "@/app/lib/offset";
-import { isValidRef, type AnnotatedTextRef } from "@/app/lib/citations";
+import { isValidRef, findRefCursor, stripDanglingLeadIn, type AnnotatedTextRef } from "@/app/lib/citations";
 
 export type { AnnotatedTextRef };
 
@@ -41,12 +41,11 @@ export default function AnnotatedText({
     return <span className={className}>{stripLegacyTrailingTag(text)}</span>;
   }
 
-  // Reconstruct the trailing remainder (text after the last citation) by
-  // subtracting every textBefore run's own JS-native length from `text`.
-  // This is JS-side arithmetic on JS strings throughout — no cross-language
-  // offset is ever reused, so UTF-16-vs-code-point indexing never comes up.
-  const consumed = refs.reduce((acc, r) => acc + r.textBefore.length, 0);
-  const remainder = text.slice(consumed);
+  // Cursor-based, not a length-sum — see findRefCursor's docstring
+  // (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001). This is JS-side arithmetic on JS
+  // strings throughout — no cross-language offset is ever reused, so
+  // UTF-16-vs-code-point indexing never comes up.
+  const remainder = text.slice(findRefCursor(text, refs));
 
   return (
     <span className={className}>
@@ -58,8 +57,11 @@ export default function AnnotatedText({
             {/* textBefore is authored ending in its own trailing space
                 before the citation gap ("...partnership at "). Trim it when
                 a citation follows so the added " (" doesn't double-space
-                ("at  (33:06)") -- left untouched when nothing follows. */}
-            {hasContent ? ref.textBefore.trimEnd() : ref.textBefore}
+                ("at  (33:06)"). When nothing follows (FIX-TIMESTAMP-LABEL-
+                EMPTY-001 AC-3), strip the dangling connector word too, so a
+                ref with no seconds/label/provenance to show doesn't leave
+                "...approved it at Next, the council..." */}
+            {hasContent ? ref.textBefore.trimEnd() : stripDanglingLeadIn(ref.textBefore)}
             {hasContent && <span className="text-gray-400 dark:text-gray-500">{" ("}</span>}
             {ref.seconds != null ? (
               <TimestampLink

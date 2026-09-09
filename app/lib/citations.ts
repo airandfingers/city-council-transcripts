@@ -30,6 +30,75 @@ export function isValidRef(r: unknown): r is AnnotatedTextRef {
   );
 }
 
+/**
+ * Walks `refs` in order and locates each one's `textBefore` inside `text`
+ * via a forward-advancing cursor, rather than assuming the refs that
+ * survived `isValidRef` sum to the correct offset on their own
+ * (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001).
+ *
+ * Both extraction functions that produce this JSON (`extract_annotated_text`
+ * and `extract_annotated_text_from_citations` in the transcriber) only add
+ * an entry to `references` when its anchor was actually found, advancing
+ * their own cursor exactly that far -- so under normal operation every
+ * entry that reaches the frontend already has a `textBefore` that starts
+ * exactly where the previous one's ended, and a plain length-sum works. The
+ * gap this guards against is a malformed/legacy `references` blob (a stale
+ * row from a different extraction mechanism, a hand-edited value, or any
+ * future producer that doesn't hold that invariant) where an entry got
+ * silently dropped by `isValidRef` (non-string `textBefore`) while its
+ * neighbors survived: a plain length-sum then desyncs from `text`'s real
+ * offsets, and the remainder slice can either re-render already-shown text
+ * or silently drop a span. Searching for each surviving ref's own
+ * `textBefore` from the running cursor (instead of trusting array order +
+ * length) self-corrects for exactly that gap, since it finds where the text
+ * actually is rather than where a naive sum assumes it is.
+ *
+ * Returns the offset immediately after the last ref's match -- i.e. where
+ * the final remainder should start.
+ */
+export function findRefCursor(text: string, refs: AnnotatedTextRef[]): number {
+  let cursor = 0;
+  for (const ref of refs) {
+    const idx = text.indexOf(ref.textBefore, cursor);
+    // If even a defensive forward search can't locate this chunk (the
+    // stored JSON is inconsistent with `text` itself -- not just missing an
+    // entry, but actively wrong), fall back to treating it as adjacent to
+    // whatever's already consumed. That reproduces the old
+    // best-effort-but-can-drift behavior for this one ref only, rather than
+    // losing track of every ref after it too.
+    cursor = (idx === -1 ? cursor : idx) + ref.textBefore.length;
+  }
+  return cursor;
+}
+
+// A citation gap is authored ending in a connector word anticipating the
+// citation that follows (e.g. "...approved the plan at "). When a ref
+// carries no seconds/label/provenance at all (FIX-TIMESTAMP-LABEL-EMPTY-001
+// AC-3), nothing renders after that connector, so printing textBefore as-is
+// leaves a dangling "...approved the plan at Next, the council...". Trimmed
+// here rather than left to the caller, since both renderers hit this case
+// the same way.
+const TRAILING_CONNECTOR_RE = /\s+(?:at|on|in|during|around|near|by|from|starting at|beginning at)\s*$/i;
+
+/**
+ * Trims a trailing connector word (or just whitespace, if none matches) off
+ * `textBefore` for a reference with no content to show after it
+ * (FIX-TIMESTAMP-LABEL-EMPTY-001 AC-3).
+ *
+ * Current backend extraction (`extract_annotated_text`/
+ * `extract_annotated_text_from_citations` in the transcriber) always skips
+ * adding a reference when seconds/label/provenance are all absent, so this
+ * is defensive against malformed/legacy data — same posture as
+ * `findRefCursor` above — not a path exercised by current production data.
+ * The connector list is deliberately small and English-specific; an
+ * unmatched trailing word just gets whitespace-trimmed, which is safe (a
+ * dangling preposition reads awkwardly but not "broken") rather than
+ * guessed at further.
+ */
+export function stripDanglingLeadIn(textBefore: string): string {
+  return textBefore.replace(TRAILING_CONNECTOR_RE, "").trimEnd();
+}
+
 /** Formats a seconds offset as "m:ss" (or "h:mm:ss" past an hour). */
 export function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -56,12 +125,9 @@ export function annotateTextPlain(text: string, references: unknown): string {
   const refs = Array.isArray(references) ? references.filter(isValidRef) : [];
   if (refs.length === 0) return text;
 
-  // Same consumed-length reconstruction as AnnotatedText.tsx — see that
-  // file's comment. Shares its known edge case (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001):
-  // a reference dropped by isValidRef (non-string textBefore) still needs
-  // its length accounted for here, which this doesn't handle either.
-  const consumed = refs.reduce((acc, r) => acc + r.textBefore.length, 0);
-  const remainder = text.slice(consumed);
+  // Cursor-based, not a length-sum — see findRefCursor's docstring
+  // (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001).
+  const remainder = text.slice(findRefCursor(text, refs));
 
   let out = "";
   for (const ref of refs) {
@@ -71,7 +137,7 @@ export function annotateTextPlain(text: string, references: unknown): string {
     // citation gap ("...partnership at "). Normalize to exactly one space
     // before "(" rather than concatenating blindly, which double-spaces
     // ("at  (33:06)") since a literal " (" gets added on top of it.
-    out += hasContent ? ref.textBefore.trimEnd() + " (" : ref.textBefore;
+    out += hasContent ? ref.textBefore.trimEnd() + " (" : stripDanglingLeadIn(ref.textBefore);
     if (ref.seconds != null) {
       out += ref.label?.trim() || formatTime(ref.seconds);
     } else if (ref.label) {

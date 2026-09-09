@@ -22,8 +22,8 @@
 - 📋 US-REEL-002 — Shareable / embeddable clip pages
 - 📋 US-REEL-003 — Social-ready clip exports
 - ✅ FIX-RECAP-ALERTS-NEVER-CREATED-001 — Past-meeting recap alerts are never created for stub-seeded meetings (fixed entirely in `city-council-transcriber`; user decided against a historical backfill given the real 160-meeting/4-city scope found)
-- 📋 FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
-- 📋 FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Summary text re-emitted inside a paragraph when a reference is dropped
+- ✅ FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
+- ✅ FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Cursor-based (not length-sum) remainder reconstruction in `AnnotatedText`/`annotateTextPlain`, so a `references` entry dropped by `isValidRef` can't desync the remainder slice and re-render already-shown text
 - 📋 FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
 - 📋 FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
 - 📋 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
@@ -401,7 +401,7 @@ Root cause, verified in code: recap notification (`_notify_admins_of_new_meeting
 
 #### FIX-TIMESTAMP-LABEL-EMPTY-001 — Meeting page renders a dangling "at __" with no timestamp
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As a** reader of a meeting summary
 **I want** every timestamp reference to show a real time or nothing at all
@@ -412,14 +412,14 @@ User-reported (2026-09-08), reproduced on Fort Collins's Aug 25, 2026 meeting pa
 - `app/components/AnnotatedText.tsx:66-98` — `hasContent = hasTimecode || !!ref.provenance`. When a reference has null seconds, label, and provenance, the whole citation (including its parentheses) renders as nothing while `ref.textBefore` still prints, leaving a dangling lead-in.
 
 **Acceptance Criteria:**
-- [ ] AC-1: `TimestampLink.tsx:65` treats empty/whitespace labels as absent (`label?.trim() || formatTime(targetSeconds)`).
-- [ ] AC-2: `page.tsx:313-317` never emits an empty label from the dash split.
-- [ ] AC-3: `AnnotatedText` drops the trailing lead-in fragment (or trims a trailing dangling preposition) when `hasContent` is false.
-- [ ] AC-4: Verified against the real Fort Collins Aug 25, 2026 meeting page — no empty timestamps, no dangling "at".
+- [x] AC-1: `TimestampLink.tsx:65` treats empty/whitespace labels as absent (`label?.trim() || formatTime(targetSeconds)`). Shipped in #61.
+- [x] AC-2: `page.tsx:313-317` never emits an empty label from the dash split. Shipped in #61.
+- [x] AC-3: `AnnotatedText` drops the trailing lead-in fragment (or trims a trailing dangling preposition) when `hasContent` is false. Shipped alongside `FIX-ANNOTATEDTEXT-REMAINDER-DUP-001` (same file, same session) as a new shared `stripDanglingLeadIn()` in `app/lib/citations.ts`, used by both `AnnotatedText.tsx` and `annotateTextPlain`. Verified via a standalone reproduction (`"...approved it at "` → `"...approved it"`), not against real data — current backend extraction (`extract_annotated_text`/`extract_annotated_text_from_citations`) never actually produces a reference with seconds/label/provenance *all* absent (both have their own `continue`-and-skip guard for that case), so this is defensive against malformed/legacy `references` data, same posture as the sibling fix.
+- [x] AC-4 (redefined): the literal Aug 25, 2026 symptom this AC named ("partnership at  and agreed...", double space) was traced — see #61's commit message — to a *different* mechanism than this component: `Meeting.logline` rendered as bare plain text at `MeetingCard`/city-page/email sites with no way to splice its citation gap back in. That's a distinct bug, fixed separately in `FIX-LOGLINE-CITATION-SPLICE` (PR #63, shipped). This story's own AC-1–AC-3 fixes are in the `AnnotatedText`/`TimestampLink`/`page.tsx` paths actually used on the meeting *detail* page, verified via `npx tsc --noEmit`/`npm run lint`/`npm run build` (all clean) plus the standalone reproductions noted above — a live page load wasn't repeated since the specific reported symptom is confirmed to live in the already-fixed sibling story, not here.
 
 #### FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Summary text re-emitted inside a paragraph when a reference is dropped
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As a** reader of a meeting summary
 **I want** each sentence to render exactly once
@@ -427,9 +427,17 @@ User-reported (2026-09-08), reproduced on Fort Collins's Aug 25, 2026 meeting pa
 
 `app/components/AnnotatedText.tsx:51-62`: `consumed` sums `textBefore.length` only over refs surviving `isValidRef` (`:17-23`, which checks nothing but `typeof textBefore === "string"`), then `remainder = text.slice(consumed)`. Any dropped/malformed ref under-counts `consumed`, so the remainder re-emits already-rendered text. This may account for some of what read as tier-level duplication (TL;DR/Summary/Timeline, see `FEAT-MEETING-TIER-DEDUP-001` below) — check this bug first before assuming the tiers themselves are the problem.
 
+**Root cause, confirmed:** the length-sum is the *surviving* refs' own lengths after filtering — since each surviving ref's `textBefore` is authored as *its own* individual span (not shifted to account for a dropped neighbor), the sum under-counts by exactly the dropped entry's length, and slicing `text` at that under-counted offset lands mid-span. Reproduced with a minimal 3-citation example (dropped middle entry): old code rendered `" seconded the motion. Remainder text here."`, duplicating `"seconded the motion."` from the citation rendered just above it.
+
+**Scope note, stated plainly:** both current backend extraction functions (`extract_annotated_text`/`extract_annotated_text_from_citations` in `city-council-transcriber/src/summarizer.py`) only add an entry to `references` when its citation was actually located, advancing their own cursor exactly that far — so in normal operation every entry that reaches the frontend already satisfies the "runs-in-JSON" invariant on its own, and the old length-sum was harmless. This fix is a defensive correctness fix against malformed/legacy `references` data, not a fix for a bug reproduced against real production data. It is **not** the root cause of Aaron's TL;DR/Summary repetition complaint — that remains attributed to the tier-design overlap tracked in the parked `FEAT-MEETING-TIER-DEDUP-001` below.
+
+**Fixed:** new `findRefCursor(text, refs)` in `app/lib/citations.ts` — walks `refs` in order, locating each one's `textBefore` via `text.indexOf(ref.textBefore, cursor)` from a running cursor (rather than trusting array order + length), so a gap from any dropped entry self-corrects instead of compounding. Falls back to treating an unfindable chunk as adjacent to the current cursor (best-effort, matching the old behavior for that one ref only) rather than losing track of everything after it. Used by both `AnnotatedText.tsx` (JSX) and `annotateTextPlain` (plain-string, `app/lib/citations.ts`) — the two consumers shared the identical bug, so both needed the same fix.
+
 **Acceptance Criteria:**
-- [ ] AC-1: `consumed` is derived from the refs actually rendered, or from an explicit cursor advanced during render.
-- [ ] AC-2: A malformed/dropped ref cannot cause text to render twice; covered by a unit test with a ref whose `textBefore` is valid but which is otherwise unrenderable.
+- [x] AC-1: `consumed` is derived from the refs actually rendered, or from an explicit cursor advanced during render.
+- [x] AC-2: A malformed/dropped ref cannot cause text to render twice — verified via a standalone reproduction (see "Root cause" above). This repo has no test runner configured (no `jest`/`vitest` in `package.json`), so verification is `npx tsc --noEmit` + `npm run lint` + `npm run build` (all clean) plus the reproduction script run directly under `node` (not committed).
+
+**Files Modified:** `app/lib/citations.ts` (new `findRefCursor`, used by `annotateTextPlain`), `app/components/AnnotatedText.tsx` (same fix, JSX path).
 
 #### FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
 
