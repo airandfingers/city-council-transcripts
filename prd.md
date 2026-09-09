@@ -27,13 +27,13 @@
 - 📋 FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001 — Normalize + highlight city/topic search matches
 - 📋 FEAT-SEARCH-SERVERSIDE-SURFACE-001 — Expand search to summary items/topics, move server-side
 - 📋 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
-- 📋 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking
+- 🚫 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking (on hold by user decision — needs a per-city source-name design choice first)
 - ✅ FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" digest copy corrected to match what `agendaLastFetchedAt` actually proves (investigated the write path across both repos; found a real, narrower gap than the plan suspected)
 - 📋 FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
 - 📋 FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
-- 📋 FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
+- ✅ FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
 - 📋 FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup
-- 📋 FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
+- ✅ FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
 - ✅ FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
@@ -494,13 +494,15 @@ User-reported (2026-09-08). No poster exists anywhere: `app/components/YouTubePl
 
 #### FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking
 
-**Status:** 📋 Not started
+**Status:** 🚫 On hold (2026-09-09, user decision) — deprioritized, not built. Not blocked on anything technical; parked by choice.
 
 **As a** site visitor clicking an external video link
 **I want** to know where it's taking me
 **So that** I'm not confused by an unfamiliar name like "FCTV" or a link that fails silently over VPN
 
 User-reported (2026-09-08): didn't know what FCTV was (Fort Collins's city cable TV); the livestream link was unreachable with VPN on. `VideoPlayer.tsx:129-136` → `ExternalLinkVideo` links out with no context about the destination.
+
+**Open design question, unresolved:** `videoProvider` (`youtube`/`mp4`/`granicus`/unknown-fallback) has no per-city "friendly source name" concept anywhere in the codebase today — nothing maps to "FCTV." AC-1 as written needs either (a) new per-city config threaded from `city-council-transcriber` through Neon to the frontend, or (b) a generic hostname-derived label ("Watch on fctv.org ↗") requiring no schema change but less polished than the plan's example copy. Flagged to the user rather than picked unilaterally; deferred instead of decided.
 
 **Acceptance Criteria:**
 - [ ] AC-1: External video links name their source and note that they leave the site (e.g. "Watch on FCTV (Fort Collins city cable) ↗").
@@ -565,17 +567,21 @@ Root cause: `config/cities/fort-collins/interest_areas.json` is `{"schema_versio
 
 #### FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As a** site visitor comparing a topic's index card to its detail page
 **I want** the same meeting count and the same discussed/not-discussed filter in both places
 **So that** the numbers don't contradict each other
 
-Two inconsistencies, which become visible the moment a city has real topics: `getInterestAreasForCity` filters `meetingStatuses: { where: { discussed: true } }` (`cityData.ts:351`); `getInterestArea` has no such filter (`cityData.ts:426`), so the detail-page timeline includes `PREVIEW`-phase/not-discussed rows whenever they carry a `summary` (`topics/[slug]/page.tsx:69`). Separately, "how many meetings" is computed two ways: the index recomputes client-side as `confidence >= 0.5` (`topics/page.tsx:51-53`), the detail page renders the DB's `area.meetingsDiscussed` (`topics/[slug]/page.tsx:107-115`).
+Two inconsistencies, which become visible the moment a city has real topics: `getInterestAreasForCity` filters `meetingStatuses: { where: { discussed: true } }` (`cityData.ts:351`); `getInterestArea` had no such filter (`cityData.ts:426`), so the detail-page timeline could include `PREVIEW`-phase/not-discussed rows whenever they carry a `summary` (`topics/[slug]/page.tsx:69`). Separately, "how many meetings" was computed two ways: the index recomputed as `confidence >= 0.5` over `area.meetings` (`topics/page.tsx:51-53`), the detail page rendered the DB's `area.meetingsDiscussed` (`topics/[slug]/page.tsx:107-115`) — two independent definitions of the same number.
+
+**Fixed:** `getInterestArea`'s `meetingStatuses` select now carries the same `where: { discussed: true }` as `getInterestAreasForCity`, so both queries return the identical set of meetings for a given area (AC-1). The index page's `discussedCount` no longer recomputes a confidence threshold — it now reads `area.meetingsDiscussed ?? 0`, the same DB field the detail page already rendered, so both pages show one number for the same area (AC-2). The `?? 0` coalesce matches the detail page's `!== null` gate: `TopicsFilter` only renders the count badge when it's `> 0`, so a null/zero area shows nothing on either page, same as before.
 
 **Acceptance Criteria:**
-- [ ] AC-1: One definition of "discussed," applied in both queries.
-- [ ] AC-2: One count, rendered identically on index and detail.
+- [x] AC-1: One definition of "discussed," applied in both queries.
+- [x] AC-2: One count, rendered identically on index and detail.
+
+**Files Modified:** `app/lib/cityData.ts` (`getInterestArea`'s select), `app/[state]/[city]/topics/page.tsx` (`discussedCount` derivation).
 
 ### Phase 3 — Meeting page polish
 
@@ -603,7 +609,7 @@ User-reported (2026-09-08): "layout could use polish… things are placed in wei
 
 #### FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
 
-**Status:** 📋 Not started
+**Status:** ✅ Done
 
 **As a** site visitor
 **I want** the section labeled "Reference" to have a name that describes Documents/Minutes/Agenda/Votes
@@ -611,10 +617,14 @@ User-reported (2026-09-08): "layout could use polish… things are placed in wei
 
 `<section id="reference"><h2>Reference</h2>` (`page.tsx:725-726`) holds Documents/Minutes/Agenda/Council Members & Votes tabs — source material, not citations. The only in-page link to it (`page.tsx:604-609`) already reads "View documents & minutes ↓" — the heading and its own anchor disagree.
 
+**Fixed:** took AC-1's first option (heading matches anchor text) over dropping/promoting the tabs, since the latter is a bigger visual-design change that belongs with the Phase 3 layout work (`FIX-MEETING-LAYOUT-ALIGNMENT-001`), which itself needs a human looking at the real page rather than a blind implementation. Heading changed to "Documents & Minutes"; `id="reference"` left untouched (AC-2) so the anchor and any external links keep landing correctly — confirmed no other reference to the old heading text anywhere in the codebase (`grep` for `"Reference"`/`>Reference<`, zero hits).
+
 **Acceptance Criteria:**
-- [ ] AC-1: The heading matches the anchor text ("Documents & Minutes") — or is dropped and the tabs are promoted/enlarged instead.
-- [ ] AC-2: `id="reference"` is preserved or redirected so the `:604` anchor and any external links still land.
-- [ ] AC-3: Note for the implementer — `MeetingSummaryItem.references` (the inline-citation JSON, `AnnotatedText.tsx:4-10`) is a different thing with the same name and is never labeled in the UI. Don't conflate them.
+- [x] AC-1: The heading matches the anchor text ("Documents & Minutes").
+- [x] AC-2: `id="reference"` preserved.
+- [x] AC-3: Noted directly in the code comment above the section — `MeetingSummaryItem.references` is unrelated, not touched here.
+
+**Files Modified:** `app/transcripts/[...slug]/page.tsx`.
 
 #### FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
 

@@ -432,7 +432,12 @@ export const getInterestArea = cache(async function getInterestArea(
       slug: areaSlug,
       city: { stateCode, slug: citySlug },
     },
-    // Same select: projection as getInterestAreasForCity above.
+    // Same select: projection as getInterestAreasForCity above, including
+    // the same `discussed: true` filter on meetingStatuses
+    // (FIX-INTERESTAREA-COUNT-CONSISTENCY-001) -- this used to be
+    // unfiltered here, so the detail-page timeline could include
+    // PREVIEW-phase/not-discussed rows the index page's card never showed,
+    // whenever such a row happened to carry a `summary`.
     select: {
       id: true,
       slug: true,
@@ -445,6 +450,7 @@ export const getInterestArea = cache(async function getInterestArea(
       mostRecentActivity: true,
       generatedAt: true,
       meetingStatuses: {
+        where: { discussed: true },
         select: {
           summary: true,
           confidence: true,

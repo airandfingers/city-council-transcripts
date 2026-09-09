@@ -727,9 +727,17 @@ export default async function TranscriptPage({ params }: Props) {
             </section>
           )}
 
-          {/* Minutes & Documents */}
+          {/* Minutes & Documents. id="reference" kept as-is (not renamed to
+              e.g. "documents") so the "View documents & minutes ↓" anchor
+              above and any external links to #reference keep landing here
+              (FIX-REFERENCE-HEADING-001 AC-2) -- only the visible heading
+              text changed, to match what this section actually holds.
+              Don't confuse this with MeetingSummaryItem.references (the
+              inline-citation JSON powering AnnotatedText) -- unrelated
+              "reference" with the same name, never itself labeled in the
+              UI (AC-3). */}
           <section id="reference" className="lg:col-span-1">
-            <h2 className="text-2xl font-semibold mb-4">Reference</h2>
+            <h2 className="text-2xl font-semibold mb-4">Documents &amp; Minutes</h2>
             <DocumentsPanel
               minutesText={meeting.minutesText}
               minutesUrl={meeting.minutesUrl}
