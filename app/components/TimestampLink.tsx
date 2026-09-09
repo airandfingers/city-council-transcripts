@@ -41,6 +41,14 @@ export default function TimestampLink({
   const s = Math.floor(targetSeconds % 60);
   const href = `?t=${m}m${s}s`;
 
+  // `label` is `string | undefined` by prop type, but callers pass through
+  // Prisma `timecodeLabel`/reference `label` values that are only checked
+  // for null/undefined upstream (`?? undefined`), not for an empty or
+  // whitespace-only string. `label ?? formatTime(...)` alone doesn't
+  // coalesce `""`, so a stored empty label rendered a clickable but
+  // visually blank link (FIX-TIMESTAMP-LABEL-EMPTY-001).
+  const displayLabel = label?.trim() || formatTime(targetSeconds);
+
   return (
     <a
       href={href}
@@ -62,7 +70,7 @@ export default function TimestampLink({
         document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
       }}
     >
-      {label ?? formatTime(targetSeconds)}
+      {displayLabel}
     </a>
   );
 }

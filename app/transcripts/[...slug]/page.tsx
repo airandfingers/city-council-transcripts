@@ -311,9 +311,15 @@ export default async function TranscriptPage({ params }: Props) {
     if (HIDDEN_SUMMARY_TYPES.has(item.type)) continue;
     const list = topicMap.get(item.type) ?? [];
     // For action items, show only the start time portion of the timecode
+    // range (e.g. "7:17 - 9:20" -> "7:17"). Guard against a leading dash
+    // ("-1:23", or any label the range-splitter regex matches at position
+    // 0) producing an empty string, which TimestampLink would otherwise
+    // render as a blank clickable link (FIX-TIMESTAMP-LABEL-EMPTY-001) --
+    // fall back to the original label rather than an empty split segment.
     let label = item.timecodeLabel;
     if (item.type === "ACTION_ITEM" && label) {
-      label = label.split(/\s*-\s*/)[0];
+      const start = label.split(/\s*-\s*/)[0];
+      label = start.trim() ? start : label;
     }
     list.push({
       text: item.text,
