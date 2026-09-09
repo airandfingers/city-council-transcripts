@@ -29,7 +29,8 @@
 - 📋 FEAT-VIDEO-POSTER-001 — Video thumbnail instead of a black first frame
 - 🚫 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking (on hold by user decision — needs a per-city source-name design choice first)
 - ✅ FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" digest copy corrected to match what `agendaLastFetchedAt` actually proves (investigated the write path across both repos; found a real, narrower gap than the plan suspected)
-- 📋 FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
+- 📋 FEAT-SEARCH-CLICK-ANALYTICS-001 — Usage analytics (search queries, page/topic clicks) to drive future topic curation — backlog write-up only, zero analytics infra exists today, real privacy/storage questions unresolved
+- 🔄 FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas (list confirmed + generation running; Neon publish held for explicit confirmation — also found Montebello's list is equally empty, documented not fabricated)
 - 📋 FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
 - ✅ FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
 - 📋 FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup
@@ -537,24 +538,54 @@ User-reported (2026-09-08): didn't know what FCTV was (Fort Collins's city cable
 
 ### Phase 2 — Hot topics on the Fort Collins page (manual curation)
 
+#### FEAT-SEARCH-CLICK-ANALYTICS-001 — Usage analytics to drive topic/interest-area curation
+
+**Status:** 📋 Not started — backlog write-up only, per user request (2026-09-09); not scoped for a build yet.
+
+**As a** person curating a city's interest areas / hot topics
+**I want** to know what residents actually search for and click on
+**So that** curation is driven by real usage, not just resident anecdotes and guesswork
+
+Raised during Fort Collins topic curation (`FEAT-FORTCOLLINS-INTEREST-AREAS-001`): the user asked to "learn from click behavior and search queries" as a curation input. Checked first, not assumed — **there is currently zero analytics infrastructure in this codebase**: no PostHog/Plausible/Vercel Analytics/`gtag`, no search-query logging, no click tracking, nothing (grepped `app/`, `package.json`). That signal doesn't exist to learn from today. `FEAT-SEARCH-SERVERSIDE-SURFACE-001`'s new `searchMeetings` server action is the one place a search query already passes through server-side code, making it the natural place to add logging if this gets built — but nothing does yet.
+
+**Real, unresolved design questions before this is buildable** — deliberately not picked unilaterally, since each has a real tradeoff:
+- **What to capture.** Raw free-text search queries on a public civic site can carry real sensitivity ("eviction help," "restraining order," a specific resident's name/address) — logging them verbatim tied to a session/IP is a different privacy posture than logging normalized tokens with no user identifier. Page/topic views are much lower-risk.
+- **Where it lives.** Three real options, not equivalent: (a) a new Neon table (`SearchEvent`/`PageView`) — full control, but is new schema + retention/cleanup to own; (b) a privacy-focused third-party (Plausible/Fathom — cookieless, aggregate) — zero query-level detail, good for page-view "what's hot" but can't answer "what did they search that found nothing"; (c) Vercel Analytics — already on the hosting platform, near-zero setup, but page-view-only, no custom search-query events on the free tier.
+- **Retention.** A raw per-query log kept indefinitely is a different risk profile than a 30/90-day rolling window or day-level aggregate counts — worth deciding before, not after, anything is collected.
+- **Actual current traffic volume** — not measured, but likely small (single-digit cities, this session's own DB queries show a few hundred meetings total) — worth confirming whether a full analytics platform is even proportionate yet, versus something as simple as a periodic manual review of aggregated top-query counts.
+
+**Recommended starting shape** (a recommendation for the next design pass, not a decision made here): log normalized search tokens (reuse `app/lib/search.ts`'s existing `tokenizeQuery`) + result count + a coarse timestamp into a small Neon table — no raw free text, no IP, no user/session identifier — answering "what are people searching for that turns up nothing" without carrying PII risk. Pair with Vercel Analytics (already available, zero extra infra) for page/topic-view counts to answer "what's actually being read." Both are additive to `FEAT-CITY-HOT-TOPICS-001`'s manual curation, not a replacement for it — this feeds evidence into a human decision, the same role the real-data checks played in curating Fort Collins' list.
+
+**Acceptance Criteria:** none yet — this needs its own scoping/design pass (privacy posture, storage choice, retention policy) before acceptance criteria can be written responsibly.
+
 #### FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
 
-**Status:** 📋 Not started
+**Status:** 🔄 In progress (2026-09-09) — list confirmed and written, generation running; Neon publish (AC-3) intentionally not yet run, needs explicit confirmation first (see below)
 
-**Repo:** `city-council-transcriber`.
+**Repo:** `city-council-transcriber` (config/generation); `city-council-transcripts` (rendering, AC-4).
 
 **As a** Fort Collins resident
 **I want** the topics the city cares about (data centers, Flock cameras, etc.) to actually be tracked
 **So that** the topics page isn't empty and hot-issue summaries have something to show
 
-Root cause: `config/cities/fort-collins/interest_areas.json` is `{"schema_version": "2.0.0", "history": [...], "custom": []}` — empty. Zero interest areas configured ⇒ zero generated ⇒ empty topics page. Monterey Park's equivalent is populated (Spending, Barnes Park Pool, Data Centers, Bike Lanes), which is why its topics page works. Note `config/cities/fort-collins/topics.json` is a different, unrelated thing (the generic per-meeting `TopicSummary` taxonomy, not city-level topic rollups).
+Root cause: `config/cities/fort-collins/interest_areas.json` was `{"schema_version": "2.0.0", "history": [...], "custom": []}` — empty. Zero interest areas configured ⇒ zero generated ⇒ empty topics page. Monterey Park's equivalent is populated (Spending, Barnes Park Pool, Data Centers, Bike Lanes), which is why its topics page works. Note `config/cities/fort-collins/topics.json` is a different, unrelated thing (the generic per-meeting `TopicSummary` taxonomy, not city-level topic rollups).
+
+**Also found: Montebello's `interest_areas.json` is equally empty** (`custom: []`), not previously flagged anywhere in the backlog — checked all 4 cities while curating Fort Collins' list, per the user's explicit request. This is a valid, expected starting state per `docs/ADDING_A_CITY.md`/`_template/README.md` (not a bug — "empty `custom` array is OK to start"), not something to fix by inventing a topic list nobody has confirmed. Left as a documented, known gap for whoever curates Montebello next — no fabricated topics added here.
+
+**AC-1, final confirmed list** (resolved with the user before generating, since "a bad list is worse than none"): 2 from direct resident feedback (Data Centers — `global_topic_id: "data_centers"`, reused from Monterey Park/Seattle's shared registry per `config/global_topics.json`; Flock Cameras / Surveillance), 1 from a specific resident-reported siting dispute (Homeless Shelter Siting, Stuart St. area — a church proposed as a shelter; zero corroboration in the transcribed archive as of this date, starts empty and fills in once it reaches a council agenda), 4 found recurring in the real archive while curating (EPIC Gate / Stewart St. Access — 5+ meetings, and *not* the same thing as the Stuart St. shelter dispute despite the similar street name, confirmed by checking actual transcript content rather than assuming; Hughes Site — 6 topic rows/4 meetings; Downtown Parking — 24 topic rows/10 meetings, the single most-discussed recurring theme in the whole archive; Housing Affordability & Zoning), and 2 carried over from the original review notes as lower-confidence/forward-looking (Montava, Poudre River — both lightly corroborated). Written to `config/cities/fort-collins/interest_areas.json`.
+
+**AC-2, the storage-root footgun, fixed rather than worked around.** `scripts/generate_interest_areas.py`'s `--city` flag resolved `storage_base = STORAGE_BASE / args.city` — always the repo-local `storage/` dir (3 meetings for Fort Collins), never consulting `get_storage_root()`/`storage_config.json` (the real archive, 51 meetings). Fixed to call `get_storage_root() / args.city`, matching every other part of the codebase's resolution order — this was a trap for the *next* city too, not just Fort Collins, so fixing the flag was preferred over a one-off workaround invocation.
+
+**Model resolution, learned from this session's earlier gpt-oss-20b drift finding.** `generate_interest_areas.py --provider openai --model openai/gpt-oss-20b` (explicit flags) actually fails — it builds a bare `LLMConfig` with no `base_url`/`api_key`, so the OpenAI-compatible client tries to reach real `api.openai.com` and errors "provider not available." The correct invocation for LM Studio is to let auto-detect run (`detect_available_provider()`, which probes LM Studio's default port and picks up `OPENAI_MODEL` from the environment) rather than pass `--provider`/`--model` explicitly: `OPENAI_MODEL=openai/gpt-oss-20b python3 scripts/generate_interest_areas.py --city fort-collins`. Confirmed Ollama isn't running locally, so auto-detect's Ollama-first check doesn't hijack this onto an unintended provider.
+
+**Timing, measured before committing to the full run.** A single meeting × 9 areas took ~5 minutes against `openai/gpt-oss-20b` locally (measured directly, not estimated) — the full 51-meeting archive is therefore a multi-hour job, running in the background as of this write-up. Spot-checked the single-meeting result before launching the full run: correctly found `housing_affordability_zoning` discussed and all 8 other areas *not* discussed for that meeting — including correctly rejecting `data_centers`, even though that meeting's raw text has both "data" and "centers" as unrelated scattered words (the same token-scatter case documented as a known limitation in `FEAT-SEARCH-SERVERSIDE-SURFACE-001`'s search matching) — real semantic classification, not naive keyword search, correctly avoided the false positive that naive search alone would have made.
 
 **Acceptance Criteria:**
-- [ ] AC-1: `config/cities/fort-collins/interest_areas.json` gains curated areas with descriptions (v2.0.0 schema: `id`, `name`, `description`, `version`, `history`, `global_topic_id`). Starting set from the review session: Data Centers (reuse `global_topic_id: "data_centers"`), Flock Cameras / Surveillance, Homelessness & Shelter Siting, Montava, Poudre River. Confirm the list before generating — a bad list is worse than none.
-- [ ] AC-2: `scripts/generate_interest_areas.py` is run across the full Fort Collins archive. Watch the storage root: `--city fort-collins` (`scripts/generate_interest_areas.py:115-130`) resolves `storage_base = STORAGE_BASE / args.city` where `STORAGE_BASE` is the repo-local `storage/` (`:31`) — it does not consult `get_storage_root()`/`storage_config.json`. The repo-local `storage/fort-collins/` holds only 3 meetings; the real archive is on the external drive (`storage_config.json`'s `storage_root`, `/fort-collins/`, 2025-07 → 2026-09). Either invoke as `CITY=fort-collins python scripts/generate_interest_areas.py --storage "<archive>/fort-collins"` (honors `--storage` when `--city` is unset, `CITY` still drives per-city config loading via `interest_area_summarizer.py:48-64`), or — preferred — make `--city` respect `get_storage_root()` (`src/storage.py:109`) so this doesn't trap the next city. Dry-run first (`--dry-run`).
-- [ ] AC-3: Results published to Neon via `write_interest_areas` (`src/neon_writer.py:594`), verified as `InterestArea` rows with non-null `statusSummary`, and `InterestAreaMeetingStatus` rows for meetings that discussed them.
-- [ ] AC-4: `/co/fort-collins/topics` renders the curated areas, and each `/topics/[slug]` shows a cross-meeting timeline.
-- [ ] AC-5: The runbook for adding a city's interest areas is written down (transcriber's `AGENTS.md` or `docs/`) — this gap silently made Fort Collins look broken and will recur for the next city otherwise.
+- [x] AC-1: `config/cities/fort-collins/interest_areas.json` gains curated areas with descriptions — final list confirmed with the user first (see above).
+- [x] AC-2: `scripts/generate_interest_areas.py --city fort-collins` fixed (storage-root resolution) and running against the full real archive.
+- [ ] AC-3: Results published to Neon via `write_interest_areas` — **deliberately not yet run.** This repo's own `publish` command requires `--prod` to write anywhere (the non-`--prod` default, `DATABASE_URL`, is unset in this repo's `.env` — only `DATABASE_URL_PROD` is configured, pointing at the same real Neon DB backing the live public site), and gates that behind an interactive confirmation prompt the codebase's own authors clearly intended as a stop-and-think point. That's a more consequential, harder-to-reverse action than "run the generator against the archive" (which only writes local files), so it's held for an explicit go-ahead rather than folded into "yes, run it."
+- [ ] AC-4: `/co/fort-collins/topics` renders the curated areas, and each `/topics/[slug]` shows a cross-meeting timeline. Blocked on AC-3.
+- [x] AC-5: The runbook already existed (`docs/ADDING_A_CITY.md`, `config/cities/_template/README.md`) — the original premise that this needed writing from scratch was wrong. Fixed a real, smaller gap instead: the template's schema blurb was stale (missing `schema_version`/per-area `version`/`history`/`global_topic_id`, i.e. describing the v1 shape, not the real v2.0.0 one) and gave no guidance on `global_topic_id` or on confirming a list before generating. Corrected in place rather than duplicating a doc that already existed.
 
 #### FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
 
