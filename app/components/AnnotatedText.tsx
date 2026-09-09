@@ -1,6 +1,6 @@
 import TimestampLink from "./TimestampLink";
 import type { OffsetModel } from "@/app/lib/offset";
-import { isValidRef, type AnnotatedTextRef } from "@/app/lib/citations";
+import { isValidRef, findRefCursor, type AnnotatedTextRef } from "@/app/lib/citations";
 
 export type { AnnotatedTextRef };
 
@@ -41,12 +41,11 @@ export default function AnnotatedText({
     return <span className={className}>{stripLegacyTrailingTag(text)}</span>;
   }
 
-  // Reconstruct the trailing remainder (text after the last citation) by
-  // subtracting every textBefore run's own JS-native length from `text`.
-  // This is JS-side arithmetic on JS strings throughout — no cross-language
-  // offset is ever reused, so UTF-16-vs-code-point indexing never comes up.
-  const consumed = refs.reduce((acc, r) => acc + r.textBefore.length, 0);
-  const remainder = text.slice(consumed);
+  // Cursor-based, not a length-sum — see findRefCursor's docstring
+  // (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001). This is JS-side arithmetic on JS
+  // strings throughout — no cross-language offset is ever reused, so
+  // UTF-16-vs-code-point indexing never comes up.
+  const remainder = text.slice(findRefCursor(text, refs));
 
   return (
     <span className={className}>

@@ -30,6 +30,47 @@ export function isValidRef(r: unknown): r is AnnotatedTextRef {
   );
 }
 
+/**
+ * Walks `refs` in order and locates each one's `textBefore` inside `text`
+ * via a forward-advancing cursor, rather than assuming the refs that
+ * survived `isValidRef` sum to the correct offset on their own
+ * (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001).
+ *
+ * Both extraction functions that produce this JSON (`extract_annotated_text`
+ * and `extract_annotated_text_from_citations` in the transcriber) only add
+ * an entry to `references` when its anchor was actually found, advancing
+ * their own cursor exactly that far -- so under normal operation every
+ * entry that reaches the frontend already has a `textBefore` that starts
+ * exactly where the previous one's ended, and a plain length-sum works. The
+ * gap this guards against is a malformed/legacy `references` blob (a stale
+ * row from a different extraction mechanism, a hand-edited value, or any
+ * future producer that doesn't hold that invariant) where an entry got
+ * silently dropped by `isValidRef` (non-string `textBefore`) while its
+ * neighbors survived: a plain length-sum then desyncs from `text`'s real
+ * offsets, and the remainder slice can either re-render already-shown text
+ * or silently drop a span. Searching for each surviving ref's own
+ * `textBefore` from the running cursor (instead of trusting array order +
+ * length) self-corrects for exactly that gap, since it finds where the text
+ * actually is rather than where a naive sum assumes it is.
+ *
+ * Returns the offset immediately after the last ref's match -- i.e. where
+ * the final remainder should start.
+ */
+export function findRefCursor(text: string, refs: AnnotatedTextRef[]): number {
+  let cursor = 0;
+  for (const ref of refs) {
+    const idx = text.indexOf(ref.textBefore, cursor);
+    // If even a defensive forward search can't locate this chunk (the
+    // stored JSON is inconsistent with `text` itself -- not just missing an
+    // entry, but actively wrong), fall back to treating it as adjacent to
+    // whatever's already consumed. That reproduces the old
+    // best-effort-but-can-drift behavior for this one ref only, rather than
+    // losing track of every ref after it too.
+    cursor = (idx === -1 ? cursor : idx) + ref.textBefore.length;
+  }
+  return cursor;
+}
+
 /** Formats a seconds offset as "m:ss" (or "h:mm:ss" past an hour). */
 export function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -56,12 +97,9 @@ export function annotateTextPlain(text: string, references: unknown): string {
   const refs = Array.isArray(references) ? references.filter(isValidRef) : [];
   if (refs.length === 0) return text;
 
-  // Same consumed-length reconstruction as AnnotatedText.tsx — see that
-  // file's comment. Shares its known edge case (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001):
-  // a reference dropped by isValidRef (non-string textBefore) still needs
-  // its length accounted for here, which this doesn't handle either.
-  const consumed = refs.reduce((acc, r) => acc + r.textBefore.length, 0);
-  const remainder = text.slice(consumed);
+  // Cursor-based, not a length-sum — see findRefCursor's docstring
+  // (FIX-ANNOTATEDTEXT-REMAINDER-DUP-001).
+  const remainder = text.slice(findRefCursor(text, refs));
 
   let out = "";
   for (const ref of refs) {

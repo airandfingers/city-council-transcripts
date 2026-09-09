@@ -21,8 +21,31 @@
 - 📋 US-REEL-001 — Auto-generated highlight clips
 - 📋 US-REEL-002 — Shareable / embeddable clip pages
 - 📋 US-REEL-003 — Social-ready clip exports
+- ✅ FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — Cursor-based (not length-sum) remainder reconstruction in `AnnotatedText`/`annotateTextPlain`, so a `references` entry dropped by `isValidRef` can't desync the remainder slice and re-render already-shown text
 
 ## Active Stories
+
+### FIX-ANNOTATEDTEXT-REMAINDER-DUP-001 — A dropped/malformed reference can make text render twice
+
+**Status:** ✅ Done
+
+**Origin:** flagged in the Aaron Fort Collins review plan as a possible contributor to his "TL;DR and Summary repeat each other" complaint — worth checking before assuming that's purely the TL;DR/Summary/Timeline tier-overlap design issue (`FEAT-MEETING-TIER-DEDUP-001`, parked). Also flagged as this citation redesign's own known edge case in `app/lib/citations.ts`'s comment (added in PR #63, `FIX-CITATION-BRACKET-LEAK-001`'s frontend companion).
+
+**As a** resident reading a meeting summary
+**I want** the same sentence to never appear twice in one paragraph
+**So that** the page reads as intentional prose, not a rendering glitch
+
+**Root cause:** `AnnotatedText.tsx` and `annotateTextPlain` (`app/lib/citations.ts`) both reconstructed the trailing remainder as `text.slice(consumed)`, where `consumed = refs.reduce((acc, r) => acc + r.textBefore.length, 0)` — the sum of the *surviving* refs' own lengths, after `references.filter(isValidRef)` (which only checks `typeof textBefore === "string"`). If any entry in the stored `references` JSON is dropped by that filter while its neighbors survive, the length-sum silently desyncs from `text`'s real offsets: the surviving refs' `textBefore` values are still authored as *their own* individual spans (not shifted to account for the gap), so the sum under-counts by exactly the dropped entry's length, and slicing `text` at that under-counted offset lands mid-span — re-emitting a chunk of already-rendered text as part of the "remainder." Reproduced with a minimal 3-citation example (dropped middle entry): old code rendered `" seconded the motion. Remainder text here."` where `"seconded the motion."` duplicates text from the just-rendered citation above it.
+
+**Scope note, stated plainly:** both current backend extraction functions (`extract_annotated_text`/`extract_annotated_text_from_citations` in `city-council-transcriber/src/summarizer.py`) only add an entry to `references` when its citation was actually located, advancing their own cursor exactly that far — so in normal operation, every entry that reaches the frontend already satisfies the "runs-in-JSON" invariant on its own, and the old length-sum was harmless. This fix is a defensive correctness fix against malformed/legacy `references` data (a stale row from a different mechanism, a hand-edited value, or any future producer that doesn't hold the invariant), not a fix for a bug reproduced against real production data. It is *not* the root cause of Aaron's TL;DR/Summary repetition complaint — that remains attributed to the tier-design overlap tracked in the parked `FEAT-MEETING-TIER-DEDUP-001`.
+
+**Fixed:** new `findRefCursor(text, refs)` in `app/lib/citations.ts` — walks `refs` in order, locating each one's `textBefore` via `text.indexOf(ref.textBefore, cursor)` from a running cursor (rather than trusting array order + length), so a gap from any dropped entry self-corrects instead of compounding. Falls back to treating an unfindable chunk as adjacent to the current cursor (best-effort, matching the old behavior for that one ref only) rather than losing track of everything after it. Used by both `AnnotatedText.tsx` (JSX) and `annotateTextPlain` (plain-string) — the two consumers shared the identical bug, so both needed the same fix.
+
+**Acceptance Criteria:**
+- [x] AC-1: `consumed` is derived from an explicit cursor advanced during traversal, not a blind length-sum over the array that survived filtering.
+- [x] AC-2: A malformed/dropped ref cannot cause text to render twice — verified via a standalone reproduction (see "Root cause" above): old code duplicated `"seconded the motion."`, new code produces the correct, non-duplicated remainder. (This repo has no test runner configured — no `jest`/`vitest` in `package.json` — so verification is `npx tsc --noEmit` + `npm run lint` + `npm run build`, all clean, plus this reproduction script run directly under `node`, not committed.)
+
+**Files Modified:** `app/lib/citations.ts` (new `findRefCursor`, used by `annotateTextPlain`), `app/components/AnnotatedText.tsx` (same fix, JSX path).
 
 ### FEAT-ADMIN-DIGEST-SUBSCRIBER-SUMMARY-001 — Weekly subscriber-count summary in the admin digest
 
