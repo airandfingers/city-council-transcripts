@@ -42,15 +42,22 @@ export default async function TopicsIndexPage({ params }: Props) {
   // area.meetings is already ordered date-desc (see getInterestAreasForCity's
   // orderBy), so [0] is the most recent discussed meeting — the "last
   // updated" signal TopicsFilter's default sort uses.
+  //
+  // discussedCount was previously recomputed here as a client-visible
+  // confidence >= 0.5 filter over area.meetings — a second, independent
+  // definition of "discussed" from the detail page's area.meetingsDiscussed
+  // (the DB's own precomputed count), so the two pages could show different
+  // numbers for the same topic (FIX-INTERESTAREA-COUNT-CONSISTENCY-001).
+  // Now both pages render the same DB field, coalesced to 0 (matching the
+  // detail page's `!== null` gate: TopicsFilter only renders the count when
+  // it's > 0, so a null/0 area shows no count on either page).
   const topics = areas.map((area) => ({
     id: area.id,
     slug: area.slug,
     name: area.name,
     statusSummary: area.statusSummary,
     mostRecentActivity: area.mostRecentActivity,
-    discussedCount: area.meetings.filter(
-      (m) => m.confidence !== null && (m.confidence ?? 0) >= 0.5
-    ).length,
+    discussedCount: area.meetingsDiscussed ?? 0,
     lastDate: area.meetings[0]?.date ?? null,
   }));
 
