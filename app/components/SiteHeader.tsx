@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { CityNavEntry } from "@/app/lib/cityData";
+import { useCityNavOverride } from "@/app/components/CityNavContext";
 
 // Mirrors app/lib/cityData.ts's isValidStateCode/isValidSlug (not exported
 // from there — this is a URL-shape heuristic for nav purposes, not input
@@ -51,10 +52,21 @@ export default function SiteHeader() {
   }, []);
 
   const cityMatch = pathname.match(CITY_PATH_RE);
-  const cityHref = cityMatch ? `/${cityMatch[1]}/${cityMatch[2]}` : null;
-  const currentCity = cityMatch
+  const pathCityHref = cityMatch ? `/${cityMatch[1]}/${cityMatch[2]}` : null;
+  const pathCurrentCity = cityMatch
     ? cities.find((c) => c.stateCode === cityMatch[1] && c.slug === cityMatch[2])
     : undefined;
+
+  // Pages whose URL doesn't encode a city (e.g. /transcripts/{slug}) can
+  // register one via useSetCurrentCity/CityNavContext; only honor it once
+  // `cities` has loaded (so the switcher isn't rendered with an empty
+  // list) and while it's still for the route currently rendering, so a
+  // stale value from a page navigated away from never leaks in.
+  const override = useCityNavOverride();
+  const overrideActive = cities.length > 0 && override?.pathname === pathname;
+
+  const cityHref = pathCityHref ?? (overrideActive ? `/${override!.city.stateCode}/${override!.city.slug}` : null);
+  const currentCity = pathCurrentCity ?? (overrideActive ? override!.city : undefined);
 
   const links = [
     { label: "Cities", href: "/", active: pathname === "/", divider: false },

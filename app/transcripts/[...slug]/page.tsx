@@ -17,6 +17,7 @@ import AIDisclaimer from "@/app/components/AIDisclaimer";
 import TimestampLink from "@/app/components/TimestampLink";
 import AnnotatedText from "@/app/components/AnnotatedText";
 import UnreviewedTranscriptNotice from "@/app/components/UnreviewedTranscriptNotice";
+import RegisterCurrentCity from "@/app/components/RegisterCurrentCity";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
 import type { GroupedLine } from "@/app/lib/transcript";
@@ -103,11 +104,12 @@ export default async function TranscriptPage({ params }: Props) {
   const meeting = await prisma.meeting.findUnique({
     where: { slug },
     include: {
-      // Only id/stateCode/slug/name are rendered (breadcrumb + subscribe
-      // form); City.summary and recentMeetingsSummary are @db.Text and
-      // unused here — dropping them avoids re-shipping city-wide prose on
-      // every transcript-page hit.
-      city: { select: { id: true, stateCode: true, slug: true, name: true } },
+      // id/stateCode/slug/name/stateName are rendered (breadcrumb, header
+      // city switcher via RegisterCurrentCity, subscribe form);
+      // City.summary and recentMeetingsSummary are @db.Text and unused
+      // here — dropping them avoids re-shipping city-wide prose on every
+      // transcript-page hit.
+      city: { select: { id: true, stateCode: true, slug: true, name: true, stateName: true } },
       lines: {
         orderBy: { lineIndex: "asc" },
         select: {
@@ -385,6 +387,11 @@ export default async function TranscriptPage({ params }: Props) {
 
   return (
     <main className="min-h-screen p-8">
+      {/* Tells the persistent header (SiteHeader) which city this page
+          belongs to — its URL alone doesn't encode one, see the city
+          field's select comment above. */}
+      <RegisterCurrentCity city={meeting.city} />
+
       <div className="flex items-center gap-3 mb-8 flex-wrap">
         {/* City breadcrumb */}
         <Link

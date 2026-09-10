@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
 import SiteHeader from "@/app/components/SiteHeader";
+import { CityNavProvider } from "@/app/components/CityNavContext";
 import "./globals.css";
 
 const inter = Inter({
@@ -37,8 +38,10 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${newsreader.variable} antialiased`}
       >
-        <SiteHeader />
-        {children}
+        <CityNavProvider>
+          <SiteHeader />
+          {children}
+        </CityNavProvider>
       </body>
     </html>
   );
