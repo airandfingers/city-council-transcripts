@@ -177,7 +177,7 @@ export default function TranscriptViewer({
   // Render
   // ---------------------------------------------------------------
   return (
-    <section className="order-2 lg:order-1 lg:col-span-1 flex flex-col max-h-[750px] min-h-0">
+    <section className="flex flex-col max-h-[750px] min-h-0">
       {/* Auto-scroll toggle, left-aligned above the transcript content. */}
       <div className="mb-4 shrink-0">
         <label className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 select-none">
