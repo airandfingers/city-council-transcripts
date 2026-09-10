@@ -122,9 +122,26 @@ export async function POST(req: Request) {
     });
   }
 
+  // City.stateCode is always stored lowercase (see src/neon_writer.py's
+  // `state_code = state_code.lower()` at every write site — "to match the
+  // web app's URL scheme"), but every config/cities/<slug>/city.json's own
+  // `state_code` field is uppercase ("CO", "CA", "WA") and gets passed
+  // through here unnormalized by every city that calls this route (verified
+  // live: a real production Fort Collins publish sweep 404'd here on
+  // "CO" vs "co", silently skipping cache invalidation for the city/topics
+  // pages — not a Fort-Collins-specific bug, every city.json uses the same
+  // uppercase convention). Normalize once and use it everywhere below —
+  // `revalidateCityPaths`/`revalidateCityTranscriptPaths` need the lowercase
+  // form too: the former builds the literal `/co/fort-collins`-shaped path
+  // `revalidatePath` matches against (uppercase would silently invalidate a
+  // path nothing ever renders at), and the latter calls
+  // `getMeetingSlugsForCity`, whose `isValidStateCode` guard requires
+  // lowercase and silently returns `[]` — zero transcript pages revalidated
+  // — on anything else, rather than erroring.
   const { city_state_code, city_slug } = parsed.data;
+  const stateCode = city_state_code.toLowerCase();
   const city = await prisma.city.findUnique({
-    where: { stateCode_slug: { stateCode: city_state_code, slug: city_slug } },
+    where: { stateCode_slug: { stateCode, slug: city_slug } },
     select: { id: true },
   });
 
@@ -132,7 +149,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "City not found" }, { status: 404 });
   }
 
-  const cityPaths = revalidateCityPaths(city_state_code, city_slug);
-  const transcriptPaths = await revalidateCityTranscriptPaths(city_state_code, city_slug);
+  const cityPaths = revalidateCityPaths(stateCode, city_slug);
+  const transcriptPaths = await revalidateCityTranscriptPaths(stateCode, city_slug);
   return NextResponse.json({ ok: true, revalidated: [...cityPaths, ...transcriptPaths] });
 }
