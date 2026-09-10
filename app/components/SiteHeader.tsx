@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { CityNavEntry } from "@/app/lib/cityData";
 
@@ -137,8 +137,19 @@ function CitySwitcher({
   cities: CityNavEntry[];
   currentCity: CityNavEntry;
 }) {
+  const pathname = usePathname();
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  // <details> is uncontrolled, and SiteHeader persists across client-side
+  // navigations (it lives in the root layout), so picking a city updates
+  // the URL without remounting this element — left alone, the dropdown
+  // would stay open after navigating. Close it whenever the route changes.
+  useEffect(() => {
+    if (detailsRef.current) detailsRef.current.open = false;
+  }, [pathname]);
+
   return (
-    <details className="relative group">
+    <details ref={detailsRef} className="relative group">
       <summary
         className="list-none flex items-center gap-1 cursor-pointer font-display font-semibold text-lg tracking-tight text-gray-900 dark:text-gray-100 select-none [&::-webkit-details-marker]:hidden"
       >
