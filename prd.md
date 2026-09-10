@@ -31,7 +31,7 @@
 - ✅ FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" digest copy corrected to match what `agendaLastFetchedAt` actually proves (investigated the write path across both repos; found a real, narrower gap than the plan suspected)
 - 📋 FEAT-SEARCH-CLICK-ANALYTICS-001 — Usage analytics (search queries, page/topic clicks) to drive future topic curation — backlog write-up only, zero analytics infra exists today, real privacy/storage questions unresolved
 - ✅ FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas (9 areas curated, generated across all 51 meetings, published to production Neon — 459 status rows, 0 skipped — and live-verified on `/co/fort-collins/topics`; also found Montebello's list is equally empty, documented not fabricated)
-- 📋 FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
+- ✅ FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page (new narrow `getInterestAreaSummariesForCity` query + shared `TopicCard` component; verified live against real Fort Collins production data, all 5 ACs)
 - ✅ FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
 - ✅ FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup (verified live against the real Fort Collins Sept 1, 2026 meeting page)
 - ✅ FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
@@ -609,20 +609,31 @@ Root cause: `config/cities/fort-collins/interest_areas.json` was `{"schema_versi
 
 #### FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
 
-**Status:** 📋 Not started
+**Status:** ✅ Done (2026-09-09) — verified live against real Fort Collins production data.
 
 **As a** Fort Collins resident visiting the city page
 **I want** to immediately see what the hot issues are (data centers, Flock cameras) with a one-line summary
 **So that** I don't have to dig through every meeting to find out what's being discussed
 
-`app/[state]/[city]/page.tsx` renders: h1 → `recentMeetingsSummary` card (`:71-80`) → city summary (`:101`) → `SubscribeForm` (`:103-109`) → Meetings section (`:111-121`) → `AIDisclaimer`. It never calls `getInterestAreasForCity` and contains zero links to `/topics` — neither does `MeetingCard.tsx` or `CityCard.tsx`. The only entry point is the header tab (`SiteHeader.tsx:64-69`), which renders only once already inside a city — which is why the topics nav shipped in prior PRs but the user still never found it.
+`app/[state]/[city]/page.tsx` never called `getInterestAreasForCity` and contained zero links to `/topics` — neither did `MeetingCard.tsx` or `CityCard.tsx`. The only entry point was the header tab, which renders only once already inside a city — which is why the topics nav shipped in prior PRs but the user still never found it.
+
+**Fixed:**
+- New `getInterestAreaSummariesForCity(stateCode, citySlug, limit)` in `app/lib/cityData.ts` — a narrow sibling of `getInterestAreasForCity`, not a narrowing of it in place (the `/topics` listing page depends on that function's full `meetings[]` join for its own sort). Filters `meetingsDiscussed: { gt: 0 }` and caps `take: limit` in the query itself (SQL `orderBy` before `take`, deterministic, curated `sortOrder` preserved), joining only a single most-recent discussed-meeting date per area (`take: 1`) instead of full per-meeting history.
+- New shared `app/components/TopicCard.tsx`, extracted from `TopicsFilter.tsx`'s previously-inline card markup — no `"use client"` (both `HighlightedText` and `formatMeetingDate` are server-safe), so the city page renders it with zero added client JS. `headingLevel` prop (`2` default, `3` on the city page) keeps a valid heading outline in both contexts. `TopicsFilter.tsx` now consumes it instead of duplicating markup; `/topics` listing page needed no changes at all.
+- New "What's being talked about" block in `app/[state]/[city]/page.tsx`, inserted between the recent-activity card and the city summary paragraph. Fetched via the page's existing `Promise.all`, capped at 5 by curated `sortOrder`.
 
 **Acceptance Criteria:**
-- [ ] AC-1: A "What's being talked about" block on the city page, inserted after the recent-activity card (`page.tsx:80`). Each entry: topic name, one-line `statusSummary`, `meetingsDiscussed`/`mostRecentActivity`, linking to `/topics/[slug]`. Ends with a "See all topics →" link — the city page's first path into `/topics`.
-- [ ] AC-2: Reuses the existing `getInterestAreasForCity` (`app/lib/cityData.ts:322-390`) added to the `Promise.all` at `page.tsx:50-53`, with a narrowed select (it currently returns the full meeting-status join).
-- [ ] AC-3: Curation is expressed through the existing `InterestArea.sortOrder` (and `source`) columns, set upstream from config. No schema change.
-- [ ] AC-4: Cities with no interest areas (every city before `FEAT-FORTCOLLINS-INTEREST-AREAS-001`-style work runs for them) render nothing — no empty shell.
-- [ ] AC-5: Revalidation — `app/api/revalidate/route.ts:60` revalidates the city path and `/topics` but nothing triggers it on interest-area writes, and the city page is `revalidate = false` (`page.tsx:18-29`). Either the transcriber's interest-area write calls revalidate, or the block gets a time-based revalidate. Same known gap documented at `topics/[slug]/page.tsx:11-17`.
+- [x] AC-1: "What's being talked about" block: topic name, one-line `statusSummary`, meeting count + most-recent date, `mostRecentActivity`, linking to `/[state]/[city]/topics/[slug]` (not a bare `/topics/[slug]` — corrected from an earlier draft's wrong route assumption). Ends with a "See all topics →" link.
+- [x] AC-2: New narrow sibling query function (see above) rather than reusing/narrowing `getInterestAreasForCity` in place, added to the page's `Promise.all`.
+- [x] AC-3: Curation expressed through the existing `InterestArea.sortOrder`/`source` columns — no schema change.
+- [x] AC-4: Cities with no interest areas render nothing. Verified live: Montebello (`ca/montebello`, zero interest areas as of this date) shows no block, no heading, no placeholder — confirmed via direct DOM query, not just eyeballed.
+- [x] AC-5: Revalidation — **no gap, confirmed by reading both sides of the pipe.** `app/api/revalidate/route.ts`'s city-level branch already revalidates the city page path itself via `revalidateCityPaths`, and `city-council-transcriber/src/publish.py` calls that unconditionally after every publish sweep that writes interest areas. This was already fixed as a side effect of this session's earlier, unrelated revalidate case-sensitivity bug fix — no new plumbing needed.
+
+**Verified live** against real Fort Collins production data (read-only `DATABASE_URL` against production Neon, per this session's established pattern): queried the expected answer first (5 of 9 areas have `meetingsDiscussed > 0`, by `sortOrder`: Data Centers, Flock Cameras / Surveillance, EPIC Gate / Stewart St. Access, Hughes Site, Downtown Parking), then confirmed the rendered page matches exactly — names, order, and link targets. Regression-checked `/co/fort-collins/topics` itself (search highlighting, all 3 sorts, all 3 filters) since `TopicsFilter.tsx` was touched — all unregressed. Checked dark mode and a 390px mobile viewport. `npx tsc --noEmit`, `npx eslint`, and `npm run build` all clean.
+
+**Pre-existing, out-of-scope observation:** Fort Collins' Data Centers area's `mostRecentActivity` field is a raw meeting slug (`2026-08-25/city-council-work-session`) rather than a human-readable description — confirmed this already renders identically on the live, unmodified `/topics` page today, so it's a transcriber-side generation data-quality issue, not a regression from this story. Not fixed here.
+
+**Files Modified:** `app/lib/cityData.ts`, `app/components/TopicCard.tsx` (new), `app/components/TopicsFilter.tsx`, `app/[state]/[city]/page.tsx`.
 
 #### FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
 

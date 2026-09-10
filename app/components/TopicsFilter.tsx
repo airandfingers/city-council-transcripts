@@ -1,22 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { formatMeetingDate } from "@/app/lib/formatDate";
 import { tokenizeQuery, matchesAllTokens } from "@/app/lib/search";
-import HighlightedText from "./HighlightedText";
+import TopicCard, { type TopicCardData } from "./TopicCard";
 
-export type TopicCardData = {
-  id: number;
-  slug: string;
-  name: string;
-  statusSummary: string | null;
-  mostRecentActivity: string | null;
-  discussedCount: number;
-  /** Date of the most recent meeting that discussed this topic, or null
-   * for a topic with no discussed-meeting record yet. */
-  lastDate: Date | null;
-};
+export type { TopicCardData };
 
 type SortOrder = "updated" | "name" | "meetings";
 type ActivityFilter = "all" | "active" | "no-activity";
@@ -120,42 +108,7 @@ export default function TopicsFilter({
       ) : (
         <ul className="space-y-4">
           {filtered.map((topic) => (
-            <li key={topic.id}>
-              <Link
-                href={`${cityHref}/topics/${topic.slug}`}
-                className="block rounded-lg border border-gray-200 dark:border-gray-700 p-5 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h2 className="font-semibold text-lg leading-tight mb-1">
-                      <HighlightedText text={topic.name} tokens={tokens} />
-                    </h2>
-                    {topic.statusSummary && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                        <HighlightedText text={topic.statusSummary} tokens={tokens} />
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-right shrink-0 text-sm text-gray-500 dark:text-gray-400">
-                    {topic.discussedCount > 0 && (
-                      <div>
-                        {topic.discussedCount} meeting{topic.discussedCount !== 1 ? "s" : ""}
-                      </div>
-                    )}
-                    {topic.lastDate && (
-                      <div>
-                        {formatMeetingDate(topic.lastDate, { month: "short", year: "numeric" })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {topic.mostRecentActivity && (
-                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                    Last activity: <HighlightedText text={topic.mostRecentActivity} tokens={tokens} />
-                  </p>
-                )}
-              </Link>
-            </li>
+            <TopicCard key={topic.id} topic={topic} cityHref={cityHref} tokens={tokens} />
           ))}
         </ul>
       )}
