@@ -39,6 +39,20 @@ export type InterestAreaWithMeetings = {
   meetings: InterestAreaMeetingEntry[];
 };
 
+/** Narrow projection for the city page's hot-topics block
+ * (FEAT-CITY-HOT-TOPICS-001) — no per-meeting detail beyond the single
+ * most-recent discussed date. Deliberately not InterestAreaWithMeetings,
+ * which requires the full meetings[] join. */
+export type InterestAreaSummary = {
+  id: number;
+  slug: string;
+  name: string;
+  statusSummary: string | null;
+  meetingsDiscussed: number | null;
+  mostRecentActivity: string | null;
+  lastDate: Date | null;
+};
+
 /**
  * Validates that a string is a valid slug format.
  * Valid slugs contain lowercase letters, numbers, hyphens, and underscores
@@ -521,6 +535,70 @@ export async function getInterestAreasForCity(
       timecodeLabel: s.timecodeLabel,
       videoProvider: s.meeting.videoProvider,
     })),
+  }));
+}
+
+/**
+ * Narrow, capped projection of a city's interest areas for the city page's
+ * hot-topics block (FEAT-CITY-HOT-TOPICS-001): only areas actually
+ * discussed in a meeting, in curated sortOrder, capped at `limit`.
+ *
+ * Deliberately a sibling of getInterestAreasForCity rather than a
+ * narrowing of it: topics/page.tsx reads area.meetings[0].date off that
+ * function's full meetingStatuses join, so it can't be narrowed in place.
+ * This one joins a single status row per area (take: 1, date only)
+ * instead of the whole history — ~5 rows for a capped city page vs.
+ * dozens/hundreds for the full listing — keeping the shared TopicCard's
+ * right-rail date without the egress (cf. FIX-NEON-EGRESS-CLIENT-001).
+ *
+ * `meetingsDiscussed: { gt: 0 }` excludes NULL as well as 0 in Prisma, so
+ * a freshly-curated, never-discussed area (e.g. a contested-siting area
+ * with zero corroboration yet) is filtered out automatically.
+ *
+ * @returns Areas ordered by curated sortOrder, capped at `limit`. Empty
+ * array if the city has no interest areas, none with real activity yet,
+ * or inputs are invalid.
+ */
+export async function getInterestAreaSummariesForCity(
+  stateCode: string,
+  citySlug: string,
+  limit = 5,
+): Promise<InterestAreaSummary[]> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
+    return [];
+  }
+
+  const areas = await prisma.interestArea.findMany({
+    where: {
+      city: { stateCode, slug: citySlug },
+      meetingsDiscussed: { gt: 0 },
+    },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      statusSummary: true,
+      meetingsDiscussed: true,
+      mostRecentActivity: true,
+      meetingStatuses: {
+        where: { discussed: true },
+        orderBy: { meeting: { date: "desc" } },
+        take: 1,
+        select: { meeting: { select: { date: true } } },
+      },
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    take: limit,
+  });
+
+  return areas.map((a) => ({
+    id: a.id,
+    slug: a.slug,
+    name: a.name,
+    statusSummary: a.statusSummary,
+    meetingsDiscussed: a.meetingsDiscussed,
+    mostRecentActivity: a.mostRecentActivity,
+    lastDate: a.meetingStatuses[0]?.meeting.date ?? null,
   }));
 }
 

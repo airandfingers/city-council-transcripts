@@ -6,10 +6,12 @@ import {
   getMeetingsForCity,
   getLatestMeetingSummary,
   getUpcomingMeetingSlugs,
+  getInterestAreaSummariesForCity,
 } from "@/app/lib/cityData";
 import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
 import MeetingCard from "@/app/components/MeetingCard";
+import TopicCard from "@/app/components/TopicCard";
 import type { MeetingCardData } from "@/app/lib/cityData";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
@@ -51,9 +53,13 @@ export default async function CityPage({ params }: Props) {
     notFound();
   }
 
-  const [meetings, latestMeeting] = await Promise.all([
+  const [meetings, latestMeeting, hotTopics] = await Promise.all([
     getMeetingsForCity(state, citySlug),
     getLatestMeetingSummary(state, citySlug),
+    // FEAT-CITY-HOT-TOPICS-001: 5 is the product cap for this block; the
+    // "See all topics →" link covers the rest. Zero-activity areas are
+    // excluded by the query itself, not filtered here.
+    getInterestAreaSummariesForCity(state, citySlug, 5),
   ]);
 
   // Upcoming meetings stay in the same filterable list as everything
@@ -100,6 +106,49 @@ export default async function CityPage({ params }: Props) {
             </span>
           </Link>
         )
+      )}
+
+      {/* Hot topics: distinct from the /topics listing page (all curated
+          areas, sortable/filterable) — this is a compact, curated-order
+          preview of the ones with real activity, so a visitor sees what's
+          actually being discussed without leaving the city page.
+          FEAT-CITY-HOT-TOPICS-001. Renders nothing when the city has no
+          interest areas yet, or none with real activity — see
+          getInterestAreaSummariesForCity's `meetingsDiscussed: { gt: 0 }`
+          filter. */}
+      {hotTopics.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-2xl font-semibold mb-1">
+            What&rsquo;s being talked about
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Ongoing issues tracked across {cityData.name} city council meetings.
+          </p>
+          <ul className="space-y-4 max-w-3xl">
+            {hotTopics.map((topic) => (
+              <TopicCard
+                key={topic.id}
+                topic={{
+                  id: topic.id,
+                  slug: topic.slug,
+                  name: topic.name,
+                  statusSummary: topic.statusSummary,
+                  mostRecentActivity: topic.mostRecentActivity,
+                  discussedCount: topic.meetingsDiscussed ?? 0,
+                  lastDate: topic.lastDate,
+                }}
+                cityHref={`/${state}/${citySlug}`}
+                headingLevel={3}
+              />
+            ))}
+          </ul>
+          <Link
+            href={`/${state}/${citySlug}/topics`}
+            className="inline-block mt-3 text-xs text-blue-500 dark:text-blue-400"
+          >
+            See all topics →
+          </Link>
+        </section>
       )}
 
       <p className="mb-8 text-gray-700 dark:text-gray-300 max-w-prose">{cityData.summary}</p>
