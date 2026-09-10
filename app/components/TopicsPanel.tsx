@@ -76,9 +76,14 @@ export default function TopicsPanel({
     <TabbedPanel
       tabs={tabs}
       heading={heading}
-      // Fixed-height, scrollable content on desktop so the TL;DR stays compact;
-      // natural height on mobile where vertical space is cheaper.
-      contentClassName="md:h-[220px] md:overflow-y-auto pr-1"
+      // FIX-MEETING-LAYOUT-ALIGNMENT-001 AC-2: a *max*-height cap, not a
+      // fixed height — a fixed height forced the TL;DR grid cell next to
+      // this one to stretch to match it even when the active tab (often
+      // Timeline, only a handful of bullets) needed far less room, leaving
+      // a large blank gap under a short TL;DR. A long tab still scrolls
+      // instead of growing the row without bound; natural height on mobile,
+      // where vertical space is cheaper than horizontal.
+      contentClassName="md:max-h-[320px] md:overflow-y-auto pr-1"
     />
   );
 }

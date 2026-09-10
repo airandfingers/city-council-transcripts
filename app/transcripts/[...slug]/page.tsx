@@ -370,6 +370,12 @@ export default async function TranscriptPage({ params }: Props) {
     ?? (meeting.youtubeUrl ? "youtube" : null)
     ?? (meeting.granicusUrl ? "granicus" : null)
     ?? null;
+  // Both fields are required for the player to actually render below
+  // (FEAT-VIDEO-POSTER-001 found rows with a bare videoUrl and no
+  // videoProvider) — used to size the Video/Documents row
+  // (FIX-MEETING-LAYOUT-ALIGNMENT-001 AC-3) so a missing video doesn't
+  // leave a dead grid column.
+  const hasVideo = Boolean(videoUrl && videoProvider);
 
   // Timestamp-seeking offset model — only meaningful for YouTube right now.
   const offsetModel = resolveOffsetModel(
@@ -461,7 +467,7 @@ export default async function TranscriptPage({ params }: Props) {
           PoC feedback: "we always want to put the TLDR at the top." */}
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-        <section className="p-6">
+        <section>
           <h2 className="text-2xl font-semibold mb-4">TL;DR</h2>
           {meeting.logline ? (
             <div className="space-y-2">
@@ -502,7 +508,7 @@ export default async function TranscriptPage({ params }: Props) {
           )}
         </section>
 
-        <section className="p-6">
+        <section>
           <TopicsPanel topics={topics} heading="" offsetModel={offsetModel} />
         </section>
       </div>
@@ -688,29 +694,14 @@ export default async function TranscriptPage({ params }: Props) {
         )}
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Full transcript: kept as a reference, not the first thing
-              people read. Collapsed by default — "the transcript is
-              good proof of what happened, but no one is going to read
-              the whole thing." */}
-          <details id="full-transcript" className="lg:col-span-1 group">
-            <summary className="cursor-pointer text-2xl font-semibold mb-4 list-none flex items-center gap-2 flex-wrap">
-              <span aria-hidden="true" className="text-base text-gray-400 group-open:rotate-90 transition-transform inline-block">▶</span>
-              Transcript
-              {!meeting.transcriptReviewed && (
-                <UnreviewedTranscriptNotice meetingId={meeting.id} />
-              )}
-            </summary>
-            <TranscriptViewer
-              groupedLines={groupedLines}
-              offsetModel={offsetModel}
-              titleByUuid={titleByUuid}
-            />
-          </details>
-
+      {/* Video + Documents: the two things people actually come here for.
+          lg:grid-cols-2 only when there's a video to show -- otherwise
+          Documents alone fills the row instead of leaving a dead second
+          column next to it (FIX-MEETING-LAYOUT-ALIGNMENT-001 AC-3). */}
+      <div className={`grid grid-cols-1 ${hasVideo ? "lg:grid-cols-2" : ""} gap-8 mb-10`}>
           {/* Video */}
           {videoUrl && videoProvider && (
-            <section className="lg:col-span-1 min-w-0">
+            <section className="min-w-0">
               <h2 id="video" className="text-2xl font-semibold mb-4">Video</h2>
               {/* VideoPlayer uses useSearchParams() (offset-model query-param
                   overrides). Client hooks like this require a Suspense
@@ -736,7 +727,7 @@ export default async function TranscriptPage({ params }: Props) {
               inline-citation JSON powering AnnotatedText) -- unrelated
               "reference" with the same name, never itself labeled in the
               UI (AC-3). */}
-          <section id="reference" className="lg:col-span-1">
+          <section id="reference">
             <h2 className="text-2xl font-semibold mb-4">Documents &amp; Minutes</h2>
             <DocumentsPanel
               minutesText={meeting.minutesText}
@@ -785,6 +776,30 @@ export default async function TranscriptPage({ params }: Props) {
             />
           </section>
         </div>
+
+        {/* Full transcript: kept as a reference, not the first thing people
+            read. Collapsed by default — "the transcript is good proof of
+            what happened, but no one is going to read the whole thing."
+            Full-width and below Video/Documents (not a 3rd grid column
+            beside them, FIX-MEETING-LAYOUT-ALIGNMENT-001 AC-3) -- a
+            collapsed one-line summary stretched to match a much taller
+            sibling column left a large dead-looking gap under it, and an
+            *expanded* transcript reads better at full page width than
+            squeezed into a third of it. */}
+        <details id="full-transcript" className="group">
+          <summary className="cursor-pointer text-2xl font-semibold mb-4 list-none flex items-center gap-2 flex-wrap">
+            <span aria-hidden="true" className="text-base text-gray-400 group-open:rotate-90 transition-transform inline-block">▶</span>
+            Transcript
+            {!meeting.transcriptReviewed && (
+              <UnreviewedTranscriptNotice meetingId={meeting.id} />
+            )}
+          </summary>
+          <TranscriptViewer
+            groupedLines={groupedLines}
+            offsetModel={offsetModel}
+            titleByUuid={titleByUuid}
+          />
+        </details>
       </VideoSyncProvider>
 
       <AIDisclaimer />

@@ -30,10 +30,10 @@
 - 🚫 FIX-EXTERNAL-VIDEO-LABEL-001 — Label external video links (e.g. FCTV) and note VPN blocking (on hold by user decision — needs a per-city source-name design choice first)
 - ✅ FIX-STALE-AGENDA-PREDICATE-001 — "Agenda fetch looks stuck" digest copy corrected to match what `agendaLastFetchedAt` actually proves (investigated the write path across both repos; found a real, narrower gap than the plan suspected)
 - 📋 FEAT-SEARCH-CLICK-ANALYTICS-001 — Usage analytics (search queries, page/topic clicks) to drive future topic curation — backlog write-up only, zero analytics infra exists today, real privacy/storage questions unresolved
-- 🔄 FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas (list confirmed + generation running; Neon publish held for explicit confirmation — also found Montebello's list is equally empty, documented not fabricated)
+- ✅ FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas (9 areas curated, generated across all 51 meetings, published to production Neon — 459 status rows, 0 skipped — and live-verified on `/co/fort-collins/topics`; also found Montebello's list is equally empty, documented not fabricated)
 - 📋 FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
 - ✅ FIX-INTERESTAREA-COUNT-CONSISTENCY-001 — Topics index and detail page disagree on meeting counts
-- 📋 FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup
+- ✅ FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup (verified live against the real Fort Collins Sept 1, 2026 meeting page)
 - ✅ FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
 - ✅ FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
@@ -580,7 +580,7 @@ Raised during Fort Collins topic curation (`FEAT-FORTCOLLINS-INTEREST-AREAS-001`
 
 #### FEAT-FORTCOLLINS-INTEREST-AREAS-001 — Curate and generate Fort Collins interest areas
 
-**Status:** 🔄 In progress (2026-09-09) — list confirmed and written, generation running; Neon publish (AC-3) intentionally not yet run, needs explicit confirmation first (see below)
+**Status:** ✅ Done (2026-09-09) — published to production Neon and live-verified.
 
 **Repo:** `city-council-transcriber` (config/generation); `city-council-transcripts` (rendering, AC-4).
 
@@ -603,8 +603,8 @@ Root cause: `config/cities/fort-collins/interest_areas.json` was `{"schema_versi
 **Acceptance Criteria:**
 - [x] AC-1: `config/cities/fort-collins/interest_areas.json` gains curated areas with descriptions — final list confirmed with the user first (see above).
 - [x] AC-2: `scripts/generate_interest_areas.py --city fort-collins` fixed (storage-root resolution) and running against the full real archive.
-- [ ] AC-3: Results published to Neon via `write_interest_areas` — **deliberately not yet run.** This repo's own `publish` command requires `--prod` to write anywhere (the non-`--prod` default, `DATABASE_URL`, is unset in this repo's `.env` — only `DATABASE_URL_PROD` is configured, pointing at the same real Neon DB backing the live public site), and gates that behind an interactive confirmation prompt the codebase's own authors clearly intended as a stop-and-think point. That's a more consequential, harder-to-reverse action than "run the generator against the archive" (which only writes local files), so it's held for an explicit go-ahead rather than folded into "yes, run it."
-- [ ] AC-4: `/co/fort-collins/topics` renders the curated areas, and each `/topics/[slug]` shows a cross-meeting timeline. Blocked on AC-3.
+- [x] AC-3: Published to production Neon via `python3 -m src.main publish --city fort-collins --prod --yes` (user ran the command directly after explicit go-ahead — 9 areas, 459 status rows, 0 skipped). Surfaced a real, previously-undiscovered bug along the way: `/api/revalidate` 404'd on the city-level call because every `city.json`'s `state_code` is uppercase ("CO") while `City.stateCode` in Neon is always lowercase — not Fort-Collins-specific, every city hits this. Fixed in `city-council-transcripts` (`app/api/revalidate/route.ts`, normalized once, used at all 3 downstream call sites — a partial fix would have left 2 more silent no-ops), shipped as PR #73, merged, then the originally-failed revalidate call was re-triggered manually once deployed.
+- [x] AC-4: Verified live against the real production site, not assumed: `https://counciloris.com/co/fort-collins/topics` renders all 9 curated topic names (`curl` + `grep` against the served HTML), and `/topics/downtown_parking` (spot-checked as the highest-volume area) renders a real cross-meeting timeline — 9 distinct meetings linked with per-citation timestamp anchors, spanning 2025-08-12 through 2026-09-01.
 - [x] AC-5: The runbook already existed (`docs/ADDING_A_CITY.md`, `config/cities/_template/README.md`) — the original premise that this needed writing from scratch was wrong. Fixed a real, smaller gap instead: the template's schema blurb was stale (missing `schema_version`/per-area `version`/`history`/`global_topic_id`, i.e. describing the v1 shape, not the real v2.0.0 one) and gave no guidance on `global_topic_id` or on confirming a list before generating. Corrected in place rather than duplicating a doc that already existed.
 
 #### FEAT-CITY-HOT-TOPICS-001 — Surface hot topics on the city page
@@ -646,7 +646,7 @@ Two inconsistencies, which become visible the moment a city has real topics: `ge
 
 #### FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup
 
-**Status:** 📋 Not started
+**Status:** ✅ Done (2026-09-09) — reviewed live against the real Fort Collins Sept 1, 2026 meeting page (has video, unreviewed transcript) per AC-4, with the user walked through before/after screenshots and asked to confirm the one genuinely open design call (AC-3's bottom-row restructuring) before implementing, per this story's own "needs a human looking at the real page" framing.
 
 **As a** site visitor reading a meeting page
 **I want** sections to be consistently spaced and sized to their content
@@ -660,11 +660,21 @@ User-reported (2026-09-08): "layout could use polish… things are placed in wei
 - `DocumentsPanel.tsx:121-123` uses an `h-full min-h-0` chain but its parent `<section>` (`:725`) sets no height, so tab content scrolls in an arbitrary box instead of sizing to content.
 - `<p className="flex gap-2 items-start">` at `:519` combined with `max-w-prose` at `:513` lets the timestamp column eat into the text measure.
 
+**Fixed:**
+- **AC-1:** dropped the outlier `p-6` from the TL;DR and Topics sections rather than adding padding to the other four — the minority pattern (2 of 6) lost, matching the majority. Measured before and after via `getBoundingClientRect`: "TL;DR"/"Summary" headings were 24px apart (56px vs 32px from the left edge); now both, and Video/Documents below them, land at exactly 32px.
+- **AC-2:** `TopicsPanel.tsx`'s fixed `contentClassName="md:h-[220px] ..."` became a `max-height` cap instead (`md:max-h-[320px] md:overflow-y-auto`). Verified it actually responds to content, not just a relabeled fixed number, by switching the active tab live and re-measuring the *row* (not just the capped content box): Timeline (7 items, this meeting's default tab) measures 375px; switching to Key Decisions (3 items) drops it to 215px with no code change — the row now follows whichever tab is open instead of being floored at 220px regardless.
+- **AC-3:** presented the user two restructuring options (full-width Transcript strip above Video/Documents, vs. below) plus a smaller-footprint "leave it for a follow-up" option; user chose full-width-below, reasoning that Video/Documents are the primary content and Transcript (already collapsed-by-default, explicitly "not the first thing people read" per the existing code comment) belongs after them, not before. Implemented: Video+Documents are now a `lg:grid-cols-2` row that collapses to a single column (new `hasVideo` boolean, used only for the grid className — the JSX gate on the Video section itself stays the original `videoUrl && videoProvider` so TypeScript keeps narrowing them, no non-null assertions needed) when there's no video, instead of a hard-coded 3-column grid with only 2 children leaving a permanently dead third column; Transcript moved to a full-width block below that row rather than a third, force-stretched grid column — removes the ~90%-blank first-column effect entirely (verified: the collapsed "▶ Transcript" line no longer stretches to match a taller sibling), and an *expanded* transcript now reads at full page width instead of a third of it. `TranscriptViewer.tsx`'s own `order-2 lg:order-1 lg:col-span-1` classes were dead even before this change (no grid ever wrapped that inner `<section>` directly) — removed for clarity while touching the file. **Both branches verified live, not just the video-present one:** a real no-video Seattle meeting (`2026-07-22/select-committee-on-the-families-education-preschool-and-promise-levy-6-yr-implementation-and-evaluation-plan`) renders Documents alone at the full 1216px row width with no dead column and no broken `h-full` sizing. Checked production data for the story's other named shape — `videoUrl` set with no `videoProvider`/legacy URL — and found zero such rows exist today (a query, not an assumption), so that exact branch has no live case to render; the header's separate "Video ↗" link (`:431`, gated on bare `videoUrl`) would still show with no player if one ever exists, same pre-existing inconsistency the original investigation listed as an observation, not an AC — left as-is, now with an explicit note instead of a silent gap.
+- **AC-4:** verified against the real, live Fort Collins Sept 1, 2026 meeting page (video present, `transcriptReviewed: false`) — pointed a local dev server's `DATABASE_URL` at the real production Neon read-only (no writes) to render the actual row, screenshotted before/after and at a 390px mobile width with Playwright (confirmed single-column stacking, no side-gutter violations), and measured every claim above directly via `getBoundingClientRect`/computed styles rather than eyeballing screenshots alone.
+
+**Not touched, deliberately out of this story's 4 ACs** (noted in the original investigation but never promoted to an AC): `DocumentsPanel.tsx`'s `h-full min-h-0` chain, and the `flex gap-2 items-start` + `max-w-prose` interaction in the Summary section's fallback-timestamp layout. Neither showed a live defect on either verification page (video-present or no-video) after AC-3's restructuring: with the whitespace's root cause removed, Documents' `h-full` now resolves against a real, non-degenerate stretched grid-row height in both cases.
+
+**Files Modified:** `app/transcripts/[...slug]/page.tsx`, `app/components/TopicsPanel.tsx`, `app/components/TranscriptViewer.tsx`.
+
 **Acceptance Criteria:**
-- [ ] AC-1: One padding/container convention across all top-level sections.
-- [ ] AC-2: The Topics panel sizes to content; no fixed `md:h-[220px]`.
-- [ ] AC-3: The bottom grid reflows so a collapsed transcript and a missing video don't leave dead columns.
-- [ ] AC-4: Verified against the real Fort Collins Sept 1, 2026 meeting page (has video, unreviewed transcript).
+- [x] AC-1: One padding/container convention across all top-level sections.
+- [x] AC-2: The Topics panel sizes to content; no fixed `md:h-[220px]`.
+- [x] AC-3: The bottom grid reflows so a collapsed transcript and a missing video don't leave dead columns.
+- [x] AC-4: Verified against the real Fort Collins Sept 1, 2026 meeting page (has video, unreviewed transcript).
 
 #### FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
 
