@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MeetingCardData } from "@/app/lib/cityData";
+import type { MeetingCardData, MeetingSearchResult } from "@/app/lib/cityData";
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { annotateTextPlain } from "@/app/lib/citations";
 import HighlightedText from "./HighlightedText";
@@ -11,9 +11,21 @@ export type MeetingCardProps = {
    * Defaults to [] so every call site that predates search highlighting
    * renders identically to before. */
   tokens?: string[];
+  /** A match found in a field this card doesn't otherwise show — a key
+   * decision, action item, timeline bullet, or topic
+   * (FEAT-SEARCH-SERVERSIDE-SURFACE-001). Shown the same way as
+   * `hiddenSummaryMatch` below, which this is deliberately kept separate
+   * from: that one covers the logline-vs-summary case this prop doesn't
+   * track. Defaults to null so every call site that predates this stays
+   * unchanged. */
+  extraSnippet?: MeetingSearchResult["extraSnippet"];
 };
 
-export default function MeetingCard({ meeting, tokens = [] }: MeetingCardProps) {
+export default function MeetingCard({
+  meeting,
+  tokens = [],
+  extraSnippet = null,
+}: MeetingCardProps) {
   const href = `/transcripts/${meeting.slug
     .split("/")
     .map(encodeURIComponent)
@@ -85,6 +97,11 @@ export default function MeetingCard({ meeting, tokens = [] }: MeetingCardProps) 
       {hiddenSummaryMatch && (
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 -mt-2">
           Matches in summary: <HighlightedText text={hiddenSummaryMatch} tokens={tokens} />
+        </p>
+      )}
+      {extraSnippet && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 -mt-2">
+          Matches in {extraSnippet.label}: <HighlightedText text={extraSnippet.text} tokens={tokens} />
         </p>
       )}
       {isPublished ? (
