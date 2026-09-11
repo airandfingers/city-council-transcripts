@@ -91,6 +91,35 @@ export async function sendTranscriptReviewRequestEmail(params: {
   );
 }
 
+/**
+ * Generic pipeline-error alert email (FIX-SUMMARY-PARSE-FAILURE-001). Used
+ * by the transcriber's `src/admin_notify.py::notify_admins()` for any
+ * pipeline condition an admin should know about but that has no dedicated
+ * template — a poisoned LLM summary, a publish-validation abort, an LM
+ * Studio outage, a Neon quota pause. Same plain-text, no-template shape as
+ * sendTranscriptReviewRequestEmail — this alert doesn't need a design, it
+ * needs to be readable and land in an inbox.
+ */
+export async function sendAdminAlertEmail(params: {
+  subject: string;
+  body: string;
+  severity?: "error" | "warn";
+  adminEmails: string[];
+}) {
+  const { adminEmails, subject, body, severity } = params;
+  if (adminEmails.length === 0) return;
+  const from = getFromAddress();
+  const prefix = severity === "warn" ? "[WARN]" : "[ERROR]";
+  const fullSubject = `${prefix} ${subject}`;
+  const text = [body, "", `Time: ${new Date().toUTCString()}`].join("\n");
+  await Promise.all(
+    adminEmails.map(async (to) => {
+      const { error } = await getResend().emails.send({ from, to, subject: fullSubject, text });
+      if (error) console.error("Failed to send admin alert email to", to, error);
+    }),
+  );
+}
+
 export type ConfirmEmailParams = {
   to: string;
   confirmToken: string;
