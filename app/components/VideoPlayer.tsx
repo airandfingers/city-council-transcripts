@@ -87,44 +87,35 @@ function Mp4Player({ videoUrl }: { videoUrl: string }) {
   );
 }
 
-/** Granicus's own player accepts a `ts=<seconds>` query param to seek on
- * load (confirmed against the pattern city-council-transcriber's
- * scripts/verify_offset_links.py already relies on for human spot-checks).
- * Appended alongside any existing params (e.g. Monterey Park's
- * `view_id=2&redirect=true`) rather than replacing them — dropping those
- * could point the player at the wrong clip/channel. */
-function withGranicusSeek(videoUrl: string, seconds: number): string {
-  if (seconds <= 0) return videoUrl;
-  try {
-    const url = new URL(videoUrl);
-    url.searchParams.set("ts", String(Math.floor(seconds)));
-    return url.toString();
-  } catch {
-    return videoUrl;
-  }
-}
-
 /** External-link-only providers (Granicus, unknown future providers) can't
  * be seeked programmatically — surface the requested timecode as copyable
- * text instead of silently dropping it, and deep-link the outbound URL
- * itself where the provider supports it (Granicus does, via `ts=`). */
+ * text instead of silently dropping it.
+ *
+ * Tried deep-linking the outbound URL itself first (Granicus's embed-code
+ * generator on this same instance builds `&entrytime=<seconds>&autostart=`
+ * params, and city-council-transcriber's scripts/verify_offset_links.py
+ * separately claims a `?ts=<seconds>` form) — live-tested both against the
+ * real Monterey Park clip (2026-09-17, headless Chromium) and neither
+ * seeks: `<video>.currentTime` stayed 0 across `ts=`, `entrytime=` with and
+ * without `autostart=1`, and with the original query params preserved or
+ * stripped. Those params appear to only take effect via this Granicus
+ * instance's actual `<embed>`/iframe embedding flow, not a direct
+ * top-level link — not useful here, so not shipped. CopyTimecode is the
+ * fallback that's actually verified to work. */
 function ExternalLinkVideo({
   videoUrl,
   label,
-  supportsTsParam = false,
 }: {
   videoUrl: string;
   label: string;
-  supportsTsParam?: boolean;
 }) {
   const searchParams = useSearchParams();
   const startSeconds = Number(searchParams.get("t")) || 0;
-  const href = supportsTsParam ? withGranicusSeek(videoUrl, startSeconds) : videoUrl;
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
       <a
-        href={href}
+        href={videoUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
@@ -147,9 +138,7 @@ export default function VideoPlayer({ videoUrl, videoProvider }: Props) {
   }
 
   if (videoProvider === "granicus") {
-    return (
-      <ExternalLinkVideo videoUrl={videoUrl} label="Watch on Granicus →" supportsTsParam />
-    );
+    return <ExternalLinkVideo videoUrl={videoUrl} label="Watch on Granicus →" />;
   }
 
   // Unknown provider — same link-out + copy-timecode fallback as granicus.

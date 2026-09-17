@@ -190,11 +190,30 @@ export default function TranscriptViewer({
     );
     if (!target) return;
 
+    // If a seekable player is attached and tracking, TimestampLink's own
+    // seekTo() call already lands `currentTime` inside this same group in
+    // the same click (both context state updates batch into one render),
+    // and the currentTime-driven auto-scroll effect above already handles
+    // it with its own proportional-position scroll. Don't also fire a
+    // second, competing scrollIntoView here — for a provider with no
+    // player (e.g. Granicus), currentTime never leaves 0, so this
+    // condition is false and this effect remains the one that moves the
+    // reader.
+    const targetStart = mapToTarget(target.startTime);
+    const targetEnd = mapToTarget(target.endTime);
+    const alreadyTrackedByPlayback =
+      autoScroll &&
+      targetStart != null &&
+      targetEnd != null &&
+      currentTime >= targetStart &&
+      currentTime < targetEnd;
+    if (alreadyTrackedByPlayback) return;
+
     cardRefs.current.get(target.firstId)?.scrollIntoView({
       behavior: "smooth",
       block: "center",
     });
-  }, [scrollRequest, groupedLines]);
+  }, [scrollRequest, groupedLines, mapToTarget, currentTime, autoScroll]);
 
   // When user re-enables auto-scroll, jump immediately
   const handleAutoScrollToggle = useCallback(
