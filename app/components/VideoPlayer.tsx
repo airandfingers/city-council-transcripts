@@ -87,23 +87,44 @@ function Mp4Player({ videoUrl }: { videoUrl: string }) {
   );
 }
 
+/** Granicus's own player accepts a `ts=<seconds>` query param to seek on
+ * load (confirmed against the pattern city-council-transcriber's
+ * scripts/verify_offset_links.py already relies on for human spot-checks).
+ * Appended alongside any existing params (e.g. Monterey Park's
+ * `view_id=2&redirect=true`) rather than replacing them — dropping those
+ * could point the player at the wrong clip/channel. */
+function withGranicusSeek(videoUrl: string, seconds: number): string {
+  if (seconds <= 0) return videoUrl;
+  try {
+    const url = new URL(videoUrl);
+    url.searchParams.set("ts", String(Math.floor(seconds)));
+    return url.toString();
+  } catch {
+    return videoUrl;
+  }
+}
+
 /** External-link-only providers (Granicus, unknown future providers) can't
  * be seeked programmatically — surface the requested timecode as copyable
- * text instead of silently dropping it. */
+ * text instead of silently dropping it, and deep-link the outbound URL
+ * itself where the provider supports it (Granicus does, via `ts=`). */
 function ExternalLinkVideo({
   videoUrl,
   label,
+  supportsTsParam = false,
 }: {
   videoUrl: string;
   label: string;
+  supportsTsParam?: boolean;
 }) {
   const searchParams = useSearchParams();
   const startSeconds = Number(searchParams.get("t")) || 0;
+  const href = supportsTsParam ? withGranicusSeek(videoUrl, startSeconds) : videoUrl;
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
       <a
-        href={videoUrl}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
@@ -126,7 +147,9 @@ export default function VideoPlayer({ videoUrl, videoProvider }: Props) {
   }
 
   if (videoProvider === "granicus") {
-    return <ExternalLinkVideo videoUrl={videoUrl} label="Watch on Granicus →" />;
+    return (
+      <ExternalLinkVideo videoUrl={videoUrl} label="Watch on Granicus →" supportsTsParam />
+    );
   }
 
   // Unknown provider — same link-out + copy-timecode fallback as granicus.
