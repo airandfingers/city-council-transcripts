@@ -31,6 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const entries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "daily" },
+    { url: `${SITE_URL}/glossary`, changeFrequency: "monthly" },
   ];
 
   for (const city of cities) {

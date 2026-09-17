@@ -81,6 +81,12 @@ export default function SiteHeader() {
           },
         ]
       : []),
+    {
+      label: "Glossary",
+      href: "/glossary",
+      active: pathname.startsWith("/glossary"),
+      divider: true,
+    },
     { label: "About", href: "/#about", active: false, divider: false },
   ];
 
