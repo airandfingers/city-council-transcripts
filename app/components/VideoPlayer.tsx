@@ -89,7 +89,19 @@ function Mp4Player({ videoUrl }: { videoUrl: string }) {
 
 /** External-link-only providers (Granicus, unknown future providers) can't
  * be seeked programmatically — surface the requested timecode as copyable
- * text instead of silently dropping it. */
+ * text instead of silently dropping it.
+ *
+ * Tried deep-linking the outbound URL itself first (Granicus's embed-code
+ * generator on this same instance builds `&entrytime=<seconds>&autostart=`
+ * params, and city-council-transcriber's scripts/verify_offset_links.py
+ * separately claims a `?ts=<seconds>` form) — live-tested both against the
+ * real Monterey Park clip (2026-09-17, headless Chromium) and neither
+ * seeks: `<video>.currentTime` stayed 0 across `ts=`, `entrytime=` with and
+ * without `autostart=1`, and with the original query params preserved or
+ * stripped. Those params appear to only take effect via this Granicus
+ * instance's actual `<embed>`/iframe embedding flow, not a direct
+ * top-level link — not useful here, so not shipped. CopyTimecode is the
+ * fallback that's actually verified to work. */
 function ExternalLinkVideo({
   videoUrl,
   label,

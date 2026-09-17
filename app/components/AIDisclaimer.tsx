@@ -1,3 +1,4 @@
+import Link from "next/link";
 import DonateButton from "@/app/components/DonateButton";
 
 const DISCLAIMER_TEXT =
@@ -60,7 +61,12 @@ export default function AIDisclaimer({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
           <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <p>{DISCLAIMER_TEXT}</p>
+          <p>
+            {DISCLAIMER_TEXT}{" "}
+            <Link href="/glossary" className="underline hover:text-gray-700 dark:hover:text-gray-300">
+              Confused by a term? See the glossary.
+            </Link>
+          </p>
         </div>
         <DonateButton className="shrink-0 self-start sm:self-auto" />
       </div>

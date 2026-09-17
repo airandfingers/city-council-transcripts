@@ -29,6 +29,12 @@ export type SyncablePlayer = {
   ) => void;
 };
 
+/** A request to scroll the transcript to a given reference-time moment.
+ * `nonce` increments on every call so clicking the same timecode twice in a
+ * row (e.g. after scrolling away) still re-triggers the effect that consumes
+ * it — a plain `seconds` value wouldn't change and React would skip it. */
+type ScrollRequest = { seconds: number; nonce: number };
+
 type VideoSyncContextValue = {
   /** Current playback time in seconds, updated ~4× per second. */
   currentTime: number;
@@ -40,6 +46,17 @@ type VideoSyncContextValue = {
   play: () => void;
   /** Register the active player — called by YouTubePlayer/Mp4Player once their player is ready. */
   registerPlayer: (player: SyncablePlayer) => void;
+  /**
+   * Ask any mounted transcript view to scroll to `seconds` (reference /
+   * transcript time, unmapped). Independent of `seekTo` — works even when
+   * there's no seekable player (e.g. a Granicus link-out meeting), which is
+   * the whole point: a citation click should always be able to move the
+   * transcript, whether or not it can also move a video
+   * (FIX-TIMECODE-SEEK-GRANICUS-001).
+   */
+  scrollToTime: (seconds: number) => void;
+  /** Latest pending scroll-to-time request, or null before the first one. */
+  scrollRequest: ScrollRequest | null;
 };
 
 const VideoSyncContext = createContext<VideoSyncContextValue | null>(null);
@@ -61,6 +78,8 @@ export default function VideoSyncProvider({
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [scrollRequest, setScrollRequest] = useState<ScrollRequest | null>(null);
+  const scrollNonceRef = useRef(0);
 
   const startPolling = useCallback(() => {
     if (intervalRef.current) return;
@@ -126,9 +145,22 @@ export default function VideoSyncProvider({
     }
   }, []);
 
+  const scrollToTime = useCallback((seconds: number) => {
+    scrollNonceRef.current += 1;
+    setScrollRequest({ seconds, nonce: scrollNonceRef.current });
+  }, []);
+
   return (
     <VideoSyncContext.Provider
-      value={{ currentTime, isPlaying, seekTo, play, registerPlayer }}
+      value={{
+        currentTime,
+        isPlaying,
+        seekTo,
+        play,
+        registerPlayer,
+        scrollToTime,
+        scrollRequest,
+      }}
     >
       {children}
     </VideoSyncContext.Provider>

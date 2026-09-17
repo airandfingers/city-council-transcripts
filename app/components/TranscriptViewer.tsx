@@ -28,7 +28,7 @@ export default function TranscriptViewer({
   offsetModel?: OffsetModel | null;
   titleByUuid?: Record<string, string>;
 }) {
-  const { currentTime, seekTo } = useVideoSync();
+  const { currentTime, seekTo, scrollRequest } = useVideoSync();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -160,6 +160,60 @@ export default function TranscriptViewer({
 
     return () => clearTimeout(timer);
   }, [currentTime, autoScroll, groupedLines, mapToTarget]);
+
+  // ---------------------------------------------------------------
+  // Respond to an external "jump to this moment" request — fired by
+  // TimestampLink when a summary/topic citation is clicked anywhere on the
+  // page. Resolves against reference (transcript) time directly, since
+  // that's what group.startTime/endTime already are and what TimestampLink
+  // sends (pre-offset). This is a one-shot scroll, independent of the
+  // currentTime-driven auto-scroll effect above — it's what actually moves
+  // the reader for a provider with no seekable player (e.g. Granicus
+  // link-out), where currentTime never leaves 0
+  // (FIX-TIMECODE-SEEK-GRANICUS-001).
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    if (!scrollRequest) return;
+    const { seconds } = scrollRequest;
+
+    const exact = groupedLines.find(
+      (g) => seconds >= g.startTime && seconds < g.endTime,
+    );
+    // Falls in a gap between groups, or past the last one — fall back to
+    // the closest group by start time rather than scrolling nowhere.
+    const target = exact ?? groupedLines.reduce<GroupedLine | undefined>(
+      (closest, g) =>
+        !closest || Math.abs(g.startTime - seconds) < Math.abs(closest.startTime - seconds)
+          ? g
+          : closest,
+      undefined,
+    );
+    if (!target) return;
+
+    // If a seekable player is attached and tracking, TimestampLink's own
+    // seekTo() call already lands `currentTime` inside this same group in
+    // the same click (both context state updates batch into one render),
+    // and the currentTime-driven auto-scroll effect above already handles
+    // it with its own proportional-position scroll. Don't also fire a
+    // second, competing scrollIntoView here — for a provider with no
+    // player (e.g. Granicus), currentTime never leaves 0, so this
+    // condition is false and this effect remains the one that moves the
+    // reader.
+    const targetStart = mapToTarget(target.startTime);
+    const targetEnd = mapToTarget(target.endTime);
+    const alreadyTrackedByPlayback =
+      autoScroll &&
+      targetStart != null &&
+      targetEnd != null &&
+      currentTime >= targetStart &&
+      currentTime < targetEnd;
+    if (alreadyTrackedByPlayback) return;
+
+    cardRefs.current.get(target.firstId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [scrollRequest, groupedLines, mapToTarget, currentTime, autoScroll]);
 
   // When user re-enables auto-scroll, jump immediately
   const handleAutoScrollToggle = useCallback(

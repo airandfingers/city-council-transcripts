@@ -20,6 +20,7 @@ import UnreviewedTranscriptNotice from "@/app/components/UnreviewedTranscriptNot
 import RegisterCurrentCity from "@/app/components/RegisterCurrentCity";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
+import GlossaryTerm from "@/app/components/GlossaryTerm";
 import type { GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
@@ -379,11 +380,14 @@ export default async function TranscriptPage({ params }: Props) {
   // leave a dead grid column.
   const hasVideo = Boolean(videoUrl && videoProvider);
 
-  // Timestamp-seeking offset model — only meaningful for YouTube right now.
-  const offsetModel = resolveOffsetModel(
-    meeting.youtubeOffsetModel,
-    meeting.youtubeOffsetSeconds,
-  );
+  // Timestamp-seeking offset model — only meaningful for YouTube right now
+  // (it maps reference/transcript time to YouTube player time). Gate on
+  // videoProvider so a granicus/mp4 meeting that happens to carry a stale
+  // youtube offset (e.g. re-sourced away from YouTube after calibration)
+  // never has it misapplied (FIX-TIMECODE-SEEK-GRANICUS-001).
+  const offsetModel = videoProvider === "youtube"
+    ? resolveOffsetModel(meeting.youtubeOffsetModel, meeting.youtubeOffsetSeconds)
+    : null;
 
   return (
     <main className="min-h-screen p-8">
@@ -475,7 +479,9 @@ export default async function TranscriptPage({ params }: Props) {
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
         <section>
-          <h2 className="text-2xl font-semibold mb-4">TL;DR</h2>
+          <h2 className="text-2xl font-semibold mb-4">
+            <GlossaryTerm id="tldr" />
+          </h2>
           {meeting.logline ? (
             <div className="space-y-2">
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
@@ -735,7 +741,9 @@ export default async function TranscriptPage({ params }: Props) {
               "reference" with the same name, never itself labeled in the
               UI (AC-3). */}
           <section id="reference">
-            <h2 className="text-2xl font-semibold mb-4">Documents &amp; Minutes</h2>
+            <h2 className="text-2xl font-semibold mb-4">
+              Documents &amp; <GlossaryTerm id="minutes" />
+            </h2>
             <DocumentsPanel
               minutesText={meeting.minutesText}
               minutesUrl={meeting.minutesUrl}

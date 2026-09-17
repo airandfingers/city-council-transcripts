@@ -9,6 +9,9 @@ name: Publish scheduled alerts (temporary)
 on:
   schedule:
     - cron: "55 12 * * *" # admin-digest: daily, ~5 min before publish-scheduled/digest-daily
+    - cron: "0 18 * * *" # admin-digest catch-up: same day, ~5h10m later, for anything a late-finishing
+                          # per-city pipeline run drafted just after the 12:55 pass already went out
+                          # (see FIX-ADMIN-DIGEST-CATCHUP-001) — a no-op send when nothing's pending
     - cron: "0 13 * * *" # publish-scheduled + digest-daily: daily, ~6am Pacific (PDT, UTC-7; drifts to 5am during PST)
     - cron: "0 13 * * 1" # digest-weekly: Mondays
     - cron: "0 13 1 * *" # digest-monthly: 1st of month
@@ -19,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call admin-digest endpoint
-        if: github.event.schedule == '55 12 * * *' || github.event_name == 'workflow_dispatch'
+        if: contains(fromJSON('["55 12 * * *", "0 18 * * *"]'), github.event.schedule) || github.event_name == 'workflow_dispatch'
         run: |
           status=$(curl -s -o /tmp/response.json -w '%{http_code}' \
             -H "Authorization: Bearer ${{ secrets.CRON_TEMP_TOKEN }}" \
@@ -32,7 +35,7 @@ jobs:
           fi
 
       - name: Call scheduled-drain endpoint
-        if: github.event.schedule != '55 12 * * *' || github.event_name == 'workflow_dispatch'
+        if: (!contains(fromJSON('["55 12 * * *", "0 18 * * *"]'), github.event.schedule)) || github.event_name == 'workflow_dispatch'
         run: |
           status=$(curl -s -o /tmp/response.json -w '%{http_code}' \
             -H "Authorization: Bearer ${{ secrets.CRON_TEMP_TOKEN }}" \
