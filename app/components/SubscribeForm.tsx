@@ -10,6 +10,10 @@ type SubscribeFormCommon = {
   /** Drop the card chrome (border/background/padding) so the form can be
    *  embedded inside another container. */
   bare?: boolean;
+  /** Suppress the form's own prompt line. For callers whose surrounding
+   *  card already says what subscribing does — without this the topic page
+   *  said it three times over (heading, blurb, prompt). */
+  hidePrompt?: boolean;
 };
 
 export type SubscribeFormProps = SubscribeFormCommon &
@@ -29,9 +33,18 @@ export type SubscribeFormProps = SubscribeFormCommon &
 type Status = "idle" | "submitting" | "success" | "error";
 type Frequency = "INSTANT" | "DAILY" | "WEEKLY" | "MONTHLY";
 
+/**
+ * Sign-up cadences, as a segmented control rather than a `<select>`: three
+ * options are worth showing at once, and the choice is part of deciding to
+ * subscribe, not a setting to go hunting for.
+ *
+ * DAILY is deliberately absent here while staying a valid AlertFrequency —
+ * the backend still delivers it and /subscriptions still offers it, so
+ * existing daily subscribers keep working; it's just not one of the
+ * choices we put in front of someone signing up.
+ */
 const FREQUENCY_OPTIONS: { value: Frequency; label: string }[] = [
-  { value: "INSTANT", label: "Instantly" },
-  { value: "DAILY", label: "Daily digest" },
+  { value: "INSTANT", label: "Instant updates" },
   { value: "WEEKLY", label: "Weekly digest" },
   { value: "MONTHLY", label: "Monthly digest" },
 ];
@@ -72,7 +85,7 @@ export default function SubscribeForm(props: SubscribeFormProps) {
   const [isPending, startTransition] = useTransition();
 
   const cta = props.ctaLabel ?? defaultCta(props.kind);
-  const prompt = defaultPrompt(props);
+  const prompt = props.hidePrompt ? "" : defaultPrompt(props);
   const showCityName = props.kind === "CITY_COVERAGE_REQUEST";
   const showTopicName = props.kind === "TOPIC_IN_CITY_COVERAGE_REQUEST";
   const showFrequency = props.kind === "CITY_UPDATES" || props.kind === "TOPIC_IN_CITY_UPDATES";
@@ -194,19 +207,31 @@ export default function SubscribeForm(props: SubscribeFormProps) {
         />
 
         {showFrequency && (
-          <select
-            value={frequency}
-            onChange={(e) => setFrequency(e.target.value as Frequency)}
-            className="border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800"
-            disabled={isPending}
-            aria-label="How often would you like to be emailed?"
-          >
-            {FREQUENCY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <fieldset disabled={isPending} className="min-w-0">
+            <legend className="sr-only">How often would you like to be emailed?</legend>
+            <div className="flex rounded border border-gray-300 dark:border-gray-700 overflow-hidden">
+              {FREQUENCY_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex-1 cursor-pointer text-center text-xs px-2 py-1.5 border-r last:border-r-0 border-gray-300 dark:border-gray-700 transition-colors ${
+                    frequency === opt.value
+                      ? "bg-blue-600 text-white font-medium"
+                      : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="frequency"
+                    value={opt.value}
+                    checked={frequency === opt.value}
+                    onChange={() => setFrequency(opt.value)}
+                    className="sr-only"
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         )}
 
         <input

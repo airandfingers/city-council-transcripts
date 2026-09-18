@@ -10,6 +10,19 @@ import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
 import { tokenizeQuery, matchesAllTokens, buildMatchSnippet } from "@/app/lib/search";
 import { summaryTypeLabel } from "@/app/lib/labels";
+import { applyOffset, resolveOffsetModel } from "@/app/lib/offset";
+import {
+  combineStances,
+  isNamedSpeaker,
+  meetingKinds,
+  namesMatch,
+  normalizePersonName,
+  normalizeStance,
+  type TopicMeetingKind,
+  type TopicPublicComment,
+  type TopicSpeaker,
+  type TopicStance,
+} from "@/app/lib/topicDetail";
 
 export type { City, Meeting, TranscriptLine };
 
@@ -602,15 +615,111 @@ export async function getInterestAreaSummariesForCity(
   }));
 }
 
+/** A recording the topic page's rail can actually play in-page. */
+export type TopicVideoSource = {
+  url: string;
+  provider: string;
+};
+
+export type TopicDetailMeeting = {
+  meetingId: number;
+  slug: string;
+  title: string;
+  date: Date;
+  summary: string | null;
+  /** Transcript-time start of the discussion, for display/deep links. */
+  startTimeSeconds: number | null;
+  timecodeLabel: string | null;
+  /** Video-time start (offset-mapped); null when unmapped or unknown. */
+  videoSeconds: number | null;
+  video: TopicVideoSource | null;
+  /** What the council actually did, from the meeting's topic summary. */
+  outcome: string | null;
+  speakers: { name: string; stance: TopicStance }[];
+  publicComments: TopicPublicComment[];
+  kinds: TopicMeetingKind[];
+};
+
+export type TopicRelated = {
+  slug: string;
+  name: string;
+  meetingsDiscussed: number | null;
+};
+
+export type TopicDetail = {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  statusSummary: string | null;
+  meetingsDiscussed: number | null;
+  totalMeetings: number | null;
+  generatedAt: Date | null;
+  /** Discussed meetings, newest first. */
+  meetings: TopicDetailMeeting[];
+  /** Named voices across the whole topic, most-present first. */
+  speakers: TopicSpeaker[];
+  /** Attributed public comment across the whole topic, newest first. */
+  publicComments: TopicPublicComment[];
+  related: TopicRelated[];
+  firstDiscussed: Date | null;
+  lastDiscussed: Date | null;
+};
+
+/** Prisma `Json` speaker-position rows, as the summarizer writes them. */
+function parsePositions(
+  value: unknown,
+): { speaker: string; stance: string | null; points: string[] }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const r = row as Record<string, unknown>;
+    const speaker = typeof r.speaker === "string" ? r.speaker : null;
+    if (!speaker) return [];
+    const points = Array.isArray(r.key_points)
+      ? r.key_points.filter((p): p is string => typeof p === "string")
+      : [];
+    return [{
+      speaker,
+      stance: typeof r.stance === "string" ? r.stance : null,
+      points,
+    }];
+  });
+}
+
 /**
- * Returns a single interest area by slug, with full meeting history.
- * Returns null if not found or inputs are invalid.
+ * Everything the topic detail page renders, for one interest area.
+ *
+ * Replaces the old `getInterestArea` (same base query, same
+ * `discussed: true` filter carried over from
+ * FIX-INTERESTAREA-COUNT-CONSISTENCY-001 so this page's meeting list and
+ * the /topics card's count keep meaning the same thing), plus three
+ * enrichment reads the redesigned page needs and the old one had no place
+ * for:
+ *
+ * - the meeting's **TopicSummary**, joined on
+ *   `InterestAreaMeetingStatus.sourceItemId` → `TopicSummary.topicId`.
+ *   This is the only *topic-scoped* record of who spoke and what the
+ *   council decided; ~37% of discussed rows carry the link today, and a
+ *   row without one simply renders as a summary with no voices/outcome.
+ * - **PUBLIC_COMMENT summary items** inside the discussion's time window,
+ *   filtered to speakers the topic summary also lists (see
+ *   topicDetail.ts's attribution rule — the window alone is far too wide
+ *   to trust).
+ * - the city's **other topics**, for the rail's Related tab.
+ *
+ * All three are capped by the number of meetings that discussed the topic
+ * (5 for Hughes Site, 27 for the busiest area in the DB), and every select
+ * is projected to rendered fields only, per this module's egress rules
+ * (FIX-NEON-EGRESS-CLIENT-001).
+ *
+ * @returns null if not found or inputs are invalid.
  */
-export const getInterestArea = cache(async function getInterestArea(
+export const getTopicDetail = cache(async function getTopicDetail(
   stateCode: string,
   citySlug: string,
   areaSlug: string,
-): Promise<InterestAreaWithMeetings | null> {
+): Promise<TopicDetail | null> {
   if (
     !isValidStateCode(stateCode) ||
     !isValidSlug(citySlug) ||
@@ -624,32 +733,37 @@ export const getInterestArea = cache(async function getInterestArea(
       slug: areaSlug,
       city: { stateCode, slug: citySlug },
     },
-    // Same select: projection as getInterestAreasForCity above, including
-    // the same `discussed: true` filter on meetingStatuses
-    // (FIX-INTERESTAREA-COUNT-CONSISTENCY-001) -- this used to be
-    // unfiltered here, so the detail-page timeline could include
-    // PREVIEW-phase/not-discussed rows the index page's card never showed,
-    // whenever such a row happened to carry a `summary`.
     select: {
       id: true,
+      cityId: true,
       slug: true,
       name: true,
       description: true,
-      source: true,
       statusSummary: true,
       meetingsDiscussed: true,
       totalMeetings: true,
-      mostRecentActivity: true,
       generatedAt: true,
       meetingStatuses: {
         where: { discussed: true },
         select: {
           summary: true,
-          confidence: true,
           startTimeSeconds: true,
+          endTimeSeconds: true,
           timecodeLabel: true,
+          sourceItemId: true,
           meeting: {
-            select: { id: true, slug: true, title: true, date: true, videoProvider: true },
+            select: {
+              id: true,
+              slug: true,
+              title: true,
+              date: true,
+              videoProvider: true,
+              videoUrl: true,
+              youtubeUrl: true,
+              granicusUrl: true,
+              youtubeOffsetSeconds: true,
+              youtubeOffsetModel: true,
+            },
           },
         },
         orderBy: { meeting: { date: "desc" } },
@@ -659,28 +773,181 @@ export const getInterestArea = cache(async function getInterestArea(
 
   if (!area) return null;
 
+  const statuses = area.meetingStatuses;
+  const linked = statuses.filter((s) => s.sourceItemId);
+
+  // One OR'd read for every linked meeting's topic summary, and one for
+  // the public comment inside those meetings' discussion windows. Both
+  // short-circuit to an empty array when nothing is linked, which is the
+  // common case for a topic whose rows predate sourceItemId.
+  const [topicSummaries, commentItems, related] = await Promise.all([
+    linked.length
+      ? prisma.topicSummary.findMany({
+          where: {
+            OR: linked.map((s) => ({
+              meetingId: s.meeting.id,
+              topicId: s.sourceItemId!,
+            })),
+          },
+          select: {
+            meetingId: true,
+            topicId: true,
+            outcome: true,
+            speakers: true,
+            speakerPositions: true,
+          },
+        })
+      : Promise.resolve([]),
+    linked.some((s) => s.startTimeSeconds != null && s.endTimeSeconds != null)
+      ? prisma.meetingSummaryItem.findMany({
+          where: {
+            OR: linked
+              .filter((s) => s.startTimeSeconds != null && s.endTimeSeconds != null)
+              .map((s) => ({
+                meetingId: s.meeting.id,
+                type: "PUBLIC_COMMENT",
+                startTimeSeconds: {
+                  gte: s.startTimeSeconds!,
+                  lte: s.endTimeSeconds!,
+                },
+              })),
+          },
+          select: {
+            meetingId: true,
+            speaker: true,
+            position: true,
+            text: true,
+            startTimeSeconds: true,
+          },
+          orderBy: { startTimeSeconds: "asc" },
+        })
+      : Promise.resolve([]),
+    prisma.interestArea.findMany({
+      where: {
+        cityId: area.cityId,
+        meetingsDiscussed: { gt: 0 },
+        NOT: { id: area.id },
+      },
+      select: { slug: true, name: true, meetingsDiscussed: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      take: 6,
+    }),
+  ]);
+
+  const summaryByMeeting = new Map(
+    topicSummaries.map((t) => [`${t.meetingId}:${t.topicId}`, t]),
+  );
+
+  const meetings: TopicDetailMeeting[] = statuses.map((s) => {
+    const m = s.meeting;
+    const summary = s.sourceItemId
+      ? summaryByMeeting.get(`${m.id}:${s.sourceItemId}`)
+      : undefined;
+
+    // Mirrors the transcript page's provider resolution, including the
+    // legacy youtubeUrl/granicusUrl fallback for rows predating the
+    // generic videoUrl/videoProvider pair.
+    const url = m.videoUrl ?? m.youtubeUrl ?? m.granicusUrl ?? null;
+    const provider =
+      m.videoProvider ?? (m.youtubeUrl ? "youtube" : null) ?? (m.granicusUrl ? "granicus" : null);
+    const video = url && provider ? { url, provider } : null;
+
+    // Transcript time → video time. Only YouTube rows carry a calibration
+    // today; everything else maps through unchanged (see offset.ts).
+    const offsetModel = resolveOffsetModel(m.youtubeOffsetModel, m.youtubeOffsetSeconds);
+    const toVideoTime = (seconds: number | null) => {
+      if (seconds == null) return null;
+      const mapped = applyOffset(offsetModel, seconds);
+      return mapped == null ? null : Math.max(0, mapped);
+    };
+
+    const positions = parsePositions(summary?.speakerPositions);
+    const speakers = positions
+      .filter((p) => isNamedSpeaker(p.speaker))
+      .map((p) => ({ name: p.speaker.trim(), stance: normalizeStance(p.stance) }));
+
+    // Attribution rule (topicDetail.ts): a comment counts for this topic
+    // only when its speaker is one the topic summary itself names.
+    const publicComments: TopicPublicComment[] = commentItems
+      .filter((item) => item.meetingId === m.id)
+      .filter((item) => item.speaker && isNamedSpeaker(item.speaker))
+      .filter((item) => positions.some((p) => namesMatch(p.speaker, item.speaker!)))
+      .map((item) => ({
+        speaker: item.speaker!.trim(),
+        stance: normalizeStance(item.position),
+        text: item.text,
+        seconds: item.startTimeSeconds,
+        videoSeconds: toVideoTime(item.startTimeSeconds),
+        meetingSlug: m.slug,
+        meetingDate: m.date,
+      }));
+
+    const outcome = summary?.outcome?.trim() || null;
+
+    return {
+      meetingId: m.id,
+      slug: m.slug,
+      title: m.title,
+      date: m.date,
+      summary: s.summary,
+      startTimeSeconds: s.startTimeSeconds,
+      timecodeLabel: s.timecodeLabel,
+      videoSeconds: toVideoTime(s.startTimeSeconds),
+      video,
+      outcome,
+      speakers,
+      publicComments,
+      kinds: meetingKinds({ outcome, publicCommentCount: publicComments.length }),
+    };
+  });
+
+  // Cross-meeting voices: one row per person, stance combined across every
+  // meeting they spoke in (disagreement with themselves reads "mixed").
+  const byName = new Map<string, { name: string; stances: TopicStance[]; meetings: Set<number>; points: string[] }>();
+  for (const s of statuses) {
+    const summary = s.sourceItemId
+      ? summaryByMeeting.get(`${s.meeting.id}:${s.sourceItemId}`)
+      : undefined;
+    for (const p of parsePositions(summary?.speakerPositions)) {
+      if (!isNamedSpeaker(p.speaker)) continue;
+      const name = p.speaker.trim();
+      const key = normalizePersonName(name);
+      const entry = byName.get(key) ?? { name, stances: [], meetings: new Set<number>(), points: [] };
+      entry.stances.push(normalizeStance(p.stance));
+      entry.meetings.add(s.meeting.id);
+      for (const point of p.points) {
+        if (!entry.points.includes(point)) entry.points.push(point);
+      }
+      byName.set(key, entry);
+    }
+  }
+
+  const speakers: TopicSpeaker[] = [...byName.values()]
+    .map((e) => ({
+      name: e.name,
+      stance: combineStances(e.stances),
+      meetingCount: e.meetings.size,
+      points: e.points.slice(0, 3),
+    }))
+    .sort((a, b) => b.meetingCount - a.meetingCount || a.name.localeCompare(b.name));
+
+  const dates = meetings.map((m) => m.date);
+
   return {
     id: area.id,
     slug: area.slug,
     name: area.name,
     description: area.description,
-    source: area.source,
     statusSummary: area.statusSummary,
     meetingsDiscussed: area.meetingsDiscussed,
     totalMeetings: area.totalMeetings,
-    mostRecentActivity: area.mostRecentActivity,
     generatedAt: area.generatedAt,
-    meetings: area.meetingStatuses.map((s) => ({
-      meetingId: s.meeting.id,
-      slug: s.meeting.slug,
-      title: s.meeting.title,
-      date: s.meeting.date,
-      summary: s.summary,
-      confidence: s.confidence,
-      startTimeSeconds: s.startTimeSeconds,
-      timecodeLabel: s.timecodeLabel,
-      videoProvider: s.meeting.videoProvider,
-    })),
+    meetings,
+    speakers,
+    publicComments: meetings.flatMap((m) => m.publicComments),
+    related,
+    firstDiscussed: dates.length ? dates[dates.length - 1] : null,
+    lastDiscussed: dates.length ? dates[0] : null,
   };
 });
 
