@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     ".venv/**",
     // Claude Code working dir (worktrees contain separate project checkouts):
     ".claude/**",
+    // Claude Design handoff bundle (browser-global JSX prototypes, not app code):
+    "city-council-topic-pages/**",
   ]),
 ]);
 
