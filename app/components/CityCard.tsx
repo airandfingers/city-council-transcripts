@@ -1,8 +1,8 @@
 import Link from "next/link";
-import type { City } from "@/app/lib/cityData";
+import type { CityDirectoryEntry } from "@/app/lib/cityData";
 
 export type CityCardProps = {
-  city: Omit<City, "recentMeetingsSummary">;
+  city: CityDirectoryEntry;
 };
 
 export default function CityCard({ city }: CityCardProps) {

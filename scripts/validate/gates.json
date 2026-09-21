@@ -17,6 +17,11 @@
       "command": "node scripts/validate/roster-title-resolver-check.mjs"
     },
     {
+      "id": "cache-boundary-check",
+      "description": "Search-corpus matcher is behavior-identical to the pre-refactor loop, and cached values (search corpus, sitemap catalog) survive unstable_cache's JSON round trip",
+      "command": "node scripts/validate/cache-boundary-check.mjs"
+    },
+    {
       "id": "home-layout-content-e2e",
       "description": "Home page shows city cards with correct content and layout",
       "command": "node scripts/validate/home-layout-content-e2e.mjs",

@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- ✅ FIX-NEON-COMPUTE-CACHING-001 — Cache the homepage city list, sitemap and search corpus so visitors/crawlers stop waking Neon's compute; make the publish-time cache purge finer-grained
 - ✅ FIX-STALE-SITE-URL-DOMAIN-001 — Stale `transcripts.ayoshitake.com` fallbacks + repeated/mislabeled "agenda fetch looks stuck" digest alert
 - ✅ US-LOCALDB-001 — Local Postgres for development
 - ✅ FIX-ALERT-AGEGATE-NULLMEETING-001 — Age-gate interest-area alerts with no meetingId
@@ -39,6 +40,32 @@
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
+
+### FIX-NEON-COMPUTE-CACHING-001 — Stop uncached page/crawler/search reads from waking Neon's compute
+
+**Status:** ✅ Done (2026-09-21)
+
+**As** the site operator on Neon's free plan (100 CU-hours/month, fixed 5-minute scale-to-zero),
+**I want** the hot, crawler-facing and per-keystroke reads cached,
+**so that** traffic does not keep the compute endpoint awake and the site stays under its monthly allowance.
+
+**Why (measured):** September was at 88.18/100 CU-h with the cap projected Sep 23. Compute is billed by *active time* and the endpoint never scaled above its 0.25 CU floor (350.8 active h × 0.25 = 87.7 vs 88.18 metered), so query cost is irrelevant — every DB read on a quiet hour is a ≥5-minute wake. The homepage, `sitemap.xml` (linked from robots.txt) and the search Server Action each queried Neon on every request. The larger cause was the local transcriber worker (fixed in `city-council-transcriber`, FIX-NEON-SYNC-WINDOW-001); this is the site-side half so traffic can't re-pin the endpoint awake.
+
+**Changes:**
+- `getCities()` (homepage) is `unstable_cache`d, 1h, and now `select`s only the five fields `CityCard` renders. `unstable_cache` round-trips through JSON, so the old `Omit<City,…>` shape's `Date` fields would have been `Date`s on a miss and strings on a hit while the type still said `Date`.
+- New `getSitemapCatalog()` (1h, tagged) replaces the sitemap's `1 + 2×cities` queries per hit with three per cache window. `getMeetingSlugsForCity` stays deliberately **uncached** — `/api/revalidate` builds its purge list from it. `getCitySlugsOnly` removed (no remaining callers).
+- Search: the per-city corpus is cached (`getSearchCorpusForCity`, 1h, tagged) and matched in Node by a new pure `matchMeetingsInCorpus` (`app/lib/searchCorpus.ts`) — semantics unchanged. Keyed by city, never by query. Measured largest corpus (monterey-park, 236 meetings) ≈ 0.5 MB vs Vercel's ~2 MB Data Cache item limit; a warning logs past 1.5 MB.
+- `/api/revalidate`: optional `include_transcripts` (default **true**, so today's publisher works against it in any deploy order). `false` skips the every-transcript-page purge that only a roster change needs. Both call shapes also `revalidateTag(…, "max")` the search-corpus and sitemap tags so a publish is searchable/listed immediately.
+
+**Acceptance Criteria:**
+- [x] Homepage: 1 SQL statement cold, 0 on repeat requests (measured with Prisma query logging against the real DB)
+- [x] `sitemap.xml`: 5 statements cold (was 1 + 2 per city on *every* request), 0 on repeat
+- [x] Search: the first query fetches the corpus (3 statements); nine further distinct queries incl. a repeat cost 0; hit counts stable across cached/uncached
+- [x] `/api/revalidate`: 401 without the key; `include_transcripts:false` purges only the city + topics pages and reports `transcripts_purged:false`; flag absent purges every transcript page (60 paths for Fort Collins); tags refreshed once, then 0 statements
+- [x] `scripts/validate/cache-boundary-check` gate: matcher agrees with a frozen copy of the pre-refactor loop on 11 queries, both cached shapes survive the JSON round trip; 5 mutations of the code each caught
+- [x] `tsc`, `eslint`, `next build`, roster check all pass (`routes-not-found-check` needs the Python `playwright` package, not installed in this environment — unrelated)
+- [ ] Follow-up (deliberately not done): `topics/[slug]` `revalidate = 3600` → `false`. Unsafe without an invalidation trigger — the scrape path writes preview-phase `InterestAreaMeetingStatus` rows straight to Neon with no revalidation. Traffic-bounded cost, so low value.
+- [ ] Follow-up (manual, no compute benefit measured): set `CRON_SECRET` in Vercel and delete `.github/workflows/publish-scheduled.yml`; the duplicate crons already fire in the same 12:55–13:15 UTC cluster, so they share one wake.
 
 ### FEAT-ADMIN-DIGEST-SUBSCRIBER-SUMMARY-001 — Weekly subscriber-count summary in the admin digest
 

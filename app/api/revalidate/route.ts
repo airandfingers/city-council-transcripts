@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import prisma from "@/app/lib/prisma";
 import { isAuthorized } from "@/app/lib/publish";
-import { getMeetingSlugsForCity } from "@/app/lib/cityData";
+import { CACHE_TAGS, getMeetingSlugsForCity } from "@/app/lib/cityData";
 
 /**
  * POST /api/revalidate
  *
- * Body: { "meeting_id": <number> } | { "city_state_code": <string>, "city_slug": <string> }
+ * Body: { "meeting_id": <number> }
+ *     | { "city_state_code": <string>, "city_slug": <string>, "include_transcripts"?: <boolean> }
  * Auth: Authorization: Bearer <PUBLISH_API_KEY>
  *
  * Invalidates the ISR cache for content that the publish sweep
@@ -38,6 +39,19 @@ import { getMeetingSlugsForCity } from "@/app/lib/cityData";
  *    (e.g. a mayor rotation) would otherwise have no invalidation trigger
  *    at all and go stale forever on every transcript page in the city.
  *
+ * `include_transcripts` (default **true**, so a publisher that predates it
+ * keeps today's behavior against this route in any deploy order): the
+ * transcript-wide purge above exists only because of roster changes, so a
+ * publisher that knows the roster did not change sends `false` and skips it.
+ * Purging every transcript page after every publish sweep made each one a
+ * cold render — the heaviest query in the app — the next time it was visited,
+ * and on Neon's free plan each such visit can wake the compute
+ * (FIX-NEON-COMPUTE-CACHING-001).
+ *
+ * Both call shapes also refresh the Data Cache entries tagged in
+ * `CACHE_TAGS` (the search corpus and the sitemap catalog) so new content is
+ * searchable/listed at once rather than after their 1h TTL.
+ *
  * Interest-area detail pages (`/[state]/[city]/topics/[slug]`) are left on
  * their existing 1h time-based `revalidate` window rather than moved to
  * `false` here — this route's per-city call covers the topics *listing*
@@ -52,8 +66,18 @@ const RevalidateBody = z.union([
   z.object({
     city_state_code: z.string().min(1),
     city_slug: z.string().min(1),
+    include_transcripts: z.boolean().optional(),
   }),
 ]);
+
+/** Marks the tagged Data Cache entries stale ("max" = stale-while-revalidate:
+ * the next request is served the old value while a fresh one is fetched, so the
+ * first visitor after a publish never waits on a cold database). */
+function revalidateDataCacheTags(): string[] {
+  const tags = Object.values(CACHE_TAGS);
+  for (const tag of tags) revalidateTag(tag, "max");
+  return tags;
+}
 
 function revalidateCityPaths(stateCode: string, slug: string): string[] {
   const cityPath = `/${stateCode}/${slug}`;
@@ -63,7 +87,8 @@ function revalidateCityPaths(stateCode: string, slug: string): string[] {
 }
 
 /** Revalidates every transcript page for a city — see the roster-staleness
- * note above. Narrow slug-only query, same one the sitemap uses. */
+ * note above. Uses the deliberately UNCACHED `getMeetingSlugsForCity`: a cached
+ * list could miss a meeting published moments ago. */
 async function revalidateCityTranscriptPaths(
   stateCode: string,
   slug: string,
@@ -115,10 +140,12 @@ export async function POST(req: Request) {
     const slugPath = meeting.slug.split("/").map(encodeURIComponent).join("/");
     revalidatePath(`/transcripts/${slugPath}`);
     const cityPaths = revalidateCityPaths(meeting.city.stateCode, meeting.city.slug);
+    const tags = revalidateDataCacheTags();
 
     return NextResponse.json({
       ok: true,
       revalidated: [`/transcripts/${slugPath}`, ...cityPaths],
+      tags,
     });
   }
 
@@ -138,7 +165,7 @@ export async function POST(req: Request) {
   // `getMeetingSlugsForCity`, whose `isValidStateCode` guard requires
   // lowercase and silently returns `[]` — zero transcript pages revalidated
   // — on anything else, rather than erroring.
-  const { city_state_code, city_slug } = parsed.data;
+  const { city_state_code, city_slug, include_transcripts } = parsed.data;
   const stateCode = city_state_code.toLowerCase();
   const city = await prisma.city.findUnique({
     where: { stateCode_slug: { stateCode, slug: city_slug } },
@@ -150,6 +177,16 @@ export async function POST(req: Request) {
   }
 
   const cityPaths = revalidateCityPaths(stateCode, city_slug);
-  const transcriptPaths = await revalidateCityTranscriptPaths(stateCode, city_slug);
-  return NextResponse.json({ ok: true, revalidated: [...cityPaths, ...transcriptPaths] });
+  // Absent means "yes" — see `include_transcripts` in the header comment.
+  const transcriptPaths =
+    include_transcripts === false
+      ? []
+      : await revalidateCityTranscriptPaths(stateCode, city_slug);
+  const tags = revalidateDataCacheTags();
+  return NextResponse.json({
+    ok: true,
+    revalidated: [...cityPaths, ...transcriptPaths],
+    transcripts_purged: include_transcripts !== false,
+    tags,
+  });
 }

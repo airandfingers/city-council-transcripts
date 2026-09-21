@@ -13,8 +13,13 @@ export const metadata: Metadata = {
 // Kept dynamic (not ISR) deliberately: this route has no dynamic segments,
 // so Next would prerender it at *build time* under ISR — coupling every
 // deploy to database availability, the same failure mode that broke
-// /admin/alerts. The query here is cheap (city list only, no transcript
-// text), so it isn't the egress driver this fix targets.
+// /admin/alerts. The query itself is cheap, but "cheap" is not the point on
+// Neon's free plan: compute is metered by active time with a fixed 5-minute
+// scale-to-zero, so ANY read on a quiet hour is a >=5 minute wake. This is the
+// site's most-visited route, so getCities() is cached (1h, stale-while-
+// revalidate) inside the data layer — the route stays force-dynamic for the
+// build-time reason above, while the DB is only touched once per cache window
+// (FIX-NEON-COMPUTE-CACHING-001).
 export const dynamic = "force-dynamic";
 
 export default async function Home() {

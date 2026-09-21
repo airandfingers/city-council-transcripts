@@ -8,10 +8,36 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
-import { tokenizeQuery, matchesAllTokens, buildMatchSnippet } from "@/app/lib/search";
-import { summaryTypeLabel } from "@/app/lib/labels";
+import { tokenizeQuery } from "@/app/lib/search";
+import {
+  matchMeetingsInCorpus,
+  toKeyPoints,
+  type MeetingSearchResult,
+  type SearchCorpusMeeting,
+} from "@/app/lib/searchCorpus";
+import { groupSitemapCatalog, type SitemapCityEntry } from "@/app/lib/sitemapCatalog";
 
-export type { City, Meeting, TranscriptLine };
+export type { City, Meeting, TranscriptLine, MeetingSearchResult, SitemapCityEntry };
+
+/**
+ * How long the Neon-backed Data Cache entries below live before a background
+ * refresh (FIX-NEON-COMPUTE-CACHING-001). Neon's free plan meters compute by
+ * *active time* with a fixed 5-minute scale-to-zero, so a DB read on a quiet
+ * hour costs a >=5 minute wake no matter how small the query is — the win here
+ * is skipping the round-trip, not making it cheaper. An expired entry is
+ * served stale while it refreshes (stale-while-revalidate), so visitors never
+ * wait on a cold database.
+ */
+const DB_CACHE_REVALIDATE_SECONDS = 3600;
+
+/**
+ * Tags on the entries a publish can make stale, so `/api/revalidate` refreshes
+ * them the moment new content lands instead of waiting out the TTL above.
+ */
+export const CACHE_TAGS = {
+  searchCorpus: "search-corpus",
+  sitemap: "sitemap",
+} as const;
 
 export type InterestAreaMeetingEntry = {
   meetingId: number;
@@ -78,39 +104,73 @@ function isValidStateCode(value: string): boolean {
   return /^[a-z]{2}$/.test(value);
 }
 
+/** The fields the homepage's CityCard renders — nothing else. Deliberately an
+ * explicit `Pick`, not `Omit<City, ...>`: `getCities` is cached, and a cached
+ * value comes back through JSON, so the `createdAt`/`updatedAt` `Date`s the old
+ * shape carried would be real `Date`s on a cache miss and strings on a hit while
+ * the type still said `Date`. Primitives only means the type can't lie. */
+export type CityDirectoryEntry = Pick<City, "stateCode" | "stateName" | "name" | "slug" | "summary">;
+
 /**
- * Returns all cities for the directory.
+ * Returns all cities for the directory (the homepage's city cards).
+ *
+ * Cached for `DB_CACHE_REVALIDATE_SECONDS` — same pattern as `getCitiesForNav`
+ * below, for the same reason: the city directory changes approximately never
+ * (a new city is a manual onboarding event), and this route is the site's most
+ * visited, so an uncached read here woke the Neon compute on every homepage
+ * view (FIX-NEON-COMPUTE-CACHING-001).
  *
  * @returns An array of all cities
  * @example
  * const cities = await getCities();
  * // [{ stateCode: "ca", name: "Monterey Park", ... }, ...]
  */
-export async function getCities(): Promise<Omit<City, "recentMeetingsSummary">[]> {
-  return prisma.city.findMany({
-    orderBy: [{ stateCode: "asc" }, { name: "asc" }],
-    // recentMeetingsSummary (@db.Text) is only rendered on the individual
-    // city page (getCityByParams), never by CityCard on this list.
-    omit: { recentMeetingsSummary: true },
-  });
-}
+export const getCities = unstable_cache(
+  async (): Promise<CityDirectoryEntry[]> => {
+    return prisma.city.findMany({
+      orderBy: [{ stateCode: "asc" }, { name: "asc" }],
+      select: { stateCode: true, stateName: true, name: true, slug: true, summary: true },
+    });
+  },
+  ["cities-directory"],
+  { revalidate: DB_CACHE_REVALIDATE_SECONDS },
+);
 
-/** Slug/state-only variant for the sitemap, which links to cities but
- * renders no city text at all. */
-export function getCitySlugsOnly(): Promise<Array<{ stateCode: string; slug: string }>> {
-  return prisma.city.findMany({
-    orderBy: [{ stateCode: "asc" }, { name: "asc" }],
-    select: { stateCode: true, slug: true },
-  });
-}
+/**
+ * Everything the sitemap needs, for every city, in one cached call
+ * (FIX-NEON-COMPUTE-CACHING-001). `app/sitemap.ts` is `force-dynamic` and
+ * linked from robots.txt, so before this every crawler hit ran 1 + 2 queries
+ * per city against Neon; now it is at most three queries per cache window.
+ * Deliberately a *separate* function from `getMeetingSlugsForCity` below, which
+ * must stay uncached — see the note there.
+ */
+export const getSitemapCatalog = unstable_cache(
+  async (): Promise<SitemapCityEntry[]> => {
+    const cityRef = { select: { stateCode: true, slug: true } } as const;
+    const [cities, meetings, areas] = await Promise.all([
+      prisma.city.findMany({
+        orderBy: [{ stateCode: "asc" }, { name: "asc" }],
+        select: { stateCode: true, slug: true },
+      }),
+      prisma.meeting.findMany({
+        orderBy: [{ date: "desc" }, { id: "desc" }],
+        select: { slug: true, date: true, city: cityRef },
+      }),
+      prisma.interestArea.findMany({ select: { slug: true, city: cityRef } }),
+    ]);
+    return groupSitemapCatalog(cities, meetings, areas);
+  },
+  ["sitemap-catalog"],
+  { revalidate: DB_CACHE_REVALIDATE_SECONDS, tags: [CACHE_TAGS.sitemap] },
+);
 
 export type CityNavEntry = { stateCode: string; slug: string; name: string; stateName: string };
 
 /**
  * Cities list for the persistent header's city switcher (SiteHeader), which
- * renders on every single page — unlike getCities()/getCitySlugsOnly()
- * (called once per page load by their own routes), fetching this uncached
- * would mean a Neon round-trip on every navigation across the whole site.
+ * renders on every single page — unlike the once-per-route directory reads,
+ * fetching this uncached would mean a Neon round-trip on every navigation
+ * across the whole site.
  * Wrapped in unstable_cache with a 1h revalidate: the city directory changes
  * approximately never (new cities are a manual onboarding event, not a
  * runtime one), so a page load momentarily not reflecting a city added
@@ -279,23 +339,65 @@ export async function getMeetingsForCity(
   }));
 }
 
-export type MeetingSearchResult = {
-  slug: string;
-  /** A short excerpt from a matched field MeetingCard doesn't otherwise
-   * show (a key decision, action item, timeline bullet, or topic) — same
-   * idea as MeetingCard's own `hiddenSummaryMatch`, extended to the wider
-   * surface this adds. Null when the match is already visible in
-   * title/logline/summary; MeetingCard keeps computing that narrower case
-   * itself (it needs the logline-vs-summary distinction this function
-   * doesn't track), so this deliberately doesn't duplicate it. */
-  extraSnippet: { label: string; text: string } | null;
-};
-
 // MeetingSummaryItem types worth searching but not already fetched by
 // MEETING_CARD_SELECT (SUMMARY_BLOCK/TLDR_BLOCK/PUBLIC_COMMENT_SUMMARY are
 // either covered by `summary`/`logline` already or too verbose to be
 // useful as a match reason here).
 const EXTRA_SEARCHABLE_SUMMARY_TYPES = ["KEY_DECISION", "ACTION_ITEM", "TIMELINE_BULLET"] as const;
+
+/** A serialized corpus this large starts to risk Vercel's ~2 MB Data Cache item
+ * limit, past which the entry is silently not stored (so every search would
+ * quietly go back to hitting Neon). Measured 2026-09-21: the largest city
+ * (monterey-park, 236 meetings) is ~0.5 MB, so there is ~4x headroom. */
+const SEARCH_CORPUS_WARN_CHARS = 1_500_000;
+
+/**
+ * One city's whole search corpus, fetched once per cache window rather than on
+ * every keystroke (FIX-NEON-COMPUTE-CACHING-001). `searchMeetingsForCity` is a
+ * Server Action, which bypasses ISR entirely, so before this every debounced
+ * search pulled every meeting's `summary` + summary items + topic key points
+ * from Neon. Keyed by city only — never by query, which would be unbounded keys
+ * with a DB read on every miss — and matched in Node, so match semantics are
+ * exactly what they were. Callers must validate `stateCode`/`citySlug` first.
+ */
+export const getSearchCorpusForCity = unstable_cache(
+  async (stateCode: string, citySlug: string): Promise<SearchCorpusMeeting[]> => {
+    const meetings = await prisma.meeting.findMany({
+      where: { city: { stateCode, slug: citySlug } },
+      select: {
+        slug: true,
+        title: true,
+        logline: true,
+        summary: true,
+        summaryItems: {
+          where: { type: { in: [...EXTRA_SEARCHABLE_SUMMARY_TYPES] } },
+          select: { type: true, text: true },
+        },
+        topicSummaries: { select: { title: true, keyPoints: true } },
+      },
+    });
+
+    const corpus: SearchCorpusMeeting[] = meetings.map((m) => ({
+      slug: m.slug,
+      title: m.title,
+      logline: m.logline,
+      summary: m.summary,
+      items: m.summaryItems,
+      topics: m.topicSummaries.map((t) => ({ title: t.title, keyPoints: toKeyPoints(t.keyPoints) })),
+    }));
+
+    const size = JSON.stringify(corpus).length;
+    if (size > SEARCH_CORPUS_WARN_CHARS) {
+      console.warn(
+        `[search] ${stateCode}/${citySlug} corpus is ${size} chars — nearing the ~2 MB Data Cache ` +
+          "item limit; past it the entry is not cached and every search hits Neon again.",
+      );
+    }
+    return corpus;
+  },
+  ["search-corpus"],
+  { revalidate: DB_CACHE_REVALIDATE_SECONDS, tags: [CACHE_TAGS.searchCorpus] },
+);
 
 /**
  * Server-side search over a city's meetings (FEAT-SEARCH-SERVERSIDE-
@@ -336,63 +438,19 @@ export async function searchMeetingsForCity(
   const tokens = tokenizeQuery(query);
   if (tokens.length === 0) return [];
 
-  const meetings = await prisma.meeting.findMany({
-    where: {
-      city: { stateCode, slug: citySlug },
-    },
-    select: {
-      slug: true,
-      title: true,
-      logline: true,
-      summary: true,
-      summaryItems: {
-        where: { type: { in: [...EXTRA_SEARCHABLE_SUMMARY_TYPES] } },
-        select: { type: true, text: true },
-      },
-      topicSummaries: {
-        select: { title: true, keyPoints: true },
-      },
-    },
-  });
-
-  const results: MeetingSearchResult[] = [];
-  for (const m of meetings) {
-    const visibleHaystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`;
-
-    const extraParts: { label: string; text: string }[] = m.summaryItems.map((item) => ({
-      label: summaryTypeLabel(item.type),
-      text: item.text,
-    }));
-    for (const topic of m.topicSummaries) {
-      const keyPoints = Array.isArray(topic.keyPoints) ? (topic.keyPoints as string[]) : [];
-      extraParts.push({
-        label: `Topic: ${topic.title}`,
-        text: `${topic.title} ${keyPoints.join(" ")}`,
-      });
-    }
-
-    const fullHaystack = [visibleHaystack, ...extraParts.map((p) => p.text)].join(" ");
-    if (!matchesAllTokens(fullHaystack, tokens)) continue;
-
-    let extraSnippet: MeetingSearchResult["extraSnippet"] = null;
-    if (!matchesAllTokens(visibleHaystack, tokens)) {
-      for (const part of extraParts) {
-        const snippet = buildMatchSnippet(part.text, tokens);
-        if (snippet) {
-          extraSnippet = { label: part.label, text: snippet };
-          break;
-        }
-      }
-    }
-
-    results.push({ slug: m.slug, extraSnippet });
-  }
-
-  return results;
+  // The corpus is cached per city (see getSearchCorpusForCity); everything
+  // below is plain in-memory matching, so match semantics are unchanged.
+  const corpus = await getSearchCorpusForCity(stateCode, citySlug);
+  return matchMeetingsInCorpus(corpus, tokens);
 }
 
-/** Narrow slug/date-only variant for the sitemap — that's all it renders
- * into <url> entries, and this is a route hit by every crawler. */
+/** Narrow slug/date-only read of a city's meetings.
+ *
+ * Deliberately UNCACHED. `/api/revalidate` builds its city-wide purge list from
+ * this, so a cached (up to 1h stale) list could miss a meeting published moments
+ * ago and silently skip invalidating its page. The sitemap, which tolerates an
+ * hour of staleness, reads `getSitemapCatalog` instead
+ * (FIX-NEON-COMPUTE-CACHING-001). */
 export function getMeetingSlugsForCity(
   stateCode: string,
   citySlug: string
