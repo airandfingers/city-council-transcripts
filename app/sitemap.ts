@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-import prisma from "@/app/lib/prisma";
-import { getCitySlugsOnly, getMeetingSlugsForCity } from "@/app/lib/cityData";
+import { getSitemapCatalog } from "@/app/lib/cityData";
 import { FALLBACK_SITE_URL } from "@/app/lib/siteUrl";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? FALLBACK_SITE_URL;
@@ -27,27 +26,24 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? FALLBACK_SITE_URL;
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const cities = await getCitySlugsOnly();
+  // One cached read for every city (FIX-NEON-COMPUTE-CACHING-001): this route
+  // stays force-dynamic (see above), but the *data* is cached inside
+  // getSitemapCatalog, so a crawler hit no longer wakes the Neon compute.
+  // Meeting dates arrive as ISO strings (they went through the cache's JSON
+  // round-trip), which `lastModified` accepts as-is.
+  const catalog = await getSitemapCatalog();
 
   const entries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "daily" },
     { url: `${SITE_URL}/glossary`, changeFrequency: "monthly" },
   ];
 
-  for (const city of cities) {
+  for (const city of catalog) {
     const cityPath = `${SITE_URL}/${city.stateCode}/${city.slug}`;
     entries.push({ url: cityPath, changeFrequency: "hourly" });
     entries.push({ url: `${cityPath}/topics`, changeFrequency: "hourly" });
 
-    const [meetings, interestAreas] = await Promise.all([
-      getMeetingSlugsForCity(city.stateCode, city.slug),
-      prisma.interestArea.findMany({
-        where: { city: { stateCode: city.stateCode, slug: city.slug } },
-        select: { slug: true },
-      }),
-    ]);
-
-    for (const meeting of meetings) {
+    for (const meeting of city.meetings) {
       const slugPath = meeting.slug.split("/").map(encodeURIComponent).join("/");
       entries.push({
         url: `${SITE_URL}/transcripts/${slugPath}`,
@@ -56,9 +52,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
-    for (const area of interestAreas) {
+    for (const areaSlug of city.areaSlugs) {
       entries.push({
-        url: `${cityPath}/topics/${area.slug}`,
+        url: `${cityPath}/topics/${areaSlug}`,
         changeFrequency: "weekly",
       });
     }

@@ -11,6 +11,33 @@ This is a Next.js 16 application for managing and displaying city council transc
 - Tailwind CSS v4 with PostCSS
 - ESLint 9 with Next.js config
 
+## Git Workflow (do this first, every time)
+
+**Always refresh from the remote before you start working.** Other contributors' PRs land on `main`; branching from a stale local `main` means building on outdated code.
+
+```bash
+git fetch origin --prune
+git checkout main && git pull --ff-only origin main   # base branch up to date FIRST
+git checkout -b <type>/<short-name>                    # then branch (feat/, fix/, perf/, chore/)
+```
+
+- **Never commit directly to `main`.** This repo uses branches + PRs (unlike `city-council-transcriber`, which is single-developer and commits straight to `main`).
+- **Before pushing**, `git fetch origin` again; if `origin/main` moved, `git rebase origin/main` and re-run the gates.
+- Use `--ff-only` when pulling. If it can't fast-forward, or the working tree is dirty, stop and ask rather than merging or stashing on your own.
+- Run `npm run test:gates` (lint, build, checks) before pushing.
+- Conventional commits (`feat:`, `fix:`, `perf:`, `docs:`, `test:`, `refactor:`); put the story ID in the subject when there is one (e.g. `FIX-NEON-COMPUTE-CACHING-001`).
+- Track work in `prd.md` (a story under "Active Stories") before implementing.
+
+## Database (Neon) conventions
+
+The database is on Neon's **free plan: 100 CU-hours/month of compute, with a fixed 5-minute scale-to-zero.** Compute is billed by *active time*, so any DB read on a quiet hour costs a ≥5-minute wake regardless of how small the query is. Query optimization does not move this meter; **avoiding round-trips does.**
+
+- **Don't add uncached DB reads to hot or crawler-facing paths** (the homepage, `sitemap.ts`, Server Actions, anything hit per keystroke). Cache them in the data layer with `unstable_cache` (see `getCities`, `getCitiesForNav`, `getSitemapCatalog`, `getSearchCorpusForCity` in `app/lib/cityData.ts`).
+- **Cached values must be JSON-safe.** `unstable_cache` stores `JSON.stringify(result)` and returns `JSON.parse(...)` on a hit, so a `Date` is a `Date` on a cache miss and a *string* on a hit — TypeScript will not warn. Select primitives explicitly (no `omit`/whole-row returns) and use ISO strings for dates.
+- Keep the cache key bounded: key by city, never by free-text user input.
+- Keep `/api/revalidate`'s purge-list source (`getMeetingSlugsForCity`) **uncached** — a stale list silently skips invalidation.
+- Vercel's Data Cache silently declines to store items over ~2 MB; check the size of anything you cache that grows with data.
+
 ## Development Commands
 
 ### Setup
