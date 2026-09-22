@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { z } from "zod";
-import prisma from "@/app/lib/prisma";
+import prisma, { prismaTx } from "@/app/lib/prisma";
 import { generateToken } from "@/app/lib/tokens";
 import { checkRateLimit } from "@/app/lib/rate-limit";
 import { sendConfirmationEmail, sendAdminCityRequestEmail } from "@/app/lib/email";
@@ -186,7 +186,7 @@ export async function subscribe(input: SubscribeInputType): Promise<SubscribeRes
     topicName = area.name;
   }
 
-  const subscriber = await prisma.subscriber.upsert({
+  const subscriber = await prismaTx.subscriber.upsert({
     where: { email: data.email },
     create: { email: data.email },
     update: {},

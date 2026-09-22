@@ -1,4 +1,4 @@
-import prisma from "@/app/lib/prisma";
+import prisma, { prismaTx } from "@/app/lib/prisma";
 import { Alert } from "@prisma/client";
 import {
   buildManageUrl,
@@ -203,7 +203,7 @@ export async function createMeetingUpcomingAlert(
     ...tiers,
   };
 
-  await prisma.alert.updateMany({
+  await prismaTx.alert.updateMany({
     where: {
       meetingId,
       type: "MEETING_UPCOMING",
@@ -367,7 +367,7 @@ export async function publishAlertToSubscribers(
   // digest job has a record to bundle later, regardless of frequency.
   // skipDuplicates makes this safe to re-run for an alert already fanned out.
   if (recipients.length > 0) {
-    await prisma.alertDelivery.createMany({
+    await prismaTx.alertDelivery.createMany({
       data: recipients.map((r) => ({
         alertId,
         subscriptionId: r.subscriptionId,
@@ -386,7 +386,7 @@ export async function publishAlertToSubscribers(
     .map((r) => r.subscriptionId);
 
   if (sentSubscriptionIds.length > 0) {
-    await prisma.alertDelivery.updateMany({
+    await prismaTx.alertDelivery.updateMany({
       where: { alertId, subscriptionId: { in: sentSubscriptionIds } },
       data: { status: "SENT", sentAt: new Date() },
     });

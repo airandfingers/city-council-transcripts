@@ -1,4 +1,4 @@
-import prisma from "@/app/lib/prisma";
+import prisma, { prismaTx } from "@/app/lib/prisma";
 import type { AlertFrequency } from "@prisma/client";
 import { buildManageUrl, buildMeetingUrl, sendDigestEmail } from "@/app/lib/email";
 import type { DigestGroup } from "@/emails/DigestEmail";
@@ -219,7 +219,7 @@ export async function sendDueDigests(
   }
 
   if (toSkip.length > 0) {
-    await prisma.alertDelivery.updateMany({
+    await prismaTx.alertDelivery.updateMany({
       where: { id: { in: toSkip } },
       data: { status: "SKIPPED" },
     });
@@ -255,7 +255,7 @@ export async function sendDueDigests(
       const batch = await prisma.digestBatch.create({
         data: { subscriberId, frequency },
       });
-      await prisma.alertDelivery.updateMany({
+      await prismaTx.alertDelivery.updateMany({
         where: { id: { in: items.map((i) => i.deliveryId) } },
         data: { status: "SENT", sentAt: now, digestBatchId: batch.id },
       });

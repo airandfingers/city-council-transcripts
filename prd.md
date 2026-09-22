@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- ✅ FIX-NEON-HTTP-ADAPTER-001 — Prisma held a persistent Neon connection open on every warm instance, blocking scale-to-zero; moved reads to Neon's HTTP driver with a transaction-capable fallback client
 - ✅ FIX-NEON-COMPUTE-CACHING-001 — Cache the homepage city list, sitemap and search corpus so visitors/crawlers stop waking Neon's compute; make the publish-time cache purge finer-grained
 - ✅ FIX-STALE-SITE-URL-DOMAIN-001 — Stale `transcripts.ayoshitake.com` fallbacks + repeated/mislabeled "agenda fetch looks stuck" digest alert
 - ✅ US-LOCALDB-001 — Local Postgres for development
@@ -40,6 +41,31 @@
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
+
+### FIX-NEON-HTTP-ADAPTER-001 — Stop Prisma holding a Neon connection open on every warm instance
+
+**Status:** ✅ Done (2026-09-22)
+
+**As** the site operator on Neon's free plan (100 CU-h/month, fixed 5-minute scale-to-zero),
+**I want** the app to stop holding a database connection open between requests,
+**so that** the compute can actually suspend and stop burning the monthly compute allowance.
+
+**Why:** `FIX-NEON-COMPUTE-CACHING-001` cut query *volume*, but compute stayed ~90%+ active. A live diagnosis on 2026-09-22 found the real cause: a bare `new PrismaClient()` holds a persistent Postgres connection for as long as a Vercel instance stays warm, independent of traffic — one connection was observed open 28+ minutes having run a single `SELECT 1` health check while the endpoint never suspended. On Neon, a held connection blocks auto-suspend regardless of query volume, so caching alone could never fix it.
+
+**Design:** the default export now uses `PrismaNeonHTTP` (one independent HTTPS request per query — nothing to hold open) when `DATABASE_URL` points at a `*.neon.tech` host, and the stock client otherwise so local Docker Postgres dev keeps working. Deliberately **not** `PrismaNeon` (the WebSocket adapter every guide shows): Neon's docs require its Pool/Client be "connected, used, and closed within a single request handler", so a module-scope singleton would either error on stale sockets or recreate the same held-open problem, and doing it properly would force all 21 importers to change shape.
+
+**The catch, found by testing rather than assuming:** `PrismaNeonHTTP` rejects `startTransaction()`, and Prisma opens an *implicit* transaction for more operations than expected. Measured against the live database: reads (incl. deep relation loads, `count`, `groupBy`), `create`, `update`, `delete`, `deleteMany` all work over HTTP; **`upsert`, `createMany`, `updateMany` do not**. (The initial assumption that a simple `upsert` compiles to a single `INSERT ... ON CONFLICT` was wrong.) So a second, lazily-constructed, transaction-capable `prismaTx` client covers exactly those 10 call sites — all on cron/admin/subscribe paths, never on hot read paths. An instance serving only reads never constructs it and never connects.
+
+**Acceptance Criteria:**
+- [x] Default client uses the Neon HTTP adapter on Neon hosts; falls back to the stock client for local Postgres (verified by running the real module against a `localhost` URL)
+- [x] Identical results between old and new clients across 9 representative query shapes + the heaviest 8-relation transcript query (1,475 lines), compared **including runtime types** so a `Date` silently becoming a string would be caught — no drift found
+- [x] `prismaTx` handles `upsert`/`createMany`/`updateMany`; 10 call sites migrated across `alerts.ts`, `digest.ts`, `adminDigest.ts`, `subscribe.ts`
+- [x] No behavior change from splitting clients: the codebase has zero `$transaction` calls, so nothing was atomic across statements before
+- [x] New `prisma-tx-boundary-check` gate (TypeScript AST, not regex) fails the build if a transaction-requiring op lands on the HTTP client; mutation-tested — catches all 6 violation shapes incl. nested relation writes, with no false positive on `prismaTx`
+- [x] `tsc`, `eslint`, `next build`, roster + cache-boundary gates pass (`routes-not-found-check` fails only on a missing Python `playwright` in this environment — pre-existing, unrelated)
+- [ ] Live: confirm on the preview deployment, then production, that the compute now reaches `suspend_compute` during a clean idle window
+
+**Not done:** interactive transactions remain unavailable on the default client by design. If one is ever needed, move that path to `prismaTx` (which supports them) or to `PrismaNeon` with a per-request lifecycle — documented in `app/lib/prisma.ts`.
 
 ### FIX-NEON-COMPUTE-CACHING-001 — Stop uncached page/crawler/search reads from waking Neon's compute
 
