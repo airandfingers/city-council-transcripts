@@ -20,21 +20,19 @@ import { groupSitemapCatalog, type SitemapCityEntry } from "@/app/lib/sitemapCat
 export type { City, Meeting, TranscriptLine, MeetingSearchResult, SitemapCityEntry };
 
 /**
- * How long the Neon-backed Data Cache entries below live before a background
- * refresh (FIX-NEON-COMPUTE-CACHING-001). Neon's free plan meters compute by
- * *active time* with a fixed 5-minute scale-to-zero, so a DB read on a quiet
- * hour costs a >=5 minute wake no matter how small the query is — the win here
- * is skipping the round-trip, not making it cheaper. An expired entry is
- * served stale while it refreshes (stale-while-revalidate), so visitors never
- * wait on a cold database.
+ * The Neon-backed Data Cache entries below never expire on a timer; they are
+ * refreshed only when `/api/revalidate` fires their tag (FIX-NEON-TAG-ONLY-
+ * CACHES-001). Neon's free plan meters compute by active time with a fixed
+ * 5-minute scale-to-zero, and an hourly TTL made each entry an uncoordinated
+ * >=5-minute wake every hour a visitor showed up. Every Neon writer (the
+ * transcriber's publish sweep and its sync window) calls `/api/revalidate`
+ * after writing, which is the only trigger these need.
  */
-const DB_CACHE_REVALIDATE_SECONDS = 3600;
+const DB_CACHE_REVALIDATE = false as const;
 
-/**
- * Tags on the entries a publish can make stale, so `/api/revalidate` refreshes
- * them the moment new content lands instead of waiting out the TTL above.
- */
+/** Tags `/api/revalidate` fires (all of them, on every call). */
 export const CACHE_TAGS = {
+  cities: "cities",
   searchCorpus: "search-corpus",
   sitemap: "sitemap",
 } as const;
@@ -114,7 +112,7 @@ export type CityDirectoryEntry = Pick<City, "stateCode" | "stateName" | "name" |
 /**
  * Returns all cities for the directory (the homepage's city cards).
  *
- * Cached for `DB_CACHE_REVALIDATE_SECONDS` — same pattern as `getCitiesForNav`
+ * Cached until the `cities` tag fires — same pattern as `getCitiesForNav`
  * below, for the same reason: the city directory changes approximately never
  * (a new city is a manual onboarding event), and this route is the site's most
  * visited, so an uncached read here woke the Neon compute on every homepage
@@ -133,14 +131,14 @@ export const getCities = unstable_cache(
     });
   },
   ["cities-directory"],
-  { revalidate: DB_CACHE_REVALIDATE_SECONDS },
+  { revalidate: DB_CACHE_REVALIDATE, tags: [CACHE_TAGS.cities] },
 );
 
 /**
  * Everything the sitemap needs, for every city, in one cached call
  * (FIX-NEON-COMPUTE-CACHING-001). `app/sitemap.ts` is `force-dynamic` and
  * linked from robots.txt, so before this every crawler hit ran 1 + 2 queries
- * per city against Neon; now it is at most three queries per cache window.
+ * per city against Neon; now it is three queries per publish.
  * Deliberately a *separate* function from `getMeetingSlugsForCity` below, which
  * must stay uncached — see the note there.
  */
@@ -161,7 +159,7 @@ export const getSitemapCatalog = unstable_cache(
     return groupSitemapCatalog(cities, meetings, areas);
   },
   ["sitemap-catalog"],
-  { revalidate: DB_CACHE_REVALIDATE_SECONDS, tags: [CACHE_TAGS.sitemap] },
+  { revalidate: DB_CACHE_REVALIDATE, tags: [CACHE_TAGS.sitemap] },
 );
 
 export type CityNavEntry = { stateCode: string; slug: string; name: string; stateName: string };
@@ -171,11 +169,9 @@ export type CityNavEntry = { stateCode: string; slug: string; name: string; stat
  * renders on every single page — unlike the once-per-route directory reads,
  * fetching this uncached would mean a Neon round-trip on every navigation
  * across the whole site.
- * Wrapped in unstable_cache with a 1h revalidate: the city directory changes
- * approximately never (new cities are a manual onboarding event, not a
- * runtime one), so a page load momentarily not reflecting a city added
- * minutes ago is an acceptable trade-off for not re-querying on every
- * request. See the many FIX-NEON-EGRESS-* stories in city-council-
+ * Cached until `/api/revalidate` fires the `cities` tag: the city directory
+ * changes approximately never (new cities are a manual onboarding event that
+ * ends in a publish sweep). See the many FIX-NEON-EGRESS-* stories in city-council-
  * transcriber's prd.md for why this codebase treats per-request DB calls
  * from a widely-shared component as worth avoiding.
  */
@@ -187,7 +183,7 @@ export const getCitiesForNav = unstable_cache(
     });
   },
   ["cities-for-nav"],
-  { revalidate: 3600 },
+  { revalidate: DB_CACHE_REVALIDATE, tags: [CACHE_TAGS.cities] },
 );
 
 /**
@@ -352,7 +348,7 @@ const EXTRA_SEARCHABLE_SUMMARY_TYPES = ["KEY_DECISION", "ACTION_ITEM", "TIMELINE
 const SEARCH_CORPUS_WARN_CHARS = 1_500_000;
 
 /**
- * One city's whole search corpus, fetched once per cache window rather than on
+ * One city's whole search corpus, fetched once per publish rather than on
  * every keystroke (FIX-NEON-COMPUTE-CACHING-001). `searchMeetingsForCity` is a
  * Server Action, which bypasses ISR entirely, so before this every debounced
  * search pulled every meeting's `summary` + summary items + topic key points
@@ -396,7 +392,7 @@ export const getSearchCorpusForCity = unstable_cache(
     return corpus;
   },
   ["search-corpus"],
-  { revalidate: DB_CACHE_REVALIDATE_SECONDS, tags: [CACHE_TAGS.searchCorpus] },
+  { revalidate: DB_CACHE_REVALIDATE, tags: [CACHE_TAGS.searchCorpus] },
 );
 
 /**
@@ -447,10 +443,9 @@ export async function searchMeetingsForCity(
 /** Narrow slug/date-only read of a city's meetings.
  *
  * Deliberately UNCACHED. `/api/revalidate` builds its city-wide purge list from
- * this, so a cached (up to 1h stale) list could miss a meeting published moments
- * ago and silently skip invalidating its page. The sitemap, which tolerates an
- * hour of staleness, reads `getSitemapCatalog` instead
- * (FIX-NEON-COMPUTE-CACHING-001). */
+ * this, so a cached list could miss a meeting published moments ago and silently
+ * skip invalidating its page. The sitemap reads the tag-refreshed
+ * `getSitemapCatalog` instead (FIX-NEON-COMPUTE-CACHING-001). */
 export function getMeetingSlugsForCity(
   stateCode: string,
   citySlug: string

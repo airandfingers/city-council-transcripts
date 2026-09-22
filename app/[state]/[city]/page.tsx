@@ -17,6 +17,7 @@ import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { annotateTextPlain } from "@/app/lib/citations";
+import { transcriptPath } from "@/app/lib/transcriptPath";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate on
 // every meeting publish for this city (see app/transcripts/[...slug]/
@@ -91,7 +92,7 @@ export default async function CityPage({ params }: Props) {
       ) : (
         latestMeeting?.logline && (
           <Link
-            href={`/transcripts/${latestMeeting.slug}`}
+            href={transcriptPath(latestMeeting.slug)}
             className="block mb-6 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:border-gray-400 dark:hover:border-gray-500 transition-colors max-w-prose"
           >
             <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">

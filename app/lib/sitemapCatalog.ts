@@ -3,9 +3,8 @@
  * into one per-city catalog (FIX-NEON-COMPUTE-CACHING-001).
  *
  * The sitemap used to run 1 + 2 queries *per city* on every crawler hit.
- * `getSitemapCatalog` (cityData.ts) now builds this once per cache window
- * instead, so the Neon endpoint is woken at most once per window regardless of
- * crawler traffic. Pure and DB-free so it can be checked without a database.
+ * `getSitemapCatalog` (cityData.ts) now builds this once per publish instead,
+ * so crawler traffic never wakes the Neon endpoint. Pure and DB-free so it can be checked without a database.
  *
  * The result goes through `unstable_cache` (JSON round-trip), so meeting dates
  * are ISO *strings* here, never `Date`s: a `Date` would be a `Date` on a cache

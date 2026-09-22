@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { notFound, permanentRedirect } from "next/navigation";
+import { cache, Suspense } from "react";
 import prisma from "@/app/lib/prisma";
+import { resolveTranscriptSlug } from "@/app/lib/transcriptPath";
 import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
 import type { Topic, Bullet } from "@/app/components/TopicsPanel";
@@ -81,13 +82,15 @@ type Props = {
   params: Promise<{ slug: string[] }>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+async function resolveSlug(params: Props["params"]): Promise<string> {
   const { slug: segments } = await params;
-  const slug = segments.map(decodeURIComponent).join("/");
-  const meeting = await prisma.meeting.findUnique({
-    where: { slug },
-    select: { title: true, date: true },
-  });
+  const { slug, redirectTo } = resolveTranscriptSlug(segments);
+  if (redirectTo) permanentRedirect(redirectTo);
+  return slug;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const meeting = await getMeeting(await resolveSlug(params));
   if (!meeting) return { title: "Transcript Not Found" };
   // Meeting titles are scraped from each city's own source; some cities'
   // titles already spell out the date ("City Council Meeting — July 15,
@@ -98,11 +101,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: titleWithDate(meeting.title, meeting.date) };
 }
 
-export default async function TranscriptPage({ params }: Props) {
-  const { slug: segments } = await params;
-  const slug = segments.map(decodeURIComponent).join("/");
-
-  const meeting = await prisma.meeting.findUnique({
+// One query per render: generateMetadata and the page share it via cache().
+const getMeeting = cache((slug: string) =>
+  prisma.meeting.findUnique({
     where: { slug },
     include: {
       // id/stateCode/slug/name/stateName are rendered (breadcrumb, header
@@ -215,7 +216,11 @@ export default async function TranscriptPage({ params }: Props) {
         },
       },
     },
-  });
+  }),
+);
+
+export default async function TranscriptPage({ params }: Props) {
+  const meeting = await getMeeting(await resolveSlug(params));
 
   if (!meeting) {
     notFound();

@@ -48,9 +48,11 @@ import { CACHE_TAGS, getMeetingSlugsForCity } from "@/app/lib/cityData";
  * and on Neon's free plan each such visit can wake the compute
  * (FIX-NEON-COMPUTE-CACHING-001).
  *
- * Both call shapes also refresh the Data Cache entries tagged in
- * `CACHE_TAGS` (the search corpus and the sitemap catalog) so new content is
- * searchable/listed at once rather than after their 1h TTL.
+ * Both call shapes also refresh every Data Cache entry tagged in `CACHE_TAGS`
+ * (city lists, search corpus, sitemap catalog). Those entries have no TTL
+ * (FIX-NEON-TAG-ONLY-CACHES-001), so this route is their ONLY refresh trigger:
+ * any code that writes Neon must call it afterwards, or the site keeps serving
+ * the old data.
  *
  * Interest-area detail pages (`/[state]/[city]/topics/[slug]`) are left on
  * their existing 1h time-based `revalidate` window rather than moved to
