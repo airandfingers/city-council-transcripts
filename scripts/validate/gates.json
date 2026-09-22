@@ -22,6 +22,11 @@
       "command": "node scripts/validate/cache-boundary-check.mjs"
     },
     {
+      "id": "prisma-tx-boundary-check",
+      "description": "No transaction-requiring Prisma op (upsert/createMany/updateMany/nested write/$transaction) on the HTTP-backed default client",
+      "command": "node scripts/validate/prisma-tx-boundary-check.mjs"
+    },
+    {
       "id": "home-layout-content-e2e",
       "description": "Home page shows city cards with correct content and layout",
       "command": "node scripts/validate/home-layout-content-e2e.mjs",

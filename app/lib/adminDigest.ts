@@ -1,4 +1,4 @@
-import prisma from "@/app/lib/prisma";
+import prisma, { prismaTx } from "@/app/lib/prisma";
 import { buildMeetingUrl, sendDigestEmail } from "@/app/lib/email";
 import type { DigestGroup } from "@/emails/DigestEmail";
 import { getAdminRecipients } from "@/app/lib/publish";
@@ -47,7 +47,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
  * deployment).
  */
 export async function buildSubscriberSummaryGroup(now: Date): Promise<DigestGroup | null> {
-  const state = await prisma.adminDigestState.upsert({
+  const state = await prismaTx.adminDigestState.upsert({
     where: { id: 1 },
     update: {},
     create: { id: 1 },
@@ -475,11 +475,11 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
   // scheduled subscriber drain); an alert that's already PUBLISHED (instant
   // subscriber fan-out, e.g. upcoming-with-agenda/preview) keeps that status
   // — flipping it back to SENT_TO_ADMINS would make the drain re-publish it.
-  await prisma.alert.updateMany({
+  await prismaTx.alert.updateMany({
     where: { id: { in: bundledAlertIds }, status: "DRAFTED" },
     data: { status: "SENT_TO_ADMINS", sentToAdminsAt: now },
   });
-  await prisma.alert.updateMany({
+  await prismaTx.alert.updateMany({
     where: { id: { in: bundledAlertIds }, status: { not: "DRAFTED" } },
     data: { sentToAdminsAt: now },
   });
@@ -489,7 +489,7 @@ export async function sendDueAdminDigest(now: Date = new Date()): Promise<AdminD
   // matching the Alert-stamping rationale: the content included in this
   // digest attempt is the same "reviewed" snapshot either way.
   if (staleAgendas.length > 0) {
-    await prisma.meeting.updateMany({
+    await prismaTx.meeting.updateMany({
       where: { id: { in: staleAgendas.map((m) => m.id) } },
       data: { staleAgendaNotifiedAt: now },
     });
