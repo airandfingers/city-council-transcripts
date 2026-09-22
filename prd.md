@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- ✅ CHORE-WARM-CACHE-AFTER-DEPLOY-001 — Warm the page cache automatically after each production deploy; doubles as outage insurance when Neon compute is suspended
 - ✅ FIX-NEON-HTTP-ADAPTER-001 — Prisma held a persistent Neon connection open on every warm instance, blocking scale-to-zero; moved reads to Neon's HTTP driver with a transaction-capable fallback client
 - ✅ FIX-NEON-COMPUTE-CACHING-001 — Cache the homepage city list, sitemap and search corpus so visitors/crawlers stop waking Neon's compute; make the publish-time cache purge finer-grained
 - ✅ FIX-STALE-SITE-URL-DOMAIN-001 — Stale `transcripts.ayoshitake.com` fallbacks + repeated/mislabeled "agenda fetch looks stuck" digest alert

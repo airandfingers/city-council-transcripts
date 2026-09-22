@@ -1,0 +1,44 @@
+name: Warm cache after production deploy
+
+# A deploy invalidates the whole page cache. Left to organic traffic, re-warming
+# dribbles out over hours and keeps Neon's compute awake the entire time
+# (measured: 41% of pages still cold 6.5h after a deploy, compute ~82% active).
+# Warming deliberately compresses that into roughly a minute.
+#
+# It doubles as outage insurance: on Neon's free plan, compute suspends when the
+# monthly CU-hour allowance runs out. Verified by test — an already-cached page
+# still serves 200 with no database; a never-rendered page returns 500. A warm
+# cache keeps the site up through a suspension.
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: "Origin to warm (defaults to the production site)"
+        required: false
+        default: "https://counciloris.com"
+
+jobs:
+  warm:
+    # Only after a *successful* *production* deploy. `deployment_status` fires
+    # for previews and for pending/failure states too.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Warm the page cache
+        env:
+          # For a deployment_status event, prefer the URL the deployment itself
+          # reports, so this stays correct if the production domain ever changes.
+          SITE_URL: ${{ github.event.inputs.origin || github.event.deployment_status.environment_url || 'https://counciloris.com' }}
+          CONCURRENCY: "5"
+        run: node scripts/warm-cache.mjs
