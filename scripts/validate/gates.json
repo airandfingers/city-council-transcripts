@@ -27,6 +27,11 @@
       "command": "node scripts/validate/prisma-tx-boundary-check.mjs"
     },
     {
+      "id": "transcript-path-check",
+      "description": "Canonical transcript URLs never redirect, and every non-canonical spelling redirects to a canonical one",
+      "command": "node scripts/validate/transcript-path-check.mjs"
+    },
+    {
       "id": "home-layout-content-e2e",
       "description": "Home page shows city cards with correct content and layout",
       "command": "node scripts/validate/home-layout-content-e2e.mjs",

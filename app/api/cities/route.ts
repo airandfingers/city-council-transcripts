@@ -17,9 +17,9 @@ import { getCitiesForNav } from "@/app/lib/cityData";
  * reason: an async root layout would force every page through the same
  * build-time DB dependency.
  *
- * getCitiesForNav() itself is `unstable_cache`'d (1h), so this route is
- * cheap per-request despite being dynamic — only the first request per
- * cache window actually hits Neon.
+ * getCitiesForNav() itself is `unstable_cache`'d until the `cities` tag fires,
+ * so this route is cheap per-request despite being dynamic — only the first
+ * request after a publish actually hits Neon.
  */
 export const dynamic = "force-dynamic";
 

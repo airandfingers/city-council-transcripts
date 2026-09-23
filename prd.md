@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- 🔄 FIX-NEON-TAG-ONLY-CACHES-001 — Shared data caches refresh only on publish (no hourly TTL wakes), one meeting query per transcript render, canonical transcript links. Built and verified locally; **held until 2026-10-01** (production deploy freeze while September's compute cap is exhausted)
 - ✅ CHORE-WARM-CACHE-AFTER-DEPLOY-001 — Warm the page cache automatically after each production deploy; doubles as outage insurance when Neon compute is suspended
 - ✅ FIX-NEON-HTTP-ADAPTER-001 — Prisma held a persistent Neon connection open on every warm instance, blocking scale-to-zero; moved reads to Neon's HTTP driver with a transaction-capable fallback client
 - ✅ FIX-NEON-COMPUTE-CACHING-001 — Cache the homepage city list, sitemap and search corpus so visitors/crawlers stop waking Neon's compute; make the publish-time cache purge finer-grained
@@ -42,6 +43,37 @@
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
+
+### FIX-NEON-TAG-ONLY-CACHES-001 — Stop hourly cache expiry from waking Neon's compute
+
+**Status:** 🔄 Built, verified locally; merge and deploy on or after 2026-10-01 (see "Rollout")
+
+**As** the site operator on Neon's free plan (target ~50 of 100 CU-h/month, i.e. ≤6.7 active h/day),
+**I want** the site to read Neon only when content actually changed,
+**so that** normal visitor and crawler traffic never wakes the compute.
+
+**Why:** after `FIX-NEON-HTTP-ADAPTER-001` and the post-deploy cache warming, compute was still ~80–90% active. Production probes on 2026-09-22 ruled out ISR eviction: 29/30 random transcript pages were cache HITs 3.4h after warming, and prefetch (`RSC`, `?_rsc=`) and `?utm_*` variants were HITs too. What remained:
+- The four `unstable_cache` entries (`getCitiesForNav` — fetched by `SiteHeader` on every page view — `getCities`, `getSitemapCatalog`, `getSearchCorpusForCity`) expired hourly. Each re-read Neon on its own schedule, so each could cost a separate ≥5-minute wake every hour a visitor showed up.
+- The transcript page ran its meeting lookup twice per render (`generateMetadata` and the page).
+- Two links (`[state]/[city]/page.tsx`, `topics/[slug]/page.tsx`) inserted the raw slug, unlike every other link.
+
+**Design:**
+- The four entries use `revalidate: false`. `getCities`/`getCitiesForNav` get a new `cities` tag. `/api/revalidate` already fires every `CACHE_TAGS` value (stale-while-revalidate), so it is now their only refresh trigger. The transcriber's sync window must call it after its own Neon writes, not just the publish sweep: that's a city-council-transcriber change shipping alongside this one.
+- `updateMeetingTitle` also fires the `search-corpus` tag, since the search corpus holds titles.
+- The transcript page shares one React `cache()`d meeting lookup between metadata and page.
+- New `app/lib/transcriptPath.ts` gives one canonical `/transcripts/…` path. The page 308-redirects segments that aren't canonically encoded (e.g. `a%2Fb`) to it, without a DB read.
+
+**Found by testing, not assumed:** Next normalizes percent-encoded unreserved characters (`%5F`, `%2D`) in `params`, so the page can't see those variants, even though production caches them as separate cold renders. Catching them needs `proxy.ts`, which runs on every request. That, and caching "not found" answers (404s currently always MISS and query Neon), wait until the Vercel request logs show that traffic actually matters.
+
+**Acceptance Criteria:**
+- [x] Local production build against Docker Postgres, counting statements with `log_statement=all`: repeat requests to `/api/cities`, `/`, `/sitemap.xml` and a transcript page run 0 queries
+- [x] A DB change is NOT served until `/api/revalidate` fires. After it fires, each cache re-reads exactly once (`/api/cities` +1, `/` +1, `/sitemap.xml` +5), serves the new value, then returns to 0
+- [x] First render of a transcript page runs the meeting query once (previously twice)
+- [x] Canonical URLs (including `%20` slugs) don't redirect; `a%2Fb/c` → 308 `/transcripts/a/b/c`. New `transcript-path-check` gate asserts canonical URLs never redirect and every redirect target is canonical
+- [x] lint, build, roster, cache-boundary, prisma-tx-boundary gates pass (`routes-not-found-check` fails only on the missing Python `playwright`, same as on `main`)
+- [ ] After the Oct 1 deploy: `neon_usage.py --activity` trends toward ≤6.7 active h/day
+
+**Rollout:** do not merge before 2026-10-01 00:00 UTC. September's compute cap is expected ~Sep 23 20:48 UTC. A production deploy wipes the page cache, and with Neon suspended nothing can rebuild it, so the site would 500. On Oct 1: merge/deploy, let `warm-cache.yml` run, then ship the transcriber changes.
 
 ### FIX-NEON-HTTP-ADAPTER-001 — Stop Prisma holding a Neon connection open on every warm instance
 

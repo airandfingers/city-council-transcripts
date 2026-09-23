@@ -7,6 +7,7 @@ import AIDisclaimer from "@/app/components/AIDisclaimer";
 import CopyTimecode from "@/app/components/CopyTimecode";
 import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
 import { formatMeetingDate } from "@/app/lib/formatDate";
+import { transcriptPath } from "@/app/lib/transcriptPath";
 
 // Time-based, not moved to indefinite+invalidate like its siblings:
 // interest-area rollups (write_interest_areas) are written by a separate
@@ -154,7 +155,7 @@ export default async function TopicDetailPage({ params }: Props) {
                     href={
                       m.startTimeSeconds != null && canAutoSeek(m.videoProvider)
                         ? buildTranscriptTimestampUrl(m.slug, m.startTimeSeconds)
-                        : `/transcripts/${m.slug}`
+                        : transcriptPath(m.slug)
                     }
                     className="font-medium hover:underline text-sm"
                   >

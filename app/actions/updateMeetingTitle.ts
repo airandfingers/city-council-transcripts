@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import prisma from "@/app/lib/prisma";
+import { CACHE_TAGS } from "@/app/lib/cityData";
 import { createMeetingUpdateAlert, sendAlertToAdmins } from "@/app/lib/alerts";
 
 /**
@@ -36,6 +37,8 @@ export async function updateMeetingTitle(
   const slugPath = updated.slug.split("/").map(encodeURIComponent).join("/");
   revalidatePath(`/transcripts/${slugPath}`);
   revalidatePath(`/${updated.city.stateCode}/${updated.city.slug}`);
+  // The search corpus holds titles and has no TTL.
+  revalidateTag(CACHE_TAGS.searchCorpus, "max");
 
   try {
     const alert = await createMeetingUpdateAlert(updated.id);

@@ -16,10 +16,10 @@ export const metadata: Metadata = {
 // /admin/alerts. The query itself is cheap, but "cheap" is not the point on
 // Neon's free plan: compute is metered by active time with a fixed 5-minute
 // scale-to-zero, so ANY read on a quiet hour is a >=5 minute wake. This is the
-// site's most-visited route, so getCities() is cached (1h, stale-while-
-// revalidate) inside the data layer — the route stays force-dynamic for the
-// build-time reason above, while the DB is only touched once per cache window
-// (FIX-NEON-COMPUTE-CACHING-001).
+// site's most-visited route, so getCities() is cached inside the data layer
+// until /api/revalidate fires its tag — the route stays force-dynamic for the
+// build-time reason above, while the DB is only touched after a publish
+// (FIX-NEON-COMPUTE-CACHING-001, FIX-NEON-TAG-ONLY-CACHES-001).
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
