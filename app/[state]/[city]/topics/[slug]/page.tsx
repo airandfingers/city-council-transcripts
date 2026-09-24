@@ -9,20 +9,19 @@ import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/l
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { transcriptPath } from "@/app/lib/transcriptPath";
 
-// Time-based, not moved to indefinite+invalidate like its siblings:
-// interest-area rollups (write_interest_areas) are written by a separate
-// path not tied to a single meeting or city-level revalidate call, so
-// there is no invalidation trigger for this specific route yet — caching
-// indefinitely with nothing to invalidate it would silently serve stale
-// content forever (FIX-NEON-EGRESS-MEASURE-001).
-export const revalidate = 3600;
+// Cache indefinitely; invalidated on demand by POST /api/revalidate's
+// city-level call, which marks every topic detail page stale
+// (FIX-NEON-TOPIC-PAGES-CHEAP-404-001). This used to be a 1h window because
+// nothing invalidated these pages, and each expiry meant a crawler visit
+// re-read Neon (a >=5-minute wake). Every interest-area writer in the
+// transcriber (the publish sweep, and preview-status writes inside the Neon
+// sync window) is now followed by that city-level call and a site warm-up.
+export const revalidate = false;
 
 // REQUIRED for the revalidate value above to do anything at all — see
 // app/transcripts/[...slug]/page.tsx's generateStaticParams comment for
-// the full explanation. This route had the same silent no-op as every
-// other route in this family before this fix. `return []` deliberate;
-// dynamicParams defaults to true so paths still render and cache on first
-// request within the 3600s window.
+// the full explanation. `return []` is deliberate; dynamicParams defaults to
+// true so paths still render on first request and are cached from then on.
 export async function generateStaticParams() {
   return [];
 }
@@ -60,12 +59,14 @@ function ConfidenceBadge({ confidence }: { confidence: number | null }) {
 export default async function TopicDetailPage({ params }: Props) {
   const { state, city: citySlug, slug } = await params;
 
-  const [cityData, area] = await Promise.all([
-    getCityByParams(state, citySlug),
-    getInterestArea(state, citySlug, slug),
-  ]);
-
-  if (!cityData || !area) notFound();
+  // Topic first, not in parallel with the city: an unknown topic in a known
+  // city is then a 404 from the cached catalog with no Neon query at all
+  // (FIX-NEON-TOPIC-PAGES-CHEAP-404-001). Costs one sequential lookup, only
+  // on a cold render.
+  const area = await getInterestArea(state, citySlug, slug);
+  if (!area) notFound();
+  const cityData = await getCityByParams(state, citySlug);
+  if (!cityData) notFound();
 
   const discussedMeetings = area.meetings.filter((m) => m.summary);
 

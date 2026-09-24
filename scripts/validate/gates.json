@@ -32,6 +32,11 @@
       "command": "node scripts/validate/transcript-path-check.mjs"
     },
     {
+      "id": "catalog-lookup-check",
+      "description": "Unknown cities, topics and meetings are answered from the cached catalog without a Neon query; known ones never 404; the city refresh reaches topic detail pages",
+      "command": "node scripts/validate/catalog-lookup-check.mjs"
+    },
+    {
       "id": "home-layout-content-e2e",
       "description": "Home page shows city cards with correct content and layout",
       "command": "node scripts/validate/home-layout-content-e2e.mjs",

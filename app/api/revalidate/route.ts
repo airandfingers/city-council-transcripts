@@ -54,13 +54,12 @@ import { CACHE_TAGS, getMeetingSlugsForCity } from "@/app/lib/cityData";
  * any code that writes Neon must call it afterwards, or the site keeps serving
  * the old data.
  *
- * Interest-area detail pages (`/[state]/[city]/topics/[slug]`) are left on
- * their existing 1h time-based `revalidate` window rather than moved to
- * `false` here — this route's per-city call covers the topics *listing*
- * page, but rolling that invalidation down to each individual area's page
- * would need per-area diffing this route doesn't do yet. Moving that page
- * to indefinite caching without a matching invalidation trigger would
- * silently serve stale content forever, so it stays time-based for now.
+ * The per-city call also marks every interest-area detail page
+ * (`/[state]/[city]/topics/[slug]`) stale, via the route pattern. Those pages
+ * have no TTL (FIX-NEON-TOPIC-PAGES-CHEAP-404-001), so this is their only
+ * refresh trigger too. The pattern covers every city's topic pages rather
+ * than just this one's: there are only a few dozen, and the publisher warms
+ * the whole site right after refreshing.
  */
 
 const RevalidateBody = z.union([
@@ -81,11 +80,15 @@ function revalidateDataCacheTags(): string[] {
   return tags;
 }
 
+/** Route pattern (not a URL) for every interest-area detail page. */
+const TOPIC_DETAIL_ROUTE = "/[state]/[city]/topics/[slug]";
+
 function revalidateCityPaths(stateCode: string, slug: string): string[] {
   const cityPath = `/${stateCode}/${slug}`;
   const paths = [cityPath, `${cityPath}/topics`];
   for (const path of paths) revalidatePath(path);
-  return paths;
+  revalidatePath(TOPIC_DETAIL_ROUTE, "page");
+  return [...paths, TOPIC_DETAIL_ROUTE];
 }
 
 /** Revalidates every transcript page for a city — see the roster-staleness

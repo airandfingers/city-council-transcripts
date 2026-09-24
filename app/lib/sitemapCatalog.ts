@@ -40,3 +40,33 @@ export function groupSitemapCatalog(
   }
   return [...byCity.values()];
 }
+
+/*
+ * Catalog membership checks (FIX-NEON-TOPIC-PAGES-CHEAP-404-001). Public
+ * pages ask these before querying Neon, so a request for a city, topic or
+ * meeting that doesn't exist is answered from the cached catalog instead of
+ * waking the compute: 404s are never cached, so every stray crawler URL used
+ * to cost a full database round trip (and, on Neon's free plan, a >=5-minute
+ * wake).
+ */
+
+function findCity(catalog: SitemapCityEntry[], stateCode: string, slug: string) {
+  return catalog.find((c) => c.stateCode === stateCode && c.slug === slug);
+}
+
+export function catalogHasCity(catalog: SitemapCityEntry[], stateCode: string, slug: string): boolean {
+  return findCity(catalog, stateCode, slug) !== undefined;
+}
+
+export function catalogHasArea(
+  catalog: SitemapCityEntry[],
+  stateCode: string,
+  citySlug: string,
+  areaSlug: string,
+): boolean {
+  return findCity(catalog, stateCode, citySlug)?.areaSlugs.includes(areaSlug) ?? false;
+}
+
+export function catalogHasMeeting(catalog: SitemapCityEntry[], meetingSlug: string): boolean {
+  return catalog.some((c) => c.meetings.some((m) => m.slug === meetingSlug));
+}
