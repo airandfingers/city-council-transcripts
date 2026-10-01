@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import prisma from "@/app/lib/prisma";
+import { mayBeKnownMeeting } from "@/app/lib/cityData";
 import { resolveTranscriptSlug } from "@/app/lib/transcriptPath";
 import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
@@ -102,8 +103,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 // One query per render: generateMetadata and the page share it via cache().
-const getMeeting = cache((slug: string) =>
-  prisma.meeting.findUnique({
+// A slug the cached catalog doesn't know is a 404 without touching Neon
+// (FIX-NEON-TOPIC-PAGES-CHEAP-404-001).
+const getMeeting = cache(async (slug: string) => {
+  if (!(await mayBeKnownMeeting(slug))) return null;
+  return prisma.meeting.findUnique({
     where: { slug },
     include: {
       // id/stateCode/slug/name/stateName are rendered (breadcrumb, header
@@ -216,8 +220,8 @@ const getMeeting = cache((slug: string) =>
         },
       },
     },
-  }),
-);
+  });
+});
 
 export default async function TranscriptPage({ params }: Props) {
   const meeting = await getMeeting(await resolveSlug(params));

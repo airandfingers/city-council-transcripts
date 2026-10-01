@@ -2,7 +2,8 @@
 
 ## Implementation Status Summary
 
-- 🔄 FIX-NEON-TAG-ONLY-CACHES-001 — Shared data caches refresh only on publish (no hourly TTL wakes), one meeting query per transcript render, canonical transcript links. Built and verified locally; **held until 2026-10-01** (production deploy freeze while September's compute cap is exhausted)
+- 🔄 FIX-NEON-TOPIC-PAGES-CHEAP-404-001 — Topic detail pages refresh on publish instead of hourly; unknown cities/topics/meetings 404 from the cached catalog without waking Neon. Built on a branch; **deploy on or after 2026-10-01** (September's compute cap)
+- ✅ FIX-NEON-TAG-ONLY-CACHES-001 — Shared data caches refresh only on publish (no hourly TTL wakes), one meeting query per transcript render, canonical transcript links. Shipped early (PR #82, 2026-09-23) before September's cap
 - ✅ CHORE-WARM-CACHE-AFTER-DEPLOY-001 — Warm the page cache automatically after each production deploy; doubles as outage insurance when Neon compute is suspended
 - ✅ FIX-NEON-HTTP-ADAPTER-001 — Prisma held a persistent Neon connection open on every warm instance, blocking scale-to-zero; moved reads to Neon's HTTP driver with a transaction-capable fallback client
 - ✅ FIX-NEON-COMPUTE-CACHING-001 — Cache the homepage city list, sitemap and search corpus so visitors/crawlers stop waking Neon's compute; make the publish-time cache purge finer-grained
@@ -44,9 +45,38 @@
 
 ## Active Stories
 
+### FIX-NEON-TOPIC-PAGES-CHEAP-404-001 — Stop stray requests from waking Neon
+
+**Status:** 🔄 Built; merge and deploy on or after 2026-10-01 (see "Rollout")
+
+**As** the site operator on Neon's free plan (≤6.7 active h/day target),
+**I want** requests that miss the page cache to be answered without a database read wherever possible,
+**so that** crawler traffic stops costing a ≥5-minute compute wake per stray URL.
+
+**Why:** after FIX-NEON-TAG-ONLY-CACHES-001 shipped (2026-09-23), wakes stayed at ~4/hour with the transcriber stopped. A `pg_stat_user_tables` diff over 39 quiet minutes (2026-09-24 16:01–16:40 UTC, 3 outside wakes) showed almost no reads. Each wake was one stray request:
+- a topic detail page rebuilt after its 1-hour `revalidate` window (`InterestArea` + `InterestAreaMeetingStatus`);
+- one full transcript render of a URL the cache didn't know;
+- several `Meeting`/`City` lookups that found nothing, i.e. 404s, which are never cached.
+
+**Design:**
+- `topics/[slug]` uses `revalidate = false`. `/api/revalidate`'s city-level refresh also calls `revalidatePath("/[state]/[city]/topics/[slug]", "page")`. Every interest-area writer in the transcriber already ends with that city refresh plus a site warm-up (`_publish_interest_areas` → `city_changed`; preview-status writes happen inside the Neon sync window, followed by `refresh_site_after_neon_sync`).
+- `getCityByParams`, `getInterestArea` and the transcript page's `getMeeting` check the cached sitemap catalog (`getSitemapCatalog`, tag-only) first. Unknown → not found with no query. If the catalog is empty or fails to load, they fall back to Neon, so a broken cache never 404s real pages. A new meeting read against a still-stale catalog gets an uncached 404, and the next request renders it.
+
+**Acceptance Criteria:**
+- [x] New `catalog-lookup-check` gate: known cities, topics and meetings are found, unknown ones aren't, each lookup checks the catalog before Prisma and falls back when it's unavailable, and the topic-route pattern matches the real directory
+- [x] Local production build against Docker Postgres (`log_statement=all`):
+  - unknown `/transcripts/x/y`, `/transcripts/nope`, `/zz/nowhere`, `/wa/nowhere`, `/wa/seattle/topics/nope` → 404 with 0 statements, once the catalog is cached;
+  - a known topic page repeats with 0 statements;
+  - a city `/api/revalidate` for Seattle, and a `meeting_id` one, each make topic pages in *every* city re-render exactly once (Monterey Park included), then 0 again.
+  - The topic page now looks up the topic before the city, so an unknown topic in a known city costs no query.
+- [x] lint, build, roster, cache-boundary, prisma-tx-boundary and transcript-path gates pass. `routes-not-found-check` fails only on the missing Python `playwright`, same as on `main`
+- [ ] After the Oct 1 deploy: sampled topic pages are `HIT`, not `STALE`; the Neon wake rate falls below ~3/hour
+
+**Rollout:** merge on or after 2026-10-01, after September's cap resets (a deploy wipes the page cache, and a paused Neon can't rebuild it). Then run the transcriber runbook in the `neon-compute-stopgap` notes.
+
 ### FIX-NEON-TAG-ONLY-CACHES-001 — Stop hourly cache expiry from waking Neon's compute
 
-**Status:** 🔄 Built, verified locally; merge and deploy on or after 2026-10-01 (see "Rollout")
+**Status:** ✅ Shipped 2026-09-23 (PR #82, `b3c80a7`), ahead of the planned Oct 1 date: deployed before September's cap and warmed by `warm-cache.yml`
 
 **As** the site operator on Neon's free plan (target ~50 of 100 CU-h/month, i.e. ≤6.7 active h/day),
 **I want** the site to read Neon only when content actually changed,

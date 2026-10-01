@@ -15,7 +15,13 @@ import {
   type MeetingSearchResult,
   type SearchCorpusMeeting,
 } from "@/app/lib/searchCorpus";
-import { groupSitemapCatalog, type SitemapCityEntry } from "@/app/lib/sitemapCatalog";
+import {
+  catalogHasArea,
+  catalogHasCity,
+  catalogHasMeeting,
+  groupSitemapCatalog,
+  type SitemapCityEntry,
+} from "@/app/lib/sitemapCatalog";
 
 export type { City, Meeting, TranscriptLine, MeetingSearchResult, SitemapCityEntry };
 
@@ -162,6 +168,35 @@ export const getSitemapCatalog = unstable_cache(
   { revalidate: DB_CACHE_REVALIDATE, tags: [CACHE_TAGS.sitemap] },
 );
 
+/**
+ * The cached catalog, for "does this exist?" checks before a Neon query
+ * (FIX-NEON-TOPIC-PAGES-CHEAP-404-001). Returns null when the catalog is empty
+ * or failed to load, and callers then fall back to querying: a broken cache
+ * must never turn real pages into 404s.
+ *
+ * Safe to trust because every Neon writer calls /api/revalidate (which fires
+ * the sitemap tag) and then warms the site. A brand-new meeting read against
+ * a still-stale catalog gets a 404 that isn't cached, so the next request,
+ * after the refresh lands, renders it normally.
+ */
+const getCatalogForLookup = cache(async function getCatalogForLookup(): Promise<
+  SitemapCityEntry[] | null
+> {
+  try {
+    const catalog = await getSitemapCatalog();
+    return catalog.length > 0 ? catalog : null;
+  } catch (err) {
+    console.error("[cityData] catalog lookup failed; falling back to Neon", err);
+    return null;
+  }
+});
+
+/** False only when the cached catalog positively says the meeting doesn't exist. */
+export async function mayBeKnownMeeting(meetingSlug: string): Promise<boolean> {
+  const catalog = await getCatalogForLookup();
+  return catalog === null || catalogHasMeeting(catalog, meetingSlug);
+}
+
 export type CityNavEntry = { stateCode: string; slug: string; name: string; stateName: string };
 
 /**
@@ -208,13 +243,16 @@ export const getCityByParams = cache(function getCityByParams(
     return Promise.resolve(null);
   }
 
-  return prisma.city.findUnique({
-    where: {
-      stateCode_slug: {
-        stateCode,
-        slug: citySlug,
+  return getCatalogForLookup().then((catalog) => {
+    if (catalog && !catalogHasCity(catalog, stateCode, citySlug)) return null;
+    return prisma.city.findUnique({
+      where: {
+        stateCode_slug: {
+          stateCode,
+          slug: citySlug,
+        },
       },
-    },
+    });
   });
 });
 
@@ -671,6 +709,9 @@ export const getInterestArea = cache(async function getInterestArea(
   ) {
     return null;
   }
+
+  const catalog = await getCatalogForLookup();
+  if (catalog && !catalogHasArea(catalog, stateCode, citySlug, areaSlug)) return null;
 
   const area = await prisma.interestArea.findFirst({
     where: {
