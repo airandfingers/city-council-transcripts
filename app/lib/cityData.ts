@@ -6,6 +6,7 @@
 
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
+import { meetingCandidates } from "@/app/lib/linkRecovery";
 import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
 import { tokenizeQuery } from "@/app/lib/search";
@@ -195,6 +196,16 @@ const getCatalogForLookup = cache(async function getCatalogForLookup(): Promise<
 export async function mayBeKnownMeeting(meetingSlug: string): Promise<boolean> {
   const catalog = await getCatalogForLookup();
   return catalog === null || catalogHasMeeting(catalog, meetingSlug);
+}
+
+/**
+ * Meetings a cut-off transcript link could have meant, from the cached
+ * catalog — no Neon query (FIX-TRUNCATED-LINKS-001). Null when the catalog
+ * isn't available.
+ */
+export async function recoverMeetingLink(meetingSlug: string) {
+  const catalog = await getCatalogForLookup();
+  return catalog === null ? null : meetingCandidates(catalog, meetingSlug);
 }
 
 export type CityNavEntry = { stateCode: string; slug: string; name: string; stateName: string };

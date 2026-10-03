@@ -32,6 +32,11 @@
       "command": "node scripts/validate/transcript-path-check.mjs"
     },
     {
+      "id": "link-recovery-check",
+      "description": "Cut-off transcript links (\"\u2026\", \"...\") are matched to the meetings they could mean",
+      "command": "node scripts/validate/link-recovery-check.mjs"
+    },
+    {
       "id": "moment-check",
       "description": "MomentCard picks the innermost agenda item covering ?t= and the topic pages covering it",
       "command": "node scripts/validate/moment-check.mjs"

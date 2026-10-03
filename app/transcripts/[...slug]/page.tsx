@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import prisma from "@/app/lib/prisma";
-import { mayBeKnownMeeting } from "@/app/lib/cityData";
-import { resolveTranscriptSlug } from "@/app/lib/transcriptPath";
+import { getCitiesForNav, mayBeKnownMeeting, recoverMeetingLink } from "@/app/lib/cityData";
+import { resolveTranscriptSlug, transcriptPath } from "@/app/lib/transcriptPath";
 import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
 import type { Topic, Bullet } from "@/app/components/TopicsPanel";
@@ -12,6 +12,7 @@ import DocumentsPanel from "@/app/components/DocumentsPanel";
 import VideoSyncProvider from "@/app/components/VideoSyncProvider";
 import VideoPlayer from "@/app/components/VideoPlayer";
 import MomentCard from "@/app/components/MomentCard";
+import LinkRecovery from "@/app/components/LinkRecovery";
 import TranscriptViewer from "@/app/components/TranscriptViewer";
 import EditableTitle from "@/app/components/EditableTitle";
 import SegmentsPanel from "@/app/components/SegmentsPanel";
@@ -92,8 +93,15 @@ async function resolveSlug(params: Props["params"]): Promise<string> {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const meeting = await getMeeting(await resolveSlug(params));
-  if (!meeting) return { title: "Transcript Not Found" };
+  const slug = await resolveSlug(params);
+  const meeting = await getMeeting(slug);
+  if (!meeting) {
+    // A cut-off link's "which meeting?" page must not be indexed.
+    const recovery = await recoverMeetingLink(slug);
+    return recovery && recovery.total > 1
+      ? { title: "Which meeting did you mean?", robots: { index: false, follow: true } }
+      : { title: "Transcript Not Found" };
+  }
   // Meeting titles are scraped from each city's own source; some cities'
   // titles already spell out the date ("City Council Meeting — July 15,
   // 2026"), others don't ("City Council Regular Meeting"). Only append the
@@ -236,9 +244,19 @@ const getMeeting = cache(async (slug: string) => {
 });
 
 export default async function TranscriptPage({ params }: Props) {
-  const meeting = await getMeeting(await resolveSlug(params));
+  const slug = await resolveSlug(params);
+  const meeting = await getMeeting(slug);
 
   if (!meeting) {
+    // FIX-TRUNCATED-LINKS-001: a cut-off link (e.g. ".../transcripts/2026-0...")
+    // is a prefix of real meeting URLs. One match → go there (307: it's a
+    // guess, not a permanent move); several → let the visitor pick; none →
+    // 404. All from the cached catalog, no Neon query.
+    const recovery = await recoverMeetingLink(slug);
+    if (recovery && recovery.total === 1) redirect(transcriptPath(recovery.matches[0].slug));
+    if (recovery && recovery.total > 1) {
+      return <LinkRecovery {...recovery} cities={await getCitiesForNav()} />;
+    }
     notFound();
   }
 

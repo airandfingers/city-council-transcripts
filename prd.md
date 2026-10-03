@@ -45,6 +45,17 @@
 
 ## Active Stories
 
+### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
+
+**Status:** 🔄 In Progress (2026-10-03) — PR open
+
+YouTube shortens long description links for display (`https://counciloris.com/transcripts/2026-0...`), and until the channel has advanced features (about two months of history) people can't always click them, so they copy the shortened text and hit a dead-end 404.
+
+- [x] `app/lib/linkRecovery.ts`: strip a trailing `...`/`…`, then prefix-match against the cached meeting catalog (no Neon). Prefixes under 4 characters are too vague to guess
+- [x] Meeting page: one match → 307 to it (a guess, not a permanent move); several → "Which meeting did you mean?" list, newest first, with city and date (`noindex, follow`); none → 404
+- [x] `app/not-found.tsx`: site-wide friendly 404 that explains shortened links and points to the city list (static, no data)
+- [x] `link-recovery-check` gate; all gates green; verified on a local production build (307 for unique prefixes incl. a real `…`, list for `2026-07-2...`, friendly 404 otherwise)
+
 ### FEAT-MOMENT-CARD-001 — "What was this moment about?" for visitors arriving from a video
 
 **Status:** 🔄 In Progress (2026-10-03) — PR open
