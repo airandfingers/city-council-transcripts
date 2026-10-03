@@ -63,6 +63,9 @@ export default function AIDisclaimer({
           <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <p>
             {DISCLAIMER_TEXT}{" "}
+            <Link href="/methodology" className="underline hover:text-gray-700 dark:hover:text-gray-300">
+              How we make this.
+            </Link>{" "}
             <Link href="/glossary" className="underline hover:text-gray-700 dark:hover:text-gray-300">
               Confused by a term? See the glossary.
             </Link>

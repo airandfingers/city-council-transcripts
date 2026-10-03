@@ -45,6 +45,16 @@
 
 ## Active Stories
 
+### FEAT-METHODOLOGY-PAGE-001 — Public "How we make this" page
+
+**Status:** 🔄 In Progress (2026-10-02)
+
+Every YouTube reel description links to `/methodology` (city-council-transcriber FEAT-REEL-DESCRIPTION-001), so it must exist before the first public upload. Plain-language explanation of recordings → transcripts → summaries → topics → short videos, with where each step goes wrong, and the video editing rules (framing cards, source timecodes, chronological order, previews show the problem, AI-selected vs hand-edited, people by role).
+
+- [x] `app/methodology/page.tsx` (static, no DB reads)
+- [x] Linked from the site-wide `AIDisclaimer` footer; added to `sitemap.ts`
+- [ ] Owner review of the copy before merge
+
 ### FIX-NEON-TOPIC-PAGES-CHEAP-404-001 — Stop stray requests from waking Neon
 
 **Status:** 🔄 Built; merge and deploy on or after 2026-10-01 (see "Rollout")
