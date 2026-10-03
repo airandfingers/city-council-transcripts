@@ -11,6 +11,7 @@ import type { Topic, Bullet } from "@/app/components/TopicsPanel";
 import DocumentsPanel from "@/app/components/DocumentsPanel";
 import VideoSyncProvider from "@/app/components/VideoSyncProvider";
 import VideoPlayer from "@/app/components/VideoPlayer";
+import MomentCard from "@/app/components/MomentCard";
 import TranscriptViewer from "@/app/components/TranscriptViewer";
 import EditableTitle from "@/app/components/EditableTitle";
 import SegmentsPanel from "@/app/components/SegmentsPanel";
@@ -186,10 +187,21 @@ const getMeeting = cache(async (slug: string) => {
           id: true,
           title: true,
           startTime: true,
+          endTime: true, // MomentCard: which agenda item covers ?t=
           summaryText: true,
           keyPoints: true,
           speakers: true,
           outcome: true,
+        },
+      },
+      // MomentCard (FEAT-MOMENT-CARD-001): the ongoing issues ("topics")
+      // discussed in this meeting and where, to link a ?t= visitor onward.
+      interestAreaStatuses: {
+        where: { phase: "POSTMEETING", discussed: true },
+        select: {
+          startTimeSeconds: true,
+          endTimeSeconds: true,
+          interestArea: { select: { slug: true, name: true } },
         },
       },
       // segmentCount/provider/model/generatedAt are unused by the panel.
@@ -482,6 +494,23 @@ export default async function TranscriptPage({ params }: Props) {
           })}
         </p>
       )}
+
+      {/* FEAT-MOMENT-CARD-001: opened at ?t= (from a video), say what that
+          moment was about before anything else. useSearchParams() needs a
+          Suspense boundary on this statically generated route (see the
+          VideoPlayer note below). */}
+      <Suspense fallback={null}>
+        <MomentCard
+          topics={meeting.topicSummaries}
+          areas={meeting.interestAreaStatuses.map((s) => ({
+            slug: s.interestArea.slug,
+            name: s.interestArea.name,
+            startTimeSeconds: s.startTimeSeconds,
+            endTimeSeconds: s.endTimeSeconds,
+          }))}
+          topicsBasePath={`/${meeting.city.stateCode.toLowerCase()}/${meeting.city.slug}/topics`}
+        />
+      </Suspense>
 
       {/* TLDR: the main takeaway leads, ahead of the full transcript.
           PoC feedback: "we always want to put the TLDR at the top." */}
