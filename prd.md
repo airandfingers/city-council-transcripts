@@ -45,6 +45,18 @@
 
 ## Active Stories
 
+### FIX-NEON-ENCODED-PATH-REDIRECT-001 — Encoded URL spellings no longer render from Neon on every request
+
+**Status:** 🔄 In Progress (2026-10-03) — PR open
+
+Found by city-council-transcriber INVESTIGATE-NEON-STRAY-WAKES-001's live probes (wait for Neon to suspend, send one request class, watch the endpoint). `/transcripts/2026-09-02/city%2Dcouncil%2Dregular%2Dmeeting` was a cache MISS on every request: Next decodes `%2D` in `params`, so the page rendered the real meeting without redirecting, while the cache keyed on the raw URL. Each crawler fetch was a full transcript render and a 5-minute compute wake. `%5F` topic URLs cost one wake per variant. 404s were verified free (PR #83).
+
+- [x] `app/lib/canonicalPath.ts`: decodes only RFC 3986 unreserved escapes (`%2D` `%2E` `%5F` `%7E`, letters, digits), which `encodeURIComponent` never produces, so the result is the canonical spelling; `%20`, `%2F`, `%25` and non-ASCII are untouched
+- [x] `proxy.ts`: 308 to the canonical path (query kept); early return for paths without `%`; no DB; excludes `_next/`, `api/` and files with extensions
+- [x] `encoded-path-check` gate: canonical paths, including legitimately encoded ones, never redirect; variants redirect to a fixed point
+- [x] Local production build: encoded variants → 308 (query preserved); `Housing_%20Arts` not redirected; `/methodology` 200
+- [ ] After deploy: re-run the round-B probe against production (expect 308 and Neon staying idle)
+
 ### FEAT-METHODOLOGY-PAGE-001 — Public "How we make this" page
 
 **Status:** 🔄 In Progress (2026-10-02)
