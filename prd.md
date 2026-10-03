@@ -45,6 +45,18 @@
 
 ## Active Stories
 
+### FEAT-MOMENT-CARD-001 — "What was this moment about?" for visitors arriving from a video
+
+**Status:** 🔄 In Progress (2026-10-03) — PR open
+
+User objective: someone who watches a short clip should be able to jump to that moment in the meeting and, at a glance, learn what the issue was about, automatically. Every video description and closing card already links to `/transcripts/<slug>?t=<seconds>`; until now that opened a long meeting page with nothing about the moment.
+
+- [x] `MomentCard` at the top of the meeting page when `?t=` is present: the innermost agenda item (TopicSummary) covering that second, its summary lead (first two sentences, rest behind "More"), up to 3 key points, the outcome, "▶ Play from m:ss", and "Follow this issue" links to topic pages whose discussion in this meeting covers that second
+- [x] Client-side selection from data already on the page (`topicSummaries` + `endTime`, discussed POSTMEETING `interestAreaStatuses`), so the cached HTML serves every `?t=` value with no per-visit DB access
+- [x] `moment-check` gate (innermost span, topic coverage, key-point parsing, lead split); full gates green including the Playwright 404 test
+- [x] Verified locally (Docker DB) on desktop and mobile: card only with `?t=`
+- [ ] Follow-up, **FEAT-VIDEO-PAGES-001** (after the YouTube uploader exists): a page per published video (embed, the video's own summary, this card's agenda context), fed by a `ReelVideo` table the transcriber publishes
+
 ### FIX-NEON-ENCODED-PATH-REDIRECT-001 — Encoded URL spellings no longer render from Neon on every request
 
 **Status:** 🔄 In Progress (2026-10-03) — PR open
