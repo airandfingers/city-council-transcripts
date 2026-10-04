@@ -99,6 +99,7 @@ export default function SiteHeader() {
             alt="Counciloris logo"
             width={120}
             height={120}
+            sizes="(min-width: 768px) 96px, 64px"
             className="rounded-full w-16 h-16 md:w-24 md:h-24"
           />
           Counciloris
