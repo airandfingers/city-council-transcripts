@@ -45,6 +45,16 @@
 
 ## Active Stories
 
+### FIX-BRAND-ASSET-EDGES-001 — Crisp, halo-free tab and home-screen icons
+
+**Status:** 🔄 In Progress (2026-10-03) — PR open, stacked on #91
+
+Builds on #91 (co-developer: redrawn 1254px transparent mascot art, notetaker/coffee mascots, `sizes` hints), which supersedes the header/about/donate images. This PR regenerates only what #91 doesn't touch, from #91's art, via city-council-transcriber `scripts/make_site_brand_assets.py` (the source art is preserved there too):
+
+- [x] Tab icons transparent (no white square on dark tabs): `favicon-96x96.png`, `favicon.ico` (16/32/48), `icon.svg`
+- [x] Home-screen icons stay opaque as required: `apple-icon.png` (180), `web-app-manifest-192/512` (art inside the 80% maskable safe zone)
+- [x] Gates green
+
 ### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
 
 **Status:** 🔄 In Progress (2026-10-03) — PR open
