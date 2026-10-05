@@ -87,10 +87,11 @@ export default async function Home() {
         {/* Counciloris mascot section */}
         <div className="mt-8 flex flex-col sm:flex-row items-start gap-6 max-w-2xl">
           <Image
-            src="/loris-city-skyline.png"
-            alt="The Counciloris — a slow loris keeping watch over the city skyline"
-            width={160}
-            height={160}
+            src="/counciloris-notetaker.png"
+            alt="The Counciloris — a slow loris taking notes with a pen and notepad"
+            width={320}
+            height={320}
+            sizes="(min-width: 640px) 144px, 112px"
             className="rounded-xl w-28 h-28 sm:w-36 sm:h-36 shrink-0 object-cover"
           />
           <div>
