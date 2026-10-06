@@ -45,6 +45,18 @@
 
 ## Active Stories
 
+### CHORE-BATCH-MERGES-001 — One production deploy per weekly batch, not per PR
+
+**Status:** 🔄 In Progress (2026-10-06) — PR open
+
+Each production deploy re-renders the whole site from Neon (~80–85 MB of transfer, measured 2026-10-06), whatever the PR changed. PRs are merged by hand.
+
+- [x] `docs/batch-merges.md`: weekly Thursday batch, skip weeks with no visitor-facing change, hold near the Neon cap, exceptions merge alone
+- [x] `scripts/batch-prs.sh`: builds `batch/YYYY-MM-DD` from `batch-ready`-labelled PRs (or given numbers) with merge commits, runs gates, opens the batch PR. Merging it with "Create a merge commit" marks each PR merged. Dry-run tested on #92 + #93 with macOS bash 3.2
+- [x] Dependabot grouped weekly (minor+patch / major / actions)
+- [x] CLAUDE.md Git Workflow rule
+- [ ] First real batch
+
 ### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
 
 **Status:** 🔄 In Progress (2026-10-03) — PR open
