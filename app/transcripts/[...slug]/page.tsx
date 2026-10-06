@@ -29,16 +29,14 @@ import type { GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
 import { buildTitleByUuid, type RosterMemberRow } from "@/app/lib/roster";
-import { FALLBACK_ADMIN_EMAIL } from "@/app/lib/siteUrl";
+import { CONTACT_EMAIL } from "@/app/lib/siteUrl";
 import { formatMeetingDate, titleIncludesDate, titleWithDate } from "@/app/lib/formatDate";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
 
 /** Mailbox for "request this summary" links when topic summaries aren't ready yet. */
-const SUMMARY_REQUEST_EMAIL =
-  process.env.EMAIL_FROM?.match(/[\w.+-]+@[\w.-]+/)?.[0] ??
-  FALLBACK_ADMIN_EMAIL;
+const SUMMARY_REQUEST_EMAIL = CONTACT_EMAIL;
 
 /**
  * Display order for the TLDR tabs — decisions and votes lead because

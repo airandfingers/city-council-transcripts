@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
+import { CONTACT_EMAIL } from "@/app/lib/siteUrl";
 
 export const metadata: Metadata = {
   title: "How we make this",
@@ -117,8 +118,17 @@ export default function MethodologyPage() {
 
       <Section id="corrections" title="Corrections">
         <p>
-          If something here is wrong, tell us in the comments on the video. Corrections fix the
-          transcript or summary at its source, and the change is noted where it matters.
+          If you spot something wrong anywhere on this site, whether it&apos;s a transcript, a
+          summary or a video, email us at{" "}
+          <a
+            href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Correction")}`}
+            className="text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            {CONTACT_EMAIL}
+          </a>
+          . Include the page link, and a timestamp if it&apos;s in a meeting. If you saw it in one
+          of our videos, a comment on the video reaches us too. Corrections fix the transcript or
+          summary at its source, and the change is noted where it matters.
         </p>
       </Section>
 
