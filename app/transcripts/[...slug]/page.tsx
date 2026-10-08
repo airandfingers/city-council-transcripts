@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import prisma from "@/app/lib/prisma";
-import { getCitiesForNav, mayBeKnownMeeting, recoverMeetingLink } from "@/app/lib/cityData";
+import { getCitiesForNav, isKnownMeeting, recoverMeetingLink } from "@/app/lib/cityData";
 import { resolveTranscriptSlug, transcriptPath } from "@/app/lib/transcriptPath";
 import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
@@ -29,16 +29,14 @@ import type { GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
 import { buildTitleByUuid, type RosterMemberRow } from "@/app/lib/roster";
-import { FALLBACK_ADMIN_EMAIL } from "@/app/lib/siteUrl";
+import { CONTACT_EMAIL } from "@/app/lib/siteUrl";
 import { formatMeetingDate, titleIncludesDate, titleWithDate } from "@/app/lib/formatDate";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
 
 /** Mailbox for "request this summary" links when topic summaries aren't ready yet. */
-const SUMMARY_REQUEST_EMAIL =
-  process.env.EMAIL_FROM?.match(/[\w.+-]+@[\w.-]+/)?.[0] ??
-  FALLBACK_ADMIN_EMAIL;
+const SUMMARY_REQUEST_EMAIL = CONTACT_EMAIL;
 
 /**
  * Display order for the TLDR tabs — decisions and votes lead because
@@ -112,10 +110,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 // One query per render: generateMetadata and the page share it via cache().
-// A slug the cached catalog doesn't know is a 404 without touching Neon
-// (FIX-NEON-TOPIC-PAGES-CHEAP-404-001).
+// A slug already known to be missing is a 404 without touching Neon. The
+// check is cached per meeting, not read from the shared catalog, so this
+// page carries only its own meeting's tag and a city refresh doesn't make
+// every transcript page stale (FIX-NEON-PER-MEETING-REFRESH-001).
 const getMeeting = cache(async (slug: string) => {
-  if (!(await mayBeKnownMeeting(slug))) return null;
+  if (!(await isKnownMeeting(slug))) return null;
   return prisma.meeting.findUnique({
     where: { slug },
     include: {

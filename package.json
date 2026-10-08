@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "warm": "node scripts/warm-cache.mjs",
+    "vercel:misses": "node scripts/vercel-cache-misses.mjs",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",

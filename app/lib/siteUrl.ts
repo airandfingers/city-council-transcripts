@@ -28,3 +28,8 @@ export const FALLBACK_SITE_URL = "https://counciloris.com";
 /** Mirrors FALLBACK_SITE_URL's rationale, for the admin-contact-email fallback
  * in transcripts/[...slug]/page.tsx (SUMMARY_REQUEST_EMAIL). */
 export const FALLBACK_ADMIN_EMAIL = "info@counciloris.com";
+
+/** The site's contact mailbox: the address in EMAIL_FROM, else the fallback above.
+ * Used by "request this summary" links and the methodology page's Corrections section. */
+export const CONTACT_EMAIL =
+  process.env.EMAIL_FROM?.match(/[\w.+-]+@[\w.-]+/)?.[0] ?? FALLBACK_ADMIN_EMAIL;

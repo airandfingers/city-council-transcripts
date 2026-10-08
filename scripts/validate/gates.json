@@ -42,6 +42,11 @@
       "command": "node scripts/validate/moment-check.mjs"
     },
     {
+      "id": "upcoming-collapse-check",
+      "description": "The collapsed Upcoming list shows the soonest meeting plus the next regular council meeting",
+      "command": "node scripts/validate/upcoming-collapse-check.mjs"
+    },
+    {
       "id": "encoded-path-check",
       "description": "Percent-encoded unreserved characters (%2D, %5F, \u2026) redirect to the canonical cached URL; canonical paths, including legitimately encoded ones, never redirect",
       "command": "node scripts/validate/encoded-path-check.mjs"
@@ -50,6 +55,11 @@
       "id": "catalog-lookup-check",
       "description": "Unknown cities, topics and meetings are answered from the cached catalog without a Neon query; known ones never 404; the city refresh reaches topic detail pages",
       "command": "node scripts/validate/catalog-lookup-check.mjs"
+    },
+    {
+      "id": "per-meeting-refresh-check",
+      "description": "Transcript pages carry only their own meeting's cache tag, and /api/revalidate refreshes the meetings written since the caller's last refresh",
+      "command": "node scripts/validate/per-meeting-refresh-check.mjs"
     },
     {
       "id": "home-layout-content-e2e",

@@ -45,6 +45,52 @@
 
 ## Active Stories
 
+### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
+
+**Status:** 🔄 In Progress (2026-10-05)
+
+Compute is still 9–13 active h/day with the transcriber down to one Neon touch a day, so the remaining wakes are site cache misses. Production's logs live under the airandfingers Vercel team, which the maintainer's CLI login can't see.
+
+- [x] `scripts/vercel-cache-misses.mjs` (`npm run vercel:misses`): wraps `vercel logs --json`, appends to a gitignored `.vercel-logs/requests.jsonl` deduped by id (retention is short, so `--watch` accumulates a day), reports non-HIT serverless requests by route, status, odd URL spelling and UTC hour
+- [x] Walkthrough for the developer: `docs/vercel-cache-miss-logs.md`
+- [x] Verified fetch + dedupe against a Hobby project of the maintainer's (JSON carries `cache`, `requestPath`, `responseStatusCode`, `source`; no IP/UA) and the report on synthetic misses
+- [ ] Developer runs it for a day; triage the top missing routes
+
+### CHORE-BATCH-MERGES-001 — One production deploy per weekly batch, not per PR
+
+**Status:** 🔄 In Progress (2026-10-06) — PR open
+
+Each production deploy re-renders the whole site from Neon (~80–85 MB of transfer, measured 2026-10-06), whatever the PR changed. PRs are merged by hand.
+
+- [x] `docs/batch-merges.md`: weekly Thursday batch, skip weeks with no visitor-facing change, hold near the Neon cap, exceptions merge alone
+- [x] `scripts/batch-prs.sh`: builds `batch/YYYY-MM-DD` from `batch-ready`-labelled PRs (or given numbers) with merge commits, runs gates, opens the batch PR. Merging it with "Create a merge commit" marks each PR merged. Dry-run tested on #92 + #93 with macOS bash 3.2
+- [x] Dependabot grouped weekly (minor+patch / major / actions)
+- [x] CLAUDE.md Git Workflow rule
+- [ ] First real batch
+
+### FIX-UPCOMING-NEXT-REGULAR-001 — Upcoming list always shows the next regular council meeting
+
+**Status:** 🔄 In Progress (2026-10-07) — PR open, `batch-ready`
+
+The city page's Upcoming group showed only the soonest meeting when collapsed. If a special meeting, work session or commission meeting came first, the next regular council meeting was hidden behind "Show more".
+
+- [x] `app/lib/upcoming.ts`: `collapsedUpcoming` shows the soonest meeting plus the next regular council meeting when that's a different one (at most 2; meetings in between stay behind "Show N more"). "Regular" means a council meeting that isn't special/work session/study session/workshop/briefing/committee/commission/board/closed session, since Seattle and Montebello titles are plain "City Council"
+- [x] `MeetingFilter` uses it in place of the fixed `DEFAULT_VISIBLE_UPCOMING = 1`
+- [x] `upcoming-collapse-check` gate with real titles from all four cities
+
+### FIX-NEON-PER-MEETING-REFRESH-001 — A city refresh no longer re-renders every transcript page
+
+**Status:** 🔄 In Progress (2026-10-08) — PR open, verified on a preview, `batch-ready`
+
+Every `/api/revalidate` call purges the site-wide `CACHE_TAGS`, and every transcript page read the catalog (`sitemap` tag) for its cheap-404 check, so each daily sync window made all ~430 transcript pages stale and the transcriber's warm re-rendered the whole site: ~80 MB of Neon egress a day (confirmed 2026-10-08: sampled transcript pages back to 2011 all rendered at the minute of the window's refresh).
+
+- [x] `isKnownMeeting`: existence check cached per meeting under its own `meetingTag` (sha256-hashed slug, under Next's 256-char tag cap); the transcript page uses it instead of the catalog. Trade-off: an unknown slug costs one small query the first time, then its "no" is cached
+- [x] `/api/revalidate` city refresh: refreshes the pages and existence checks of meetings with `updatedAt >= changed_since` (default lookback 48 h; every transcriber write sets `updatedAt`, so it over-includes rather than misses). `meeting_id` refresh does the same for its meeting. Existence tags expire immediately (`{ expire: 0 }`), so a new meeting never gets a cached 404
+- [x] Transcriber sends `changed_since` = its last acknowledged refresh start minus 15 min (FIX-NEON-PER-MEETING-REFRESH-001 there)
+- [x] `per-meeting-refresh-check` gate (mutation-tested); `catalog-lookup-check` updated
+- [x] Preview (2026-10-08): POSTed a window-shaped Seattle refresh (36 meetings changed in 26 h). Three untouched Seattle transcript pages stayed HIT with their ages still counting (31/30/29 s); a touched one and `/wa/seattle` came back REVALIDATED then fresh; unknown slugs still 404; link recovery still works
+- [ ] Follow-up: the document refresh bumps `Meeting.updatedAt` even when nothing changed, so ~36 Seattle meetings/day still re-render. Only bump it when the documents actually change
+
 ### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
 
 **Status:** 🔄 In Progress (2026-10-03) — PR open
