@@ -1,10 +1,22 @@
 version: 2
+# Grouped so each week's updates arrive as one PR per ecosystem (majors
+# separately, since they need a closer look). Every merge to main is a
+# production deploy that re-renders the site from Neon, so fewer PRs means
+# fewer deploys. Queue them with the batch-ready label (docs/batch-merges.md).
 updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      npm-minor-and-patch:
+        update-types: ["minor", "patch"]
+      npm-major:
+        update-types: ["major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]

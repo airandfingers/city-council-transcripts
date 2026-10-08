@@ -25,6 +25,7 @@ git checkout -b <type>/<short-name>                    # then branch (feat/, fix
 - **Before pushing**, `git fetch origin` again; if `origin/main` moved, `git rebase origin/main` and re-run the gates.
 - Use `--ff-only` when pulling. If it can't fast-forward, or the working tree is dirty, stop and ask rather than merging or stashing on your own.
 - Run `npm run test:gates` (lint, build, checks) before pushing.
+- **Don't merge PRs one at a time.** Every merge to `main` is a production deploy that re-renders the whole site from Neon (~80–85 MB of the 5 GB/month transfer). When a PR is ready, label it `batch-ready`; once a week (Thursday) `scripts/batch-prs.sh` builds one batch PR, which is merged by hand with **"Create a merge commit"**. Exceptions (site broken, security, time-sensitive content) merge alone. Full process: `docs/batch-merges.md`.
 - Conventional commits (`feat:`, `fix:`, `perf:`, `docs:`, `test:`, `refactor:`); put the story ID in the subject when there is one (e.g. `FIX-NEON-COMPUTE-CACHING-001`).
 - Track work in `prd.md` (a story under "Active Stories") before implementing.
 
