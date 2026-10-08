@@ -42,6 +42,11 @@
       "command": "node scripts/validate/moment-check.mjs"
     },
     {
+      "id": "upcoming-collapse-check",
+      "description": "The collapsed Upcoming list shows the soonest meeting plus the next regular council meeting",
+      "command": "node scripts/validate/upcoming-collapse-check.mjs"
+    },
+    {
       "id": "encoded-path-check",
       "description": "Percent-encoded unreserved characters (%2D, %5F, \u2026) redirect to the canonical cached URL; canonical paths, including legitimately encoded ones, never redirect",
       "command": "node scripts/validate/encoded-path-check.mjs"

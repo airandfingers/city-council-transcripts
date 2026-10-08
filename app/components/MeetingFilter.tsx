@@ -6,6 +6,7 @@ import MeetingCard from "./MeetingCard";
 import type { MeetingCardData, MeetingSearchResult } from "@/app/lib/cityData";
 import { tokenizeQuery } from "@/app/lib/search";
 import { searchMeetings } from "@/app/actions/searchMeetings";
+import { collapsedUpcoming } from "@/app/lib/upcoming";
 
 /**
  * Search & filter over a city's full meeting list, including upcoming
@@ -30,12 +31,6 @@ import { searchMeetings } from "@/app/actions/searchMeetings";
  * empty (see `matchedSlugs` below).
  */
 type StatusFilter = "all" | "published" | "upcoming" | "pending";
-
-// Only this many upcoming meetings show by default — a city with a busy
-// commission calendar can have a dozen-plus SCHEDULED meetings at once,
-// which would otherwise push every past meeting below the fold. "Show
-// all" reveals the rest.
-const DEFAULT_VISIBLE_UPCOMING = 1;
 
 // How long to wait after the last keystroke before hitting the server
 // action (AC-4/AC-2's round trip) or writing the query to the URL. Short
@@ -208,7 +203,10 @@ export default function MeetingFilter({
   }, [meetings, debouncedQuery, matchedSlugs, statusFilter, upcomingSlugs]);
 
   // Upcoming meetings lead under their own subheader, capped and
-  // expandable; everything else follows under its own "Past Meetings"
+  // expandable (collapsed: the soonest meeting plus the next regular
+  // council meeting, see collapsedUpcoming — a city with a busy
+  // commission calendar can have a dozen-plus SCHEDULED meetings at once,
+  // which would otherwise push every past meeting below the fold); everything else follows under its own "Past Meetings"
   // subheader — the two never mix. The Newest/Oldest sort toggle applies
   // to the past group only; Upcoming always sorts soonest-first
   // regardless of it, since that's what "the next meeting" (the one that
@@ -229,9 +227,7 @@ export default function MeetingFilter({
       return sortOrder === "newest" ? -diff : diff;
     });
   }, [matched, upcomingSlugs, sortOrder]);
-  const upcoming = upcomingExpanded
-    ? allUpcoming
-    : allUpcoming.slice(0, DEFAULT_VISIBLE_UPCOMING);
+  const upcoming = upcomingExpanded ? allUpcoming : collapsedUpcoming(allUpcoming);
   const hiddenUpcomingCount = allUpcoming.length - upcoming.length;
 
   return (
@@ -302,7 +298,7 @@ export default function MeetingFilter({
               {`Show ${hiddenUpcomingCount} more upcoming meeting${hiddenUpcomingCount === 1 ? "" : "s"}`}
             </button>
           )}
-          {upcomingExpanded && allUpcoming.length > DEFAULT_VISIBLE_UPCOMING && (
+          {upcomingExpanded && collapsedUpcoming(allUpcoming).length < allUpcoming.length && (
             <button
               type="button"
               onClick={() => setUpcomingExpanded(false)}
