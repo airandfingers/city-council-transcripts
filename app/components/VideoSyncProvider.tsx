@@ -57,6 +57,17 @@ type VideoSyncContextValue = {
   scrollToTime: (seconds: number) => void;
   /** Latest pending scroll-to-time request, or null before the first one. */
   scrollRequest: ScrollRequest | null;
+  /** True once a seekable player (YouTube/mp4) has registered. Until then a
+   * citation click can't play the moment, so it jumps to the transcript. */
+  hasPlayer: boolean;
+  /** Ask DockableVideo to pop the player into the corner if it's off-screen,
+   * so a citation click plays the moment without moving the page
+   * (FEAT-TRANSCRIPT-DOCK-PLAYER-001). Bumped once per request. */
+  requestDock: () => void;
+  dockNonce: number;
+  /** Scroll the page to *target*, remembering where the reader was, and show
+   * a "Back to where you were" button that returns there. */
+  jumpWithReturn: (target: Element | null) => void;
 };
 
 const VideoSyncContext = createContext<VideoSyncContextValue | null>(null);
@@ -80,6 +91,9 @@ export default function VideoSyncProvider({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [scrollRequest, setScrollRequest] = useState<ScrollRequest | null>(null);
   const scrollNonceRef = useRef(0);
+  const [hasPlayer, setHasPlayer] = useState(false);
+  const [dockNonce, setDockNonce] = useState(0);
+  const [returnTo, setReturnTo] = useState<number | null>(null);
 
   const startPolling = useCallback(() => {
     if (intervalRef.current) return;
@@ -106,6 +120,7 @@ export default function VideoSyncProvider({
   const registerPlayer = useCallback(
     (player: SyncablePlayer) => {
       playerRef.current = player;
+      setHasPlayer(true);
 
       // Listen for state changes to start/stop polling. Uses YouTube's own
       // numeric state codes (1 = playing) rather than referencing the
@@ -150,6 +165,16 @@ export default function VideoSyncProvider({
     setScrollRequest({ seconds, nonce: scrollNonceRef.current });
   }, []);
 
+  const requestDock = useCallback(() => setDockNonce((n) => n + 1), []);
+
+  const jumpWithReturn = useCallback((target: Element | null) => {
+    if (!target) return;
+    // Keep the first saved spot across repeated jumps, so "back" always
+    // returns to where the reader actually was.
+    setReturnTo((saved) => saved ?? window.scrollY);
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   return (
     <VideoSyncContext.Provider
       value={{
@@ -160,9 +185,35 @@ export default function VideoSyncProvider({
         registerPlayer,
         scrollToTime,
         scrollRequest,
+        hasPlayer,
+        requestDock,
+        dockNonce,
+        jumpWithReturn,
       }}
     >
       {children}
+      {returnTo != null && (
+        <div className="fixed z-50 top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 flex items-center whitespace-nowrap rounded-full bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 shadow-lg text-sm">
+          <button
+            type="button"
+            onClick={() => {
+              window.scrollTo({ top: returnTo, behavior: "smooth" });
+              setReturnTo(null);
+            }}
+            className="pl-4 pr-2 py-2 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 rounded-l-full"
+          >
+            ↑ Back to where you were
+          </button>
+          <button
+            type="button"
+            onClick={() => setReturnTo(null)}
+            aria-label="Dismiss"
+            className="pl-1 pr-3 py-2 opacity-70 hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 rounded-r-full"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </VideoSyncContext.Provider>
   );
 }

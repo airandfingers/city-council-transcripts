@@ -28,7 +28,7 @@ export default function TranscriptViewer({
   offsetModel?: OffsetModel | null;
   titleByUuid?: Record<string, string>;
 }) {
-  const { currentTime, seekTo, scrollRequest } = useVideoSync();
+  const { currentTime, seekTo, scrollRequest, requestDock } = useVideoSync();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -67,11 +67,14 @@ export default function TranscriptViewer({
   const handleTimestampClick = useCallback(
     (seconds: number) => {
       seekTo(seconds);
+      // The video sits above the transcript; dock it if it's off-screen so
+      // the moment is visible without scrolling (FEAT-TRANSCRIPT-DOCK-PLAYER-001).
+      requestDock();
       router.replace(`${pathname}?t=${Math.floor(seconds)}`, {
         scroll: false,
       });
     },
-    [seekTo, router, pathname],
+    [seekTo, requestDock, router, pathname],
   );
 
   // ---------------------------------------------------------------
@@ -172,8 +175,13 @@ export default function TranscriptViewer({
   // link-out), where currentTime never leaves 0
   // (FIX-TIMECODE-SEEK-GRANICUS-001).
   // ---------------------------------------------------------------
+  // Each request is handled once. The effect also re-runs on every
+  // currentTime tick (~4×/s while playing), and without this it would keep
+  // pulling the box back to an old citation once playback moved past it.
+  const handledScrollNonce = useRef<number | null>(null);
   useEffect(() => {
-    if (!scrollRequest) return;
+    if (!scrollRequest || handledScrollNonce.current === scrollRequest.nonce) return;
+    handledScrollNonce.current = scrollRequest.nonce;
     const { seconds } = scrollRequest;
 
     const exact = groupedLines.find(
@@ -209,10 +217,26 @@ export default function TranscriptViewer({
       currentTime < targetEnd;
     if (alreadyTrackedByPlayback) return;
 
-    cardRefs.current.get(target.firstId)?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
+    // Scroll the transcript box only. scrollIntoView() would also scroll
+    // every scrollable ancestor, dragging the whole page down to the
+    // transcript at the bottom of it (FEAT-TRANSCRIPT-DOCK-PLAYER-001).
+    const container = containerRef.current;
+    const card = cardRefs.current.get(target.firstId);
+    if (!container || !card) return;
+    const cardTop =
+      card.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop;
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    const top = Math.max(0, Math.min(cardTop - container.clientHeight * 0.25, maxScroll));
+    // Our own scroll, not the reader's: keep Auto Scroll on. Not cleared
+    // in a cleanup, since the next currentTime tick would cancel it.
+    isAutoScrolling.current = true;
+    lastProgrammaticTop.current = top;
+    container.scrollTo({ top, behavior: "smooth" });
+    setTimeout(() => {
+      isAutoScrolling.current = false;
+    }, 600);
   }, [scrollRequest, groupedLines, mapToTarget, currentTime, autoScroll]);
 
   // When user re-enables auto-scroll, jump immediately
