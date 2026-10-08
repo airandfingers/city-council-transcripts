@@ -75,6 +75,18 @@ The city page's Upcoming group showed only the soonest meeting when collapsed. I
 - [x] `app/lib/upcoming.ts`: `collapsedUpcoming` shows the soonest meeting plus the next regular council meeting when that's a different one (at most 2; meetings in between stay behind "Show N more"). "Regular" means a council meeting that isn't special/work session/study session/workshop/briefing/committee/commission/board/closed session, since Seattle and Montebello titles are plain "City Council"
 - [x] `MeetingFilter` uses it in place of the fixed `DEFAULT_VISIBLE_UPCOMING = 1`
 - [x] `upcoming-collapse-check` gate with real titles from all four cities
+### FIX-NEON-PER-MEETING-REFRESH-001 — A city refresh no longer re-renders every transcript page
+
+**Status:** 🔄 In Progress (2026-10-08) — PR open, verified on a preview, `batch-ready`
+
+Every `/api/revalidate` call purges the site-wide `CACHE_TAGS`, and every transcript page read the catalog (`sitemap` tag) for its cheap-404 check, so each daily sync window made all ~430 transcript pages stale and the transcriber's warm re-rendered the whole site: ~80 MB of Neon egress a day (confirmed 2026-10-08: sampled transcript pages back to 2011 all rendered at the minute of the window's refresh).
+
+- [x] `isKnownMeeting`: existence check cached per meeting under its own `meetingTag` (sha256-hashed slug, under Next's 256-char tag cap); the transcript page uses it instead of the catalog. Trade-off: an unknown slug costs one small query the first time, then its "no" is cached
+- [x] `/api/revalidate` city refresh: refreshes the pages and existence checks of meetings with `updatedAt >= changed_since` (default lookback 48 h; every transcriber write sets `updatedAt`, so it over-includes rather than misses). `meeting_id` refresh does the same for its meeting. Existence tags expire immediately (`{ expire: 0 }`), so a new meeting never gets a cached 404
+- [x] Transcriber sends `changed_since` = its last acknowledged refresh start minus 15 min (FIX-NEON-PER-MEETING-REFRESH-001 there)
+- [x] `per-meeting-refresh-check` gate (mutation-tested); `catalog-lookup-check` updated
+- [x] Preview (2026-10-08): POSTed a window-shaped Seattle refresh (36 meetings changed in 26 h). Three untouched Seattle transcript pages stayed HIT with their ages still counting (31/30/29 s); a touched one and `/wa/seattle` came back REVALIDATED then fresh; unknown slugs still 404; link recovery still works
+- [ ] Follow-up: the document refresh bumps `Meeting.updatedAt` even when nothing changed, so ~36 Seattle meetings/day still re-render. Only bump it when the documents actually change
 
 ### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
 
