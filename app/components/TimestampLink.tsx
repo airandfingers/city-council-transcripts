@@ -4,6 +4,9 @@ import { useVideoSync } from "./VideoSyncProvider";
 import { applyOffset, type OffsetModel } from "@/app/lib/offset";
 import { formatTime } from "@/app/lib/citations";
 
+/** The transcript page's collapsible transcript (`<details id="full-transcript">`). */
+const TRANSCRIPT_DETAILS_ID = "full-transcript";
+
 export default function TimestampLink({
   seconds,
   label,
@@ -16,12 +19,14 @@ export default function TimestampLink({
   label?: string;
   className?: string;
   offsetModel?: OffsetModel | null;
-  /** Element id to scroll into view after seeking (defaults to the video player). */
+  /** Where to jump when there's no seekable player and no transcript to
+   * show the moment in (defaults to the video section). */
   scrollTargetId?: string;
-  /** If set, opens this `<details>` element (e.g. the collapsed transcript) before scrolling to it. */
+  /** The transcript `<details>` to open and jump to when there's no seekable
+   * player (defaults to TRANSCRIPT_DETAILS_ID). */
   openDetailsId?: string;
 }) {
-  const { seekTo, play, scrollToTime } = useVideoSync();
+  const { seekTo, play, scrollToTime, hasPlayer, requestDock, jumpWithReturn } = useVideoSync();
 
   // `seconds` is in reference (transcript / granicus) time; convert to
   // target (youtube) time before seeking or building the URL.
@@ -61,11 +66,23 @@ export default function TimestampLink({
         seekTo(targetSeconds);
         play();
         window.history.replaceState(null, "", href);
-        if (openDetailsId) {
-          const details = document.getElementById(openDetailsId);
-          if (details instanceof HTMLDetailsElement) details.open = true;
+        // FEAT-TRANSCRIPT-DOCK-PLAYER-001: never drag the reader down the
+        // page. With a seekable player, the video plays the moment in a
+        // corner dock (if it's off-screen) and the page stays put. Without
+        // one (Granicus link-out, or YouTube still loading), the transcript
+        // is the only place the moment exists, so jump there and offer a
+        // way back.
+        if (hasPlayer) {
+          requestDock();
+        } else {
+          const transcript = document.getElementById(openDetailsId ?? TRANSCRIPT_DETAILS_ID);
+          if (transcript instanceof HTMLDetailsElement) {
+            transcript.open = true;
+            jumpWithReturn(transcript);
+          } else {
+            jumpWithReturn(document.getElementById(scrollTargetId));
+          }
         }
-        document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
         // Ask any mounted TranscriptViewer to scroll to this moment too.
         // Independent of seekTo/scrollTargetId above — this is what actually
         // moves the reader to the cited passage for a provider with no
