@@ -47,7 +47,7 @@
 
 ### FEAT-TRANSCRIPT-DOCK-PLAYER-001 — Clicking a timestamp plays the moment without dragging the reader down the page
 
-**Status:** 🔄 In Progress (2026-10-08) — PR open
+**Status:** 🔄 In Progress (2026-10-08) — PR open, `batch-ready`
 
 As a reader on a meeting page, I want a summary or topic timestamp to play that moment without scrolling me to the bottom of the page, so I can keep reading and click the next one.
 
@@ -56,7 +56,8 @@ Cause: the transcript already scrolls inside its own 750 px box, but the "jump t
 - [x] Seekable player (YouTube/mp4): the click seeks and plays, and if the video is off-screen it pops into a corner mini-player (`DockableVideo`). The page doesn't move. It goes back in place when the reader scrolls to the video or closes it. Classes only, no remount, so the YouTube iframe never reloads
 - [x] Transcript jumps scroll only the transcript box (`container.scrollTo`), keep Auto Scroll on, and are handled once per click. Before, the effect re-ran on every playback tick and could pull the box back to an old citation
 - [x] No seekable player (Granicus link-out, or YouTube still loading): open the transcript and jump to it, with a "↑ Back to where you were" button. The mini-player's "Show in transcript" uses the same button
-- [ ] Browser check on the preview: `scrollY` unchanged after a summary click on YouTube and mp4 meetings, the iframe not reloaded, Auto Scroll still on, the back button works on Granicus, and a phone-width viewport
+- [x] Browser check on the preview (headless Chromium, 2026-10-08), YouTube (Montebello 09-23) desktop and phone, and mp4 (Fort Collins 09-22): `scrollY` 0 → 0, docked, 0 iframe reloads, transcript box scrolled to the line, Auto Scroll still on. No player (YouTube API blocked): jumped to the transcript, then the back button returned to 0. The first run caught long smooth scrolls switching Auto Scroll off; fixed with instant jumps past two screens
+- [ ] On a real phone: the docked video draws (headless showed the phone dock black, likely just no headless video decode)
 
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 
