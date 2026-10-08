@@ -66,6 +66,15 @@ Each production deploy re-renders the whole site from Neon (~80–85 MB of trans
 - [x] Dependabot grouped weekly (minor+patch / major / actions)
 - [x] CLAUDE.md Git Workflow rule
 - [ ] First real batch
+### FIX-UPCOMING-NEXT-REGULAR-001 — Upcoming list always shows the next regular council meeting
+
+**Status:** 🔄 In Progress (2026-10-07) — PR open, `batch-ready`
+
+The city page's Upcoming group showed only the soonest meeting when collapsed. If a special meeting, work session or commission meeting came first, the next regular council meeting was hidden behind "Show more".
+
+- [x] `app/lib/upcoming.ts`: `collapsedUpcoming` shows the soonest meeting plus the next regular council meeting when that's a different one (at most 2; meetings in between stay behind "Show N more"). "Regular" means a council meeting that isn't special/work session/study session/workshop/briefing/committee/commission/board/closed session, since Seattle and Montebello titles are plain "City Council"
+- [x] `MeetingFilter` uses it in place of the fixed `DEFAULT_VISIBLE_UPCOMING = 1`
+- [x] `upcoming-collapse-check` gate with real titles from all four cities
 
 ### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
 
