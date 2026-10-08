@@ -154,7 +154,11 @@ export default function TranscriptViewer({
     lastProgrammaticTop.current = clampedTop;
 
     isAutoScrolling.current = true;
-    container.scrollTo({ top: clampedTop, behavior: "smooth" });
+    // A seek can land far away; a long smooth scroll outlasts the 150 ms
+    // guard and its later events switch Auto Scroll off, so jump instantly
+    // past a couple of screens (FEAT-TRANSCRIPT-DOCK-PLAYER-001).
+    const far = Math.abs(clampedTop - container.scrollTop) > container.clientHeight * 2;
+    container.scrollTo({ top: clampedTop, behavior: far ? "instant" : "smooth" });
 
     // Clear the guard after the smooth scroll settles
     const timer = setTimeout(() => {
@@ -229,14 +233,17 @@ export default function TranscriptViewer({
       container.scrollTop;
     const maxScroll = container.scrollHeight - container.clientHeight;
     const top = Math.max(0, Math.min(cardTop - container.clientHeight * 0.25, maxScroll));
-    // Our own scroll, not the reader's: keep Auto Scroll on. Not cleared
-    // in a cleanup, since the next currentTime tick would cancel it.
+    // Instant, not smooth: a citation can be tens of thousands of pixels
+    // away, and a smooth scroll that long outlasts the guard below, so its
+    // later scroll events read as the reader's and switch Auto Scroll off
+    // (seen on the preview). The guard isn't cleared in a cleanup, since
+    // the next currentTime tick would cancel it.
     isAutoScrolling.current = true;
     lastProgrammaticTop.current = top;
-    container.scrollTo({ top, behavior: "smooth" });
+    container.scrollTo({ top, behavior: "instant" });
     setTimeout(() => {
       isAutoScrolling.current = false;
-    }, 600);
+    }, 300);
   }, [scrollRequest, groupedLines, mapToTarget, currentTime, autoScroll]);
 
   // When user re-enables auto-scroll, jump immediately
