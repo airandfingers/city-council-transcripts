@@ -45,6 +45,17 @@
 
 ## Active Stories
 
+### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
+
+**Status:** 🔄 In Progress (2026-10-05)
+
+Compute is still 9–13 active h/day with the transcriber down to one Neon touch a day, so the remaining wakes are site cache misses. Production's logs live under the airandfingers Vercel team, which the maintainer's CLI login can't see.
+
+- [x] `scripts/vercel-cache-misses.mjs` (`npm run vercel:misses`): wraps `vercel logs --json`, appends to a gitignored `.vercel-logs/requests.jsonl` deduped by id (retention is short, so `--watch` accumulates a day), reports non-HIT serverless requests by route, status, odd URL spelling and UTC hour
+- [x] Walkthrough for the developer: `docs/vercel-cache-miss-logs.md`
+- [x] Verified fetch + dedupe against a Hobby project of the maintainer's (JSON carries `cache`, `requestPath`, `responseStatusCode`, `source`; no IP/UA) and the report on synthetic misses
+- [ ] Developer runs it for a day; triage the top missing routes
+
 ### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
 
 **Status:** 🔄 In Progress (2026-10-03) — PR open

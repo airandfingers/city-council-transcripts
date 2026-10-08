@@ -43,3 +43,6 @@ next-env.d.ts
 specs/.current-spec
 **/.progress.md
 **/.ralph-state.json
+
+# vercel request logs pulled by scripts/vercel-cache-misses.mjs
+/.vercel-logs/
