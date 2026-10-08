@@ -45,6 +45,18 @@
 
 ## Active Stories
 
+### FIX-NEON-PER-MEETING-REFRESH-001 — A city refresh no longer re-renders every transcript page
+
+**Status:** 🔄 In Progress (2026-10-08) — PR open, verify on a preview before batching
+
+Every `/api/revalidate` call purges the site-wide `CACHE_TAGS`, and every transcript page read the catalog (`sitemap` tag) for its cheap-404 check, so each daily sync window made all ~430 transcript pages stale and the transcriber's warm re-rendered the whole site: ~80 MB of Neon egress a day (confirmed 2026-10-08: sampled transcript pages back to 2011 all rendered at the minute of the window's refresh).
+
+- [x] `isKnownMeeting`: existence check cached per meeting under its own `meetingTag` (sha256-hashed slug, under Next's 256-char tag cap); the transcript page uses it instead of the catalog. Trade-off: an unknown slug costs one small query the first time, then its "no" is cached
+- [x] `/api/revalidate` city refresh: refreshes the pages and existence checks of meetings with `updatedAt >= changed_since` (default lookback 48 h; every transcriber write sets `updatedAt`, so it over-includes rather than misses). `meeting_id` refresh does the same for its meeting. Existence tags expire immediately (`{ expire: 0 }`), so a new meeting never gets a cached 404
+- [x] Transcriber sends `changed_since` = its last acknowledged refresh start minus 15 min (FIX-NEON-PER-MEETING-REFRESH-001 there)
+- [x] `per-meeting-refresh-check` gate (mutation-tested); `catalog-lookup-check` updated
+- [ ] Preview: warm transcript pages, POST a window-shaped refresh, confirm untouched pages stay HIT with their old `age` and a touched one re-renders
+
 ### FIX-TRUNCATED-LINKS-001 — Cut-off links from video descriptions land somewhere useful
 
 **Status:** 🔄 In Progress (2026-10-03) — PR open

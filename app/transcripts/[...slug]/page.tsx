@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import prisma from "@/app/lib/prisma";
-import { getCitiesForNav, mayBeKnownMeeting, recoverMeetingLink } from "@/app/lib/cityData";
+import { getCitiesForNav, isKnownMeeting, recoverMeetingLink } from "@/app/lib/cityData";
 import { resolveTranscriptSlug, transcriptPath } from "@/app/lib/transcriptPath";
 import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
@@ -112,10 +112,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 // One query per render: generateMetadata and the page share it via cache().
-// A slug the cached catalog doesn't know is a 404 without touching Neon
-// (FIX-NEON-TOPIC-PAGES-CHEAP-404-001).
+// A slug already known to be missing is a 404 without touching Neon. The
+// check is cached per meeting, not read from the shared catalog, so this
+// page carries only its own meeting's tag and a city refresh doesn't make
+// every transcript page stale (FIX-NEON-PER-MEETING-REFRESH-001).
 const getMeeting = cache(async (slug: string) => {
-  if (!(await mayBeKnownMeeting(slug))) return null;
+  if (!(await isKnownMeeting(slug))) return null;
   return prisma.meeting.findUnique({
     where: { slug },
     include: {

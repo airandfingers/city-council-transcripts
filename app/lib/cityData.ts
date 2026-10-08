@@ -4,6 +4,7 @@
  * @module cityData
  */
 
+import { createHash } from "node:crypto";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { meetingCandidates } from "@/app/lib/linkRecovery";
@@ -196,6 +197,53 @@ const getCatalogForLookup = cache(async function getCatalogForLookup(): Promise<
 export async function mayBeKnownMeeting(meetingSlug: string): Promise<boolean> {
   const catalog = await getCatalogForLookup();
   return catalog === null || catalogHasMeeting(catalog, meetingSlug);
+}
+
+/**
+ * Cache tag for one meeting's existence check. Hashed because Next caps tags
+ * at 256 characters and meeting slugs can be up to 500.
+ */
+export function meetingTag(meetingSlug: string): string {
+  return `meeting:${createHash("sha256").update(meetingSlug).digest("hex").slice(0, 32)}`;
+}
+
+/**
+ * Whether a meeting with this slug exists, cached per meeting
+ * (FIX-NEON-PER-MEETING-REFRESH-001). The transcript page uses this instead of
+ * `mayBeKnownMeeting`: a page carries the tags of every cached read it makes,
+ * and the catalog's `sitemap` tag is purged on every city refresh, so every
+ * transcript page went stale (and the warm re-rendered the whole site) once
+ * per sync window. This entry carries only its own meeting's tag, which
+ * `/api/revalidate` purges when that meeting changes or is created.
+ *
+ * Trade-off: an unknown slug costs one small Neon query the first time it is
+ * requested (then its "no" is cached), where the catalog answered it free.
+ */
+export function isKnownMeeting(meetingSlug: string): Promise<boolean> {
+  return unstable_cache(
+    async (): Promise<boolean> =>
+      (await prisma.meeting.findUnique({ where: { slug: meetingSlug }, select: { id: true } })) !== null,
+    ["meeting-known", meetingSlug],
+    { revalidate: DB_CACHE_REVALIDATE, tags: [meetingTag(meetingSlug)] },
+  )();
+}
+
+/** Slugs of a city's meetings written since *since*, for /api/revalidate.
+ * Deliberately UNCACHED, like getMeetingSlugsForCity. Every transcriber write
+ * to a meeting (publish, stub/documents refresh, status aging) sets
+ * `updatedAt`, so this over-includes rather than misses. */
+export function getMeetingSlugsChangedSince(
+  stateCode: string,
+  citySlug: string,
+  since: Date,
+): Promise<Array<{ slug: string }>> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) {
+    return Promise.resolve([]);
+  }
+  return prisma.meeting.findMany({
+    where: { city: { stateCode, slug: citySlug }, updatedAt: { gte: since } },
+    select: { slug: true },
+  });
 }
 
 /**

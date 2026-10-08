@@ -52,6 +52,11 @@
       "command": "node scripts/validate/catalog-lookup-check.mjs"
     },
     {
+      "id": "per-meeting-refresh-check",
+      "description": "Transcript pages carry only their own meeting's cache tag, and /api/revalidate refreshes the meetings written since the caller's last refresh",
+      "command": "node scripts/validate/per-meeting-refresh-check.mjs"
+    },
+    {
       "id": "home-layout-content-e2e",
       "description": "Home page shows city cards with correct content and layout",
       "command": "node scripts/validate/home-layout-content-e2e.mjs",

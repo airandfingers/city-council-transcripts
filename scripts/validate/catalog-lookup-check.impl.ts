@@ -55,11 +55,14 @@ for (const [name, check] of [
 assert.match(cityData, /catalog === null \|\| catalogHasMeeting/, "mayBeKnownMeeting must fall back when the catalog is unavailable");
 assert.match(cityData, /catalog\.length > 0 \? catalog : null/, "an empty catalog must count as unavailable");
 
+// Transcript pages check existence per meeting instead (see
+// per-meeting-refresh-check), so a known-missing slug is still a 404
+// without the full meeting query.
 const transcriptPage = readFileSync("app/transcripts/[...slug]/page.tsx", "utf8");
 const getMeeting = transcriptPage.slice(transcriptPage.indexOf("const getMeeting"));
 assert.ok(
-  getMeeting.indexOf("mayBeKnownMeeting") >= 0 && getMeeting.indexOf("mayBeKnownMeeting") < getMeeting.indexOf("prisma.meeting"),
-  "getMeeting must check the catalog before querying",
+  getMeeting.indexOf("isKnownMeeting") >= 0 && getMeeting.indexOf("isKnownMeeting") < getMeeting.indexOf("prisma.meeting"),
+  "getMeeting must check existence before querying",
 );
 
 // Topic detail pages have no TTL, so the city-level refresh must reach them,

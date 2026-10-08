@@ -3,13 +3,19 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import prisma from "@/app/lib/prisma";
 import { isAuthorized } from "@/app/lib/publish";
-import { CACHE_TAGS, getMeetingSlugsForCity } from "@/app/lib/cityData";
+import {
+  CACHE_TAGS,
+  getMeetingSlugsChangedSince,
+  getMeetingSlugsForCity,
+  meetingTag,
+} from "@/app/lib/cityData";
 
 /**
  * POST /api/revalidate
  *
  * Body: { "meeting_id": <number> }
- *     | { "city_state_code": <string>, "city_slug": <string>, "include_transcripts"?: <boolean> }
+ *     | { "city_state_code": <string>, "city_slug": <string>, "include_transcripts"?: <boolean>,
+ *         "changed_since"?: <ISO 8601 timestamp> }
  * Auth: Authorization: Bearer <PUBLISH_API_KEY>
  *
  * Invalidates the ISR cache for content that the publish sweep
@@ -54,6 +60,16 @@ import { CACHE_TAGS, getMeetingSlugsForCity } from "@/app/lib/cityData";
  * any code that writes Neon must call it afterwards, or the site keeps serving
  * the old data.
  *
+ * Transcript pages don't read those tags (FIX-NEON-PER-MEETING-REFRESH-001):
+ * each one's existence check is cached under its own `meetingTag`, because a
+ * page carries the tags of every cached read it makes, and when they read the
+ * catalog every city refresh made all ~430 of them stale and the warm
+ * re-rendered the whole site (~80 MB of Neon egress) once per sync window. So
+ * the per-city call refreshes only the transcript pages of meetings written
+ * since `changed_since` (by `Meeting.updatedAt`, which every transcriber
+ * write sets), defaulting to the last DEFAULT_CHANGED_LOOKBACK_MS when the
+ * caller doesn't send it.
+ *
  * The per-city call also marks every interest-area detail page
  * (`/[state]/[city]/topics/[slug]`) stale, via the route pattern. Those pages
  * have no TTL (FIX-NEON-TOPIC-PAGES-CHEAP-404-001), so this is their only
@@ -68,6 +84,7 @@ const RevalidateBody = z.union([
     city_state_code: z.string().min(1),
     city_slug: z.string().min(1),
     include_transcripts: z.boolean().optional(),
+    changed_since: z.string().datetime({ offset: true }).optional(),
   }),
 ]);
 
@@ -81,6 +98,35 @@ function revalidateDataCacheTags(): string[] {
 }
 
 /** Route pattern (not a URL) for every interest-area detail page. */
+const DEFAULT_CHANGED_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+const MAX_CHANGED_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+
+function transcriptPathFor(meetingSlug: string): string {
+  return `/transcripts/${meetingSlug.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/** Refreshes one meeting's transcript page and its existence check. Expired
+ * immediately, not stale-while-revalidate: a cached "doesn't exist" served
+ * once more would 404 a meeting that was just created. */
+function revalidateMeeting(meetingSlug: string): string {
+  const path = transcriptPathFor(meetingSlug);
+  revalidatePath(path);
+  revalidateTag(meetingTag(meetingSlug), { expire: 0 });
+  return path;
+}
+
+async function revalidateChangedMeetings(
+  stateCode: string,
+  slug: string,
+  changedSince: string | undefined,
+): Promise<string[]> {
+  const now = Date.now();
+  const requested = changedSince ? new Date(changedSince).getTime() : now - DEFAULT_CHANGED_LOOKBACK_MS;
+  const since = new Date(Math.min(now, Math.max(requested, now - MAX_CHANGED_LOOKBACK_MS)));
+  const meetings = await getMeetingSlugsChangedSince(stateCode, slug, since);
+  return meetings.map((m) => revalidateMeeting(m.slug));
+}
+
 const TOPIC_DETAIL_ROUTE = "/[state]/[city]/topics/[slug]";
 
 function revalidateCityPaths(stateCode: string, slug: string): string[] {
@@ -99,9 +145,7 @@ async function revalidateCityTranscriptPaths(
   slug: string,
 ): Promise<string[]> {
   const meetings = await getMeetingSlugsForCity(stateCode, slug);
-  const paths = meetings.map(
-    (m) => `/transcripts/${m.slug.split("/").map(encodeURIComponent).join("/")}`,
-  );
+  const paths = meetings.map((m) => transcriptPathFor(m.slug));
   for (const path of paths) revalidatePath(path);
   return paths;
 }
@@ -142,14 +186,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
     }
 
-    const slugPath = meeting.slug.split("/").map(encodeURIComponent).join("/");
-    revalidatePath(`/transcripts/${slugPath}`);
+    const meetingPath = revalidateMeeting(meeting.slug);
     const cityPaths = revalidateCityPaths(meeting.city.stateCode, meeting.city.slug);
     const tags = revalidateDataCacheTags();
 
     return NextResponse.json({
       ok: true,
-      revalidated: [`/transcripts/${slugPath}`, ...cityPaths],
+      revalidated: [meetingPath, ...cityPaths],
       tags,
     });
   }
@@ -170,7 +213,7 @@ export async function POST(req: Request) {
   // `getMeetingSlugsForCity`, whose `isValidStateCode` guard requires
   // lowercase and silently returns `[]` — zero transcript pages revalidated
   // — on anything else, rather than erroring.
-  const { city_state_code, city_slug, include_transcripts } = parsed.data;
+  const { city_state_code, city_slug, include_transcripts, changed_since } = parsed.data;
   const stateCode = city_state_code.toLowerCase();
   const city = await prisma.city.findUnique({
     where: { stateCode_slug: { stateCode, slug: city_slug } },
@@ -182,6 +225,7 @@ export async function POST(req: Request) {
   }
 
   const cityPaths = revalidateCityPaths(stateCode, city_slug);
+  const changedPaths = await revalidateChangedMeetings(stateCode, city_slug, changed_since);
   // Absent means "yes" — see `include_transcripts` in the header comment.
   const transcriptPaths =
     include_transcripts === false
@@ -190,7 +234,8 @@ export async function POST(req: Request) {
   const tags = revalidateDataCacheTags();
   return NextResponse.json({
     ok: true,
-    revalidated: [...cityPaths, ...transcriptPaths],
+    revalidated: [...cityPaths, ...new Set([...changedPaths, ...transcriptPaths])],
+    changed_meetings: changedPaths.length,
     transcripts_purged: include_transcripts !== false,
     tags,
   });
