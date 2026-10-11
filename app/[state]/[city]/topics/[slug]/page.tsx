@@ -48,7 +48,8 @@ function ConfidenceBadge({ confidence }: { confidence: number | null }) {
         : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
   return (
     <span
-      title={`AI confidence that this topic was actually discussed in this meeting: ${pct}%`}
+      title={`How sure the AI is that this meeting actually discussed this topic: ${pct}%`}
+      aria-label={`${pct}% sure this meeting discussed this topic`}
       className={`text-xs px-1.5 py-0.5 rounded font-medium cursor-help ${color}`}
     >
       {pct}%
@@ -140,7 +141,16 @@ export default async function TopicDetailPage({ params }: Props) {
       {/* ── Meeting history timeline (Timeline Spine) ── */}
       {discussedMeetings.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xl font-semibold mb-5">Meeting history</h2>
+          <h2 className="text-xl font-semibold mb-1">Meeting history</h2>
+          {/* FIX-TOPIC-CONFIDENCE-LEGEND-001: the % badge's tooltip never
+              shows on touch screens, so say what the number is up front. */}
+          {discussedMeetings.some((m) => m.confidence !== null) && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
+              The % next to each meeting is how sure our AI is that the meeting
+              actually discussed this topic. Lower numbers can mean a passing
+              mention; check the transcript.
+            </p>
+          )}
           <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-3 space-y-6">
             {discussedMeetings.map((m) => (
               <li key={m.meetingId} className="ml-6">

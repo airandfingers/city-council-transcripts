@@ -45,6 +45,15 @@
 
 ## Active Stories
 
+### FIX-TOPIC-CONFIDENCE-LEGEND-001 — Say what the % on a topic's meeting history means
+
+**Status:** ✅ Complete (2026-10-11), waiting for the Thursday batch
+
+User: "for a topic, meeting history. there is % number next to each meeting and a tooltip, but the tooltip has no explanation what that % number is." The badge's only explanation was a hover `title`, which never shows on touch screens and appears late on desktop.
+
+- [x] One line under "Meeting history" says the % is how sure the AI is that the meeting discussed the topic, and that low numbers can be a passing mention (shown only when a meeting has a confidence)
+- [x] Badge tooltip reworded in plain language; `aria-label` for screen readers
+
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 
 **Status:** 🔄 In Progress (2026-10-05)
