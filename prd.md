@@ -45,6 +45,17 @@
 
 ## Active Stories
 
+### FEAT-TOPIC-VIDEOS-001 — Topic pages list the videos made about them
+
+**Status:** 🔄 In Progress (2026-10-13) — PR open
+
+A topic page and the videos made about it should link to each other (transcriber FEAT-ISSUE-PAGE-REEL-LINKS-001). The first is the Fort Collins climate-goals supercut (https://youtu.be/VGBsxi4CUSA), whose YouTube description links to `/co/fort-collins/topics/climate_goals`.
+
+- [x] `app/lib/topicVideos.ts`: checked-in list keyed by state/city/topic (a handful of hand-uploaded videos; no Neon reads)
+- [x] `TopicVideoCard`: thumbnail link to YouTube, no player or iframe until clicked
+- [x] "Videos" section on the topic page, above the subscribe box, only when the topic has videos
+- [ ] The Fort Collins `climate_goals` topic is published by the transcriber (the page 404s until then)
+
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 
 **Status:** 🔄 In Progress (2026-10-05)

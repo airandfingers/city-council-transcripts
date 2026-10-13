@@ -3,11 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCityByParams, getInterestArea } from "@/app/lib/cityData";
 import SubscribeForm from "@/app/components/SubscribeForm";
+import TopicVideoCard from "@/app/components/TopicVideoCard";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import CopyTimecode from "@/app/components/CopyTimecode";
 import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { transcriptPath } from "@/app/lib/transcriptPath";
+import { getTopicVideos } from "@/app/lib/topicVideos";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate's
 // city-level call, which marks every topic detail page stale
@@ -69,6 +71,7 @@ export default async function TopicDetailPage({ params }: Props) {
   if (!cityData) notFound();
 
   const discussedMeetings = area.meetings.filter((m) => m.summary);
+  const videos = getTopicVideos(state, citySlug, slug);
 
   return (
     <main className="p-8 max-w-3xl">
@@ -120,6 +123,18 @@ export default async function TopicDetailPage({ params }: Props) {
           )}
         </div>
       </section>
+
+      {/* ── Videos about this topic (FEAT-TOPIC-VIDEOS-001) ── */}
+      {videos.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-3">Videos</h2>
+          <div className="space-y-3">
+            {videos.map((v) => (
+              <TopicVideoCard key={v.youtubeId} video={v} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── Subscribe CTA (mobile-forward, from M7b) ── */}
       <section className="mb-8 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
