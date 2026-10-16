@@ -45,6 +45,16 @@
 
 ## Active Stories
 
+### FIX-CITY-CARD-LABEL-001 — City cards say what a city page holds
+
+**Status:** ✅ Done (2026-10-16) — PR open, `batch-ready`
+
+The home page's city cards ended in "View meetings", but a city page also leads with the topics being discussed. The card's screen-reader name ("View transcripts for …") matched neither.
+
+- [x] Card call-to-action reads "Meetings and topics"
+- [x] Accessible name is "<City>, <State>: meetings and topics", so it contains the visible text (WCAG 2.5.3)
+- [x] Home page e2e test selects cards by the new name
+
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 
 **Status:** 🔄 In Progress (2026-10-05)
