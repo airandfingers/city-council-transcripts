@@ -76,6 +76,15 @@ A topic page and the videos made about it should link to each other (transcriber
 - [x] `TopicVideoCard`: thumbnail link to YouTube, no player or iframe until clicked
 - [x] "Videos" section on the topic page, above the subscribe box, only when the topic has videos
 - [ ] The Fort Collins `climate_goals` topic is published by the transcriber (the page 404s until then)
+### FIX-CITY-CARD-LABEL-001 — City cards say what a city page holds
+
+**Status:** ✅ Done (2026-10-16) — PR open, `batch-ready`
+
+The home page's city cards ended in "View meetings", but a city page also leads with the topics being discussed. The card's screen-reader name ("View transcripts for …") matched neither.
+
+- [x] Card call-to-action reads "Meetings and topics"
+- [x] Accessible name is "<City>, <State>: meetings and topics", so it contains the visible text (WCAG 2.5.3)
+- [x] Home page e2e test selects cards by the new name
 
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 

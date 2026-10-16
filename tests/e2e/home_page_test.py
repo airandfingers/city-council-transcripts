@@ -22,8 +22,8 @@ def test_home_page():
         assert response.status == 200, f"Home page returned status {response.status}, expected 200"
 
         # Test: exactly 2 city cards present
-        # City cards are links with aria-label containing "View transcripts for"
-        city_cards = page.locator('a[aria-label^="View transcripts for"]')
+        # City cards are links whose aria-label ends with ": meetings and topics"
+        city_cards = page.locator('a[aria-label$=": meetings and topics"]')
         card_count = city_cards.count()
         assert card_count == 2, f"Expected exactly 2 city cards, found {card_count}"
 
