@@ -84,7 +84,7 @@ The home page's city cards ended in "View meetings", but a city page also leads 
 
 - [x] Card call-to-action reads "Meetings and topics"
 - [x] Accessible name is "<City>, <State>: meetings and topics", so it contains the visible text (WCAG 2.5.3)
-- [x] Home page e2e test selects cards by the new name
+- [x] Home page e2e test selects cards by the new name; it no longer pins the city count to 2 (the directory has 3) or expects a one-paragraph About section, both of which already failed on main
 
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 
