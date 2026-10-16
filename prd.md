@@ -58,6 +58,14 @@ Cause: the transcript already scrolls inside its own 750 px box, but the "jump t
 - [x] No seekable player (Granicus link-out, or YouTube still loading): open the transcript and jump to it, with a "↑ Back to where you were" button. The mini-player's "Show in transcript" uses the same button
 - [x] Browser check on the preview (headless Chromium, 2026-10-08), YouTube (Montebello 09-23) desktop and phone, and mp4 (Fort Collins 09-22): `scrollY` 0 → 0, docked, 0 iframe reloads, transcript box scrolled to the line, Auto Scroll still on. No player (YouTube API blocked): jumped to the transcript, then the back button returned to 0. The first run caught long smooth scrolls switching Auto Scroll off; fixed with instant jumps past two screens
 - [ ] On a real phone: the docked video draws (headless showed the phone dock black, likely just no headless video decode)
+### FIX-TOPIC-CONFIDENCE-LEGEND-001 — Say what the % on a topic's meeting history means
+
+**Status:** ✅ Complete (2026-10-11), waiting for the Thursday batch
+
+User: "for a topic, meeting history. there is % number next to each meeting and a tooltip, but the tooltip has no explanation what that % number is." The badge's only explanation was a hover `title`, which never shows on touch screens and appears late on desktop.
+
+- [x] One line under "Meeting history" says the % is how sure the AI is that the meeting discussed the topic, and that low numbers can be a passing mention (shown only when a meeting has a confidence)
+- [x] Badge tooltip reworded in plain language; `aria-label` for screen readers
 
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 
