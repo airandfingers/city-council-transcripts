@@ -11,6 +11,7 @@ import type { Topic, Bullet } from "@/app/components/TopicsPanel";
 import DocumentsPanel from "@/app/components/DocumentsPanel";
 import VideoSyncProvider from "@/app/components/VideoSyncProvider";
 import VideoPlayer from "@/app/components/VideoPlayer";
+import DockableVideo from "@/app/components/DockableVideo";
 import MomentCard from "@/app/components/MomentCard";
 import LinkRecovery from "@/app/components/LinkRecovery";
 import TranscriptViewer from "@/app/components/TranscriptViewer";
@@ -781,9 +782,14 @@ export default async function TranscriptPage({ params }: Props) {
                   via generateStaticParams — FIX-NEON-EGRESS-MEASURE-001).
                   Surfaced by adding generateStaticParams during that fix's
                   local verification; this bug predates it. */}
-              <Suspense fallback={<div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />}>
-                <VideoPlayer videoUrl={videoUrl} videoProvider={videoProvider} />
-              </Suspense>
+              {/* DockableVideo: a citation click plays the moment in a corner
+                  mini-player instead of scrolling the page down here
+                  (FEAT-TRANSCRIPT-DOCK-PLAYER-001). */}
+              <DockableVideo>
+                <Suspense fallback={<div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />}>
+                  <VideoPlayer videoUrl={videoUrl} videoProvider={videoProvider} />
+                </Suspense>
+              </DockableVideo>
             </section>
           )}
 

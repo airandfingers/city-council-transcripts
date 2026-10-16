@@ -45,6 +45,47 @@
 
 ## Active Stories
 
+### FEAT-TRANSCRIPT-DOCK-PLAYER-001 — Clicking a timestamp plays the moment without dragging the reader down the page
+
+**Status:** 🔄 In Progress (2026-10-08) — PR open, `batch-ready`
+
+As a reader on a meeting page, I want a summary or topic timestamp to play that moment without scrolling me to the bottom of the page, so I can keep reading and click the next one.
+
+Cause: the transcript already scrolls inside its own 750 px box, but the "jump to this moment" effect called `card.scrollIntoView()`, which scrolls every scrollable ancestor too, so the page landed at the transcript at the very bottom. `TimestampLink` also scrolled to `#video` itself.
+
+- [x] Seekable player (YouTube/mp4): the click seeks and plays, and if the video is off-screen it pops into a corner mini-player (`DockableVideo`). The page doesn't move. It goes back in place when the reader scrolls to the video or closes it. Classes only, no remount, so the YouTube iframe never reloads
+- [x] Transcript jumps scroll only the transcript box (`container.scrollTo`), keep Auto Scroll on, and are handled once per click. Before, the effect re-ran on every playback tick and could pull the box back to an old citation
+- [x] No seekable player (Granicus link-out, or YouTube still loading): open the transcript and jump to it, with a "↑ Back to where you were" button. The mini-player's "Show in transcript" uses the same button
+- [x] Browser check on the preview (headless Chromium, 2026-10-08), YouTube (Montebello 09-23) desktop and phone, and mp4 (Fort Collins 09-22): `scrollY` 0 → 0, docked, 0 iframe reloads, transcript box scrolled to the line, Auto Scroll still on. No player (YouTube API blocked): jumped to the transcript, then the back button returned to 0. The first run caught long smooth scrolls switching Auto Scroll off; fixed with instant jumps past two screens
+- [ ] On a real phone: the docked video draws (headless showed the phone dock black, likely just no headless video decode)
+### FIX-TOPIC-CONFIDENCE-LEGEND-001 — Say what the % on a topic's meeting history means
+
+**Status:** ✅ Complete (2026-10-11), waiting for the Thursday batch
+
+User: "for a topic, meeting history. there is % number next to each meeting and a tooltip, but the tooltip has no explanation what that % number is." The badge's only explanation was a hover `title`, which never shows on touch screens and appears late on desktop.
+
+- [x] One line under "Meeting history" says the % is how sure the AI is that the meeting discussed the topic, and that low numbers can be a passing mention (shown only when a meeting has a confidence)
+- [x] Badge tooltip reworded in plain language; `aria-label` for screen readers
+### FEAT-TOPIC-VIDEOS-001 — Topic pages list the videos made about them
+
+**Status:** 🔄 In Progress (2026-10-13) — PR open
+
+A topic page and the videos made about it should link to each other (transcriber FEAT-ISSUE-PAGE-REEL-LINKS-001). The first is the Fort Collins climate-goals supercut (https://youtu.be/VGBsxi4CUSA), whose YouTube description links to `/co/fort-collins/topics/climate_goals`.
+
+- [x] `app/lib/topicVideos.ts`: checked-in list keyed by state/city/topic (a handful of hand-uploaded videos; no Neon reads)
+- [x] `TopicVideoCard`: thumbnail link to YouTube, no player or iframe until clicked
+- [x] "Videos" section on the topic page, above the subscribe box, only when the topic has videos
+- [ ] The Fort Collins `climate_goals` topic is published by the transcriber (the page 404s until then)
+### FIX-CITY-CARD-LABEL-001 — City cards say what a city page holds
+
+**Status:** ✅ Done (2026-10-16) — PR open, `batch-ready`
+
+The home page's city cards ended in "View meetings", but a city page also leads with the topics being discussed. The card's screen-reader name ("View transcripts for …") matched neither.
+
+- [x] Card call-to-action reads "Meetings and topics"
+- [x] Accessible name is "<City>, <State>: meetings and topics", so it contains the visible text (WCAG 2.5.3)
+- [x] Home page e2e test selects cards by the new name; it no longer pins the city count to 2 (the directory has 3) or expects a one-paragraph About section, both of which already failed on main
+
 ### FIX-NEON-CACHE-MISS-LOGS-001 — One command for an airandfingers team member to pull cache-miss request logs
 
 **Status:** 🔄 In Progress (2026-10-05)

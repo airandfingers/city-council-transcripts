@@ -3,11 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCityByParams, getInterestArea } from "@/app/lib/cityData";
 import SubscribeForm from "@/app/components/SubscribeForm";
+import TopicVideoCard from "@/app/components/TopicVideoCard";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import CopyTimecode from "@/app/components/CopyTimecode";
 import { canAutoSeek, buildTranscriptTimestampUrl, formatSeconds } from "@/app/lib/videoSeek";
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { transcriptPath } from "@/app/lib/transcriptPath";
+import { getTopicVideos } from "@/app/lib/topicVideos";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate's
 // city-level call, which marks every topic detail page stale
@@ -48,7 +50,8 @@ function ConfidenceBadge({ confidence }: { confidence: number | null }) {
         : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
   return (
     <span
-      title={`AI confidence that this topic was actually discussed in this meeting: ${pct}%`}
+      title={`How sure the AI is that this meeting actually discussed this topic: ${pct}%`}
+      aria-label={`${pct}% sure this meeting discussed this topic`}
       className={`text-xs px-1.5 py-0.5 rounded font-medium cursor-help ${color}`}
     >
       {pct}%
@@ -69,6 +72,7 @@ export default async function TopicDetailPage({ params }: Props) {
   if (!cityData) notFound();
 
   const discussedMeetings = area.meetings.filter((m) => m.summary);
+  const videos = getTopicVideos(state, citySlug, slug);
 
   return (
     <main className="p-8 max-w-3xl">
@@ -121,6 +125,18 @@ export default async function TopicDetailPage({ params }: Props) {
         </div>
       </section>
 
+      {/* ── Videos about this topic (FEAT-TOPIC-VIDEOS-001) ── */}
+      {videos.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-3">Videos</h2>
+          <div className="space-y-3">
+            {videos.map((v) => (
+              <TopicVideoCard key={v.youtubeId} video={v} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Subscribe CTA (mobile-forward, from M7b) ── */}
       <section className="mb-8 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <h2 className="font-semibold mb-1">Get updates on this topic</h2>
@@ -140,7 +156,16 @@ export default async function TopicDetailPage({ params }: Props) {
       {/* ── Meeting history timeline (Timeline Spine) ── */}
       {discussedMeetings.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xl font-semibold mb-5">Meeting history</h2>
+          <h2 className="text-xl font-semibold mb-1">Meeting history</h2>
+          {/* FIX-TOPIC-CONFIDENCE-LEGEND-001: the % badge's tooltip never
+              shows on touch screens, so say what the number is up front. */}
+          {discussedMeetings.some((m) => m.confidence !== null) && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
+              The % next to each meeting is how sure our AI is that the meeting
+              actually discussed this topic. Lower numbers can mean a passing
+              mention; check the transcript.
+            </p>
+          )}
           <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-3 space-y-6">
             {discussedMeetings.map((m) => (
               <li key={m.meetingId} className="ml-6">
