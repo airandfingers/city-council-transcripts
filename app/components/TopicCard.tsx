@@ -45,6 +45,7 @@ export default function TopicCard({
   return (
     <li>
       <Link
+        prefetch={false}
         href={`${cityHref}/topics/${topic.slug}`}
         className="block rounded-lg border border-gray-200 dark:border-gray-700 p-5 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
       >

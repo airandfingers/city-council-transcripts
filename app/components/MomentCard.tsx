@@ -67,7 +67,7 @@ export default function MomentCard({
           ▶ Play from {formatSeconds(t)}
         </a>
         {related.map((a) => (
-          <Link key={a.slug} href={`${topicsBasePath}/${a.slug}`} className="text-blue-600 hover:underline dark:text-blue-400">
+          <Link prefetch={false} key={a.slug} href={`${topicsBasePath}/${a.slug}`} className="text-blue-600 hover:underline dark:text-blue-400">
             Follow this issue: {a.name} →
           </Link>
         ))}

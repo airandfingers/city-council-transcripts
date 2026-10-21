@@ -13,7 +13,7 @@
  *
  * Pure: no database, no Next runtime. Run via `tsx` (see the .mjs wrapper).
  */
-import { tokenizeQuery, matchesAllTokens, buildMatchSnippet } from "../../app/lib/search";
+import { tokenizeQuery, matchesAllTokens, buildMatchSnippet, cardSummaryExcerpt, CARD_SUMMARY_MAX_CHARS } from "../../app/lib/search";
 import { summaryTypeLabel } from "../../app/lib/labels";
 import {
   matchMeetingsInCorpus,
@@ -36,8 +36,9 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const roundTrip = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 // --- Frozen oracle: the pre-refactor loop, verbatim in behavior -------------
-function referenceMatch(corpus: SearchCorpusMeeting[], tokens: string[]): MeetingSearchResult[] {
-  const results: MeetingSearchResult[] = [];
+type ReferenceResult = Pick<MeetingSearchResult, "slug" | "extraSnippet">;
+function referenceMatch(corpus: SearchCorpusMeeting[], tokens: string[]): ReferenceResult[] {
+  const results: ReferenceResult[] = [];
   for (const m of corpus) {
     const visibleHaystack = `${m.title} ${m.summary ?? ""} ${m.logline ?? ""}`;
     const extraParts: { label: string; text: string }[] = m.items.map((item) => ({
@@ -116,7 +117,8 @@ for (const q of queries) {
     continue;
   }
   const expected = referenceMatch(corpus, tokens);
-  const actual = matchMeetingsInCorpus(corpus, tokens);
+  // The reference predates summarySnippet (FIX-CITY-PAGE-PAYLOAD-001); compare the fields it has.
+  const actual = matchMeetingsInCorpus(corpus, tokens).map(({ slug, extraSnippet }) => ({ slug, extraSnippet }));
   check(`"${q}" matches the reference (${actual.length} hit(s))`, same(actual, expected), { expected, actual });
 }
 
@@ -130,6 +132,30 @@ console.log("search corpus: shape of the extra-snippet contract");
   check("a match already visible in title/logline/summary has no extra snippet", visible.length === 1 && visible[0].extraSnippet === null, visible);
   const topic = matchMeetingsInCorpus(corpus, tokenizeQuery("tax abatement"));
   check("topic-only match is labelled `Topic: <title>`", topic[0]?.extraSnippet?.label === "Topic: Data Center Zoning", topic);
+}
+
+console.log("search corpus: summary snippet (was MeetingCard's hiddenSummaryMatch)");
+{
+  const zoning = matchMeetingsInCorpus(corpus, tokenizeQuery("zoning parking"));
+  check("a match only in the summary behind a logline gets a summary snippet", zoning[0]?.summarySnippet?.includes("zoning") === true, zoning);
+  const logline = matchMeetingsInCorpus(corpus, tokenizeQuery("hillcrest"));
+  check("a match visible in the logline gets no summary snippet", logline.length === 1 && logline[0].summarySnippet === null, logline);
+  const elm = matchMeetingsInCorpus(corpus, tokenizeQuery("elm street"));
+  check("no summary, no summary snippet", elm.length === 1 && elm[0].summarySnippet === null, elm);
+  const longSummary: SearchCorpusMeeting = {
+    slug: "2026-06-01/city-council",
+    title: "City Council",
+    logline: null,
+    summary: `Opening business. ${"Routine consent items were approved. ".repeat(12)}Late in the meeting the council discussed the Poudre River trail.`,
+    items: [],
+    topics: [],
+  };
+  const early = matchMeetingsInCorpus([longSummary], tokenizeQuery("opening business"));
+  check("no logline: a match in the shown start of the summary gets no snippet", early.length === 1 && early[0].summarySnippet === null, early);
+  const late = matchMeetingsInCorpus([longSummary], tokenizeQuery("poudre"));
+  check("no logline: a match past the shown excerpt gets a snippet", late[0]?.summarySnippet?.includes("Poudre") === true, late);
+  check("cardSummaryExcerpt cuts long text at a word and adds …", cardSummaryExcerpt(longSummary.summary!).endsWith("…") && cardSummaryExcerpt(longSummary.summary!).length <= CARD_SUMMARY_MAX_CHARS + 1);
+  check("cardSummaryExcerpt leaves short text alone", cardSummaryExcerpt("Routine business.") === "Routine business.");
 }
 
 console.log("search corpus: survives unstable_cache's JSON round trip");
@@ -150,10 +176,10 @@ const cities = [
   { stateCode: "ca", slug: "montebello" }, // no meetings, no areas: must still appear
 ];
 const meetings = [
-  { slug: "2026-09-02/a", date: new Date("2026-09-02T00:00:00.000Z"), city: cities[0] },
-  { slug: "2026-08-19/b", date: new Date("2026-08-19T00:00:00.000Z"), city: cities[1] },
-  { slug: "2026-07-08/c", date: new Date("2026-07-08T00:00:00.000Z"), city: cities[0] },
-  { slug: "2026-01-01/orphan", date: new Date("2026-01-01T00:00:00.000Z"), city: { stateCode: "zz", slug: "nowhere" } },
+  { slug: "2026-09-02/a", date: new Date("2026-09-02T00:00:00.000Z"), updatedAt: new Date("2026-09-02T00:00:00.000Z"), city: cities[0] },
+  { slug: "2026-08-19/b", date: new Date("2026-08-19T00:00:00.000Z"), updatedAt: new Date("2026-08-19T00:00:00.000Z"), city: cities[1] },
+  { slug: "2026-07-08/c", date: new Date("2026-07-08T00:00:00.000Z"), updatedAt: new Date("2026-07-08T00:00:00.000Z"), city: cities[0] },
+  { slug: "2026-01-01/orphan", date: new Date("2026-01-01T00:00:00.000Z"), updatedAt: new Date("2026-01-01T00:00:00.000Z"), city: { stateCode: "zz", slug: "nowhere" } },
 ];
 const areas = [
   { slug: "housing", city: cities[0] },
@@ -166,7 +192,7 @@ check("a city's meetings keep the caller's (newest-first) order", same(catalog[0
 check("rows for an unknown city are dropped, not attached elsewhere", !catalog.some((c) => c.meetings.some((m) => m.slug.includes("orphan"))));
 check("a city with no rows is kept with empty lists", catalog[2].meetings.length === 0 && catalog[2].areaSlugs.length === 0);
 check("interest-area slugs group by city", same(catalog[0].areaSlugs, ["housing", "housing_costs"]) && same(catalog[1].areaSlugs, ["transit"]), catalog);
-check("dates are ISO strings, not Date objects", catalog[0].meetings.every((m) => typeof m.date === "string" && m.date.endsWith("Z")), catalog[0]);
+check("dates are ISO strings, not Date objects", catalog[0].meetings.every((m) => typeof m.date === "string" && m.date.endsWith("Z") && typeof m.updatedAt === "string" && m.updatedAt.endsWith("Z")), catalog[0]);
 check("survives unstable_cache's JSON round trip unchanged", same(roundTrip(catalog), catalog));
 
 if (failures > 0) {

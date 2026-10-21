@@ -10,7 +10,7 @@ import { unstable_cache } from "next/cache";
 import { meetingCandidates } from "@/app/lib/linkRecovery";
 import prisma from "@/app/lib/prisma";
 import type { City, Meeting, TranscriptLine } from "@prisma/client";
-import { tokenizeQuery } from "@/app/lib/search";
+import { tokenizeQuery, cardSummaryExcerpt } from "@/app/lib/search";
 import {
   matchMeetingsInCorpus,
   toKeyPoints,
@@ -160,7 +160,7 @@ export const getSitemapCatalog = unstable_cache(
       }),
       prisma.meeting.findMany({
         orderBy: [{ date: "desc" }, { id: "desc" }],
-        select: { slug: true, date: true, city: cityRef },
+        select: { slug: true, date: true, updatedAt: true, city: cityRef },
       }),
       prisma.interestArea.findMany({ select: { slug: true, city: cityRef } }),
     ]);
@@ -355,7 +355,10 @@ export type MeetingCardData = {
   date: Date;
   title: string;
   logline: string | null;
-  summary: string | null;
+  /** Start of the summary, shown only when there is no logline; null
+   * otherwise. Never the full summary: it is serialized into the city
+   * page's client payload for every meeting (FIX-CITY-PAGE-PAYLOAD-001). */
+  summaryExcerpt: string | null;
   /** The logline's own citation references (see MEETING_CARD_SELECT) —
    * pass to annotateTextPlain() alongside `logline`, never render `logline`
    * bare (FIX-TIMESTAMP-LABEL-EMPTY-001). */
@@ -426,8 +429,9 @@ export async function getMeetingsForCity(
     select: MEETING_CARD_SELECT,
   });
 
-  return meetings.map(({ summaryItems, ...rest }) => ({
+  return meetings.map(({ summaryItems, summary, ...rest }) => ({
     ...rest,
+    summaryExcerpt: rest.logline == null && summary != null ? cardSummaryExcerpt(summary) : null,
     tldrReferences: summaryItems[0]?.references ?? null,
   }));
 }

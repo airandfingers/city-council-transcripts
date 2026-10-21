@@ -15,7 +15,7 @@
  * otherwise.
  */
 
-import { matchesAllTokens, buildMatchSnippet } from "@/app/lib/search";
+import { matchesAllTokens, buildMatchSnippet, cardSummaryExcerpt } from "@/app/lib/search";
 import { summaryTypeLabel } from "@/app/lib/labels";
 
 export type MeetingSearchResult = {
@@ -28,6 +28,13 @@ export type MeetingSearchResult = {
    * itself (it needs the logline-vs-summary distinction this function
    * doesn't track), so this deliberately doesn't duplicate it. */
   extraSnippet: { label: string; text: string } | null;
+  /** MeetingCard's "Matches in summary" excerpt, for a match in the part
+   * of the summary the card doesn't show (it shows the logline, or only
+   * the start of the summary). Computed here because the city page no
+   * longer ships every meeting's full summary to the browser
+   * (FIX-CITY-PAGE-PAYLOAD-001); same rule MeetingCard used to apply, except
+   * the logline is matched without its citation labels spliced in. */
+  summarySnippet: string | null;
 };
 
 export type SearchCorpusMeeting = {
@@ -81,7 +88,13 @@ export function matchMeetingsInCorpus(
       }
     }
 
-    results.push({ slug: m.slug, extraSnippet });
+    const shownText = m.logline ?? (m.summary != null ? cardSummaryExcerpt(m.summary) : "");
+    const summarySnippet =
+      m.summary != null && !matchesAllTokens(`${m.title} ${shownText}`, tokens)
+        ? buildMatchSnippet(m.summary, tokens)
+        : null;
+
+    results.push({ slug: m.slug, extraSnippet, summarySnippet });
   }
   return results;
 }

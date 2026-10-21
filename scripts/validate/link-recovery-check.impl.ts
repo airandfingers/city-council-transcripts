@@ -9,12 +9,12 @@ assert.equal(stripTruncation("2026-09-15/city.council"), "2026-09-15/city.counci
 
 const catalog = [
   { stateCode: "CO", slug: "fort-collins", areaSlugs: [], meetings: [
-    { slug: "2026-09-15/city-council-regular-meeting", date: "2026-09-15T00:00:00.000Z" },
-    { slug: "2026-09-15/city-council-work-session", date: "2026-09-15T00:00:00.000Z" },
-    { slug: "2026-08-25/city-council-work-session", date: "2026-08-25T00:00:00.000Z" },
+    { slug: "2026-09-15/city-council-regular-meeting", date: "2026-09-15T00:00:00.000Z", updatedAt: "2026-09-15T00:00:00.000Z" },
+    { slug: "2026-09-15/city-council-work-session", date: "2026-09-15T00:00:00.000Z", updatedAt: "2026-09-15T00:00:00.000Z" },
+    { slug: "2026-08-25/city-council-work-session", date: "2026-08-25T00:00:00.000Z", updatedAt: "2026-08-25T00:00:00.000Z" },
   ] },
   { stateCode: "CA", slug: "monterey-park", areaSlugs: [], meetings: [
-    { slug: "2026-09-02/city-council-regular-meeting", date: "2026-09-02T00:00:00.000Z" },
+    { slug: "2026-09-02/city-council-regular-meeting", date: "2026-09-02T00:00:00.000Z", updatedAt: "2026-09-02T00:00:00.000Z" },
   ] },
 ];
 

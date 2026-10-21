@@ -14,6 +14,18 @@ export type GroupedLine = {
   firstId: number;
 };
 
+/** What TranscriptViewer gets per turn: the speaker already resolved to a
+ * display label on the server. Ids, UUIDs and the roster title map would be
+ * serialized into the cached page once per turn, hundreds of times
+ * (FIX-TRANSCRIPT-PAGE-PAYLOAD-001). */
+export type TranscriptTurn = {
+  label: string;
+  startTime: number;
+  endTime: number;
+  text: string;
+  firstId: number;
+};
+
 /**
  * Format seconds as HH:MM:SS with leading zeros stripped from the hours
  * portion, e.g. 0:00, 4:03, 1:04:03

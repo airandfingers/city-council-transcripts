@@ -15,7 +15,7 @@ export default function NotFound() {
         there are often shortened with &ldquo;…&rdquo;. Try opening the link directly from the
         video, or find the meeting by city.
       </p>
-      <Link href="/" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+      <Link prefetch={false} href="/" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
         Browse meetings by city →
       </Link>
     </main>
