@@ -12,6 +12,11 @@
       "command": "node scripts/validate/build-check.mjs"
     },
     {
+      "id": "no-prefetch-check",
+      "description": "Every <Link> sets prefetch={false}, so a page view never reads linked pages from the ISR cache before a click",
+      "command": "node scripts/validate/no-prefetch-check.mjs"
+    },
+    {
       "id": "roster-title-resolver-check",
       "description": "resolveTitleAt resolves speaker titles as-of a meeting date, including the Monterey Park mayor-rotation fixture",
       "command": "node scripts/validate/roster-title-resolver-check.mjs"

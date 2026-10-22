@@ -8,6 +8,7 @@ export type CityCardProps = {
 export default function CityCard({ city }: CityCardProps) {
   return (
     <Link
+      prefetch={false}
       href={`/${city.stateCode}/${city.slug}`}
       aria-label={`${city.name}, ${city.stateName}: meetings and topics`}
       className="group flex flex-col h-full p-6 border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 transition-all dark:border-gray-700 dark:hover:border-blue-500"

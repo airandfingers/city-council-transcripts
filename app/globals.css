@@ -28,3 +28,25 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-newsreader), ui-serif, Georgia, serif;
 }
+
+/* A transcript turn repeats hundreds of times on a meeting page. One short
+   class each, instead of the utility lists inline, takes ~250 KB off a long
+   meeting's cached HTML; Vercel meters ISR reads per 8 KB
+   (FIX-TRANSCRIPT-PAGE-PAYLOAD-001). */
+@layer components {
+  .tx-turn {
+    @apply border rounded-lg p-4 transition-colors border-gray-200 dark:border-gray-700;
+  }
+  .tx-turn-active {
+    @apply border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-950/30;
+  }
+  .tx-meta {
+    @apply text-sm text-gray-500 dark:text-gray-400 mb-2;
+  }
+  .tx-time {
+    @apply cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline;
+  }
+  .tx-text {
+    @apply text-gray-900 dark:text-gray-100 space-y-3;
+  }
+}

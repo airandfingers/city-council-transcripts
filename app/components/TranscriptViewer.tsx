@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useVideoSync } from "./VideoSyncProvider";
-import {
-  formatTimestamp,
-  displayName,
-  type GroupedLine,
-} from "@/app/lib/transcript";
+import { formatTimestamp, type TranscriptTurn } from "@/app/lib/transcript";
 import { applyOffset, type OffsetModel } from "@/app/lib/offset";
-import { speakerLabel } from "@/app/lib/roster";
 
 /**
  * Client component that renders grouped transcript lines with:
@@ -22,11 +17,9 @@ import { speakerLabel } from "@/app/lib/roster";
 export default function TranscriptViewer({
   groupedLines,
   offsetModel = null,
-  titleByUuid = {},
 }: {
-  groupedLines: GroupedLine[];
+  groupedLines: TranscriptTurn[];
   offsetModel?: OffsetModel | null;
-  titleByUuid?: Record<string, string>;
 }) {
   const { currentTime, seekTo, scrollRequest, requestDock } = useVideoSync();
   const router = useRouter();
@@ -193,7 +186,7 @@ export default function TranscriptViewer({
     );
     // Falls in a gap between groups, or past the last one — fall back to
     // the closest group by start time rather than scrolling nowhere.
-    const target = exact ?? groupedLines.reduce<GroupedLine | undefined>(
+    const target = exact ?? groupedLines.reduce<TranscriptTurn | undefined>(
       (closest, g) =>
         !closest || Math.abs(g.startTime - seconds) < Math.abs(closest.startTime - seconds)
           ? g
@@ -301,26 +294,17 @@ export default function TranscriptViewer({
                   if (el) cardRefs.current.set(group.firstId, el);
                   else cardRefs.current.delete(group.firstId);
                 }}
-                className={`border rounded-lg p-4 transition-colors ${
-                  isActive
-                    ? "border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-950/30"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
+                // Short classes from globals.css: this repeats per turn
+                // (FIX-TRANSCRIPT-PAGE-PAYLOAD-001).
+                className={isActive ? "tx-turn tx-turn-active" : "tx-turn"}
               >
-                <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                  <span className="font-medium">
-                    {speakerLabel(
-                      displayName(group.speakerName, group.speaker),
-                      group.globalSpeakerUuid
-                        ? (titleByUuid[group.globalSpeakerUuid] ?? null)
-                        : null,
-                    )}
-                  </span>
+                <div className="tx-meta">
+                  <span className="font-medium">{group.label}</span>
                   <span className="mx-2">•</span>
                   <button
                     type="button"
                     onClick={() => handleTimestampClick(adjustedStart)}
-                    className="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                    className="tx-time"
                     title={
                       inGap
                         ? `Approximate — outside calibrated range (≈ ${formatTimestamp(adjustedStart)})`
@@ -334,7 +318,7 @@ export default function TranscriptViewer({
                   <button
                     type="button"
                     onClick={() => handleTimestampClick(adjustedEnd)}
-                    className="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                    className="tx-time"
                     title={
                       inGap
                         ? `Approximate — outside calibrated range (≈ ${formatTimestamp(adjustedEnd)})`
@@ -344,7 +328,7 @@ export default function TranscriptViewer({
                     {formatTimestamp(adjustedEnd)}
                   </button>
                 </div>
-                <div className="text-gray-900 dark:text-gray-100 space-y-3">
+                <div className="tx-text">
                   {group.text.split("\n\n").map((para, i) => (
                     <p key={i}>{para}</p>
                   ))}

@@ -3,7 +3,6 @@ import type { MeetingCardData, MeetingSearchResult } from "@/app/lib/cityData";
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { annotateTextPlain } from "@/app/lib/citations";
 import HighlightedText from "./HighlightedText";
-import { matchesAllTokens, buildMatchSnippet } from "@/app/lib/search";
 
 export type MeetingCardProps = {
   meeting: MeetingCardData;
@@ -13,18 +12,20 @@ export type MeetingCardProps = {
   tokens?: string[];
   /** A match found in a field this card doesn't otherwise show — a key
    * decision, action item, timeline bullet, or topic
-   * (FEAT-SEARCH-SERVERSIDE-SURFACE-001). Shown the same way as
-   * `hiddenSummaryMatch` below, which this is deliberately kept separate
-   * from: that one covers the logline-vs-summary case this prop doesn't
-   * track. Defaults to null so every call site that predates this stays
-   * unchanged. */
+   * (FEAT-SEARCH-SERVERSIDE-SURFACE-001). Defaults to null so every call
+   * site that predates this stays unchanged. */
   extraSnippet?: MeetingSearchResult["extraSnippet"];
+  /** Excerpt of a match in the part of the summary this card doesn't show
+   * (the server search computes it — the card only has the summary's
+   * start, FIX-CITY-PAGE-PAYLOAD-001). */
+  summarySnippet?: string | null;
 };
 
 export default function MeetingCard({
   meeting,
   tokens = [],
   extraSnippet = null,
+  summarySnippet = null,
 }: MeetingCardProps) {
   const href = `/transcripts/${meeting.slug
     .split("/")
@@ -47,22 +48,14 @@ export default function MeetingCard({
   // string, applied to a different one).
   const displayText = meeting.logline
     ? annotateTextPlain(meeting.logline, meeting.tldrReferences)
-    : meeting.summary;
+    : meeting.summaryExcerpt;
 
-  // AC-3: MeetingFilter only renders this card when `${title} ${summary}
-  // ${logline}` combined satisfies every token — but the card shows title
-  // + (logline OR summary), never summary alongside a present logline. If
-  // the visible text alone doesn't already satisfy every token, the match
-  // must be hiding in `summary` while `logline` is what's shown — surface
-  // why it matched with a short excerpt (the Poudre case: a river name
-  // mentioned in the AI summary paragraph, not the one-line logline).
-  const hiddenSummaryMatch =
-    tokens.length > 0 &&
-    meeting.logline != null &&
-    meeting.summary != null &&
-    !matchesAllTokens(`${meeting.title} ${displayText ?? ""}`, tokens)
-      ? buildMatchSnippet(meeting.summary, tokens)
-      : null;
+  // AC-3: the card shows title + (logline OR the start of the summary). A
+  // match hiding in the rest of the summary (the Poudre case: a river name
+  // mentioned in the AI summary paragraph, not the one-line logline) is
+  // surfaced with a short excerpt, which the server search builds
+  // (`summarySnippet` in matchMeetingsInCorpus).
+  const hiddenSummaryMatch = tokens.length > 0 ? summarySnippet : null;
 
   // The whole card is clickable (not just a small text link below the
   // summary) and styled with hover/focus affordances so it reads as an
@@ -70,6 +63,7 @@ export default function MeetingCard({
   // didn't realize these were clickable.
   return (
     <Link
+      prefetch={false}
       href={href}
       aria-label={
         isPublished

@@ -22,7 +22,7 @@ export default function MethodologyPage() {
   return (
     <main className="p-8 max-w-2xl mx-auto">
       <nav className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        <Link href="/" className="hover:underline">
+        <Link prefetch={false} href="/" className="hover:underline">
           Cities
         </Link>
         {" / How we make this"}

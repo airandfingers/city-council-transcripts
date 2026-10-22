@@ -35,7 +35,7 @@ export default function LinkRecovery({
       <ul className="space-y-3">
         {matches.map((m) => (
           <li key={m.slug}>
-            <Link href={transcriptPath(m.slug)} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+            <Link prefetch={false} href={transcriptPath(m.slug)} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
               {label(m)}
             </Link>
             <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -47,7 +47,7 @@ export default function LinkRecovery({
         ))}
       </ul>
       <p className="mt-8 text-sm text-gray-600 dark:text-gray-400">
-        Not here? <Link href="/" className="underline">Browse meetings by city</Link>.
+        Not here? <Link prefetch={false} href="/" className="underline">Browse meetings by city</Link>.
       </p>
     </main>
   );

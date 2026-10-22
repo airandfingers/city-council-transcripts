@@ -142,3 +142,17 @@ export function buildMatchSnippet(
   const suffix = to < text.length ? "…" : "";
   return prefix + text.slice(from, to).trim() + suffix;
 }
+
+/** How much of a summary a meeting card shows when the meeting has no
+ * logline (FIX-CITY-PAGE-PAYLOAD-001). The city page used to ship every
+ * full summary to the browser, which made Monterey Park's page ~900 KB;
+ * the full text is one click away on the meeting page. */
+export const CARD_SUMMARY_MAX_CHARS = 280;
+
+/** `summary` cut at a word boundary to CARD_SUMMARY_MAX_CHARS, with "…". */
+export function cardSummaryExcerpt(summary: string): string {
+  if (summary.length <= CARD_SUMMARY_MAX_CHARS) return summary;
+  const cut = summary.slice(0, CARD_SUMMARY_MAX_CHARS);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}

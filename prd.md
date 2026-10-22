@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- ✅ FIX-ISR-PREFETCH-001, FIX-CITY-PAGE-PAYLOAD-001, FIX-TRANSCRIPT-PAGE-PAYLOAD-001, FIX-CRAWLER-BUDGET-001 — Vercel ISR reads (1M/month shared Hobby quota, ~1.8M/month pace in October): no link prefetching, city pages carry each meeting once, smaller meeting pages, non-SEO crawlers disallowed. PR open, `batch-ready`
 - 🔄 FIX-NEON-TOPIC-PAGES-CHEAP-404-001 — Topic detail pages refresh on publish instead of hourly; unknown cities/topics/meetings 404 from the cached catalog without waking Neon. Built on a branch; **deploy on or after 2026-10-01** (September's compute cap)
 - ✅ FIX-NEON-TAG-ONLY-CACHES-001 — Shared data caches refresh only on publish (no hourly TTL wakes), one meeting query per transcript render, canonical transcript links. Shipped early (PR #82, 2026-09-23) before September's cap
 - ✅ CHORE-WARM-CACHE-AFTER-DEPLOY-001 — Warm the page cache automatically after each production deploy; doubles as outage insurance when Neon compute is suspended
@@ -44,6 +45,49 @@
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
+
+### FIX-ISR-PREFETCH-001 — Page views no longer read every linked page from the ISR cache
+
+**Status:** ✅ Done (2026-10-21) — PR open, `batch-ready`
+
+The shared Vercel Hobby quota is 1M ISR reads a month, and counciloris.com was past 1.2M by Oct 20; the target is ≤ ~333k. ISR reads are metered per 8 KB. No `<Link>` set `prefetch`, so each visit pulled the full RSC payload of every in-view linked page before anyone clicked. Measured on production 2026-10-20 (sandboxed Chromium): the home page pulled every city page (Monterey Park 606 KB, Seattle 355 KB, Fort Collins 214 KB), and a transcript page pulled its city page through the breadcrumb.
+
+- [x] Every `<Link>` under `app/` sets `prefetch={false}` (no viewport or hover prefetch; a click still fetches the page once)
+- [x] `no-prefetch-check` gate fails on any `<Link>` without it, or on `router.prefetch()`; mutation-tested (removing it from `CityCard` fails the gate)
+- [x] Local build, same data, per visit in 8 KB units (main → branch): home 129 → 10, Monterey Park city page 556 → 35, a long Monterey Park transcript 178 → 105 (→ ~75 with FIX-TRANSCRIPT-PAGE-PAYLOAD-001)
+- [ ] After deploy: Vercel → Usage → ISR Reads trends to ≤ ~11k/day (was ~60k/day)
+
+### FIX-CITY-PAGE-PAYLOAD-001 — City pages carry each meeting once, without full summaries
+
+**Status:** ✅ Done (2026-10-21) — PR open, `batch-ready`
+
+Monterey Park's city page was 899 KB of HTML and 589 KB of RSC on production. `MeetingFilter` read `q` with `useSearchParams()`, which made it client-only on the cached page, so the page also rendered every meeting as its Suspense fallback: the list appeared twice. Every meeting's full `summary` went to the browser too, though text search has been server-side since FEAT-SEARCH-SERVERSIDE-SURFACE-001.
+
+- [x] `useSearchParams()` moved into a tiny `UrlQueryListener` child in its own Suspense boundary. The list renders on the server once, and no-JS HTML still has every meeting. Only the visitor's typing writes `?q=`, so a shared `?q=` link isn't stripped on load
+- [x] Cards get `summaryExcerpt` (first ~280 chars, only when there's no logline) instead of `summary`. The "Matches in summary" excerpt now comes from the server search (`summarySnippet`), computed the same way
+- [x] Local build, same data (main → branch): Monterey Park 599 → 270 KB HTML and 410 → 107 KB RSC; Fort Collins 347 → 103 and 225 → 36
+- [x] Browser check: search narrows and writes `?q=`, clearing removes it, a shared `?q=` link fills and filters, Back restores the query, no-JS HTML has all 125 meetings, no page errors. Results and "Matches in …" excerpts identical to main for 5 queries
+
+### FIX-TRANSCRIPT-PAGE-PAYLOAD-001 — Smaller meeting pages
+
+**Status:** ✅ Done (2026-10-21) — PR open, `batch-ready`
+
+A long meeting page is ~830 KB (about 100 ISR read units per view). Each transcript turn repeated ~600 bytes of utility classes, and every turn's props carried speaker ids, a UUID and the roster title map.
+
+- [x] Turn styles moved to `.tx-*` classes in `globals.css` (same look; checked computed styles)
+- [x] The server resolves each turn's speaker label; `TranscriptViewer` gets `{label, startTime, endTime, text, firstId}`
+- [x] Local build, Monterey Park 2026-07-15: 806 → 614 KB HTML, 297 → 267 KB RSC
+- [ ] Decide whether the collapsed transcript should load only when opened. That would take a long meeting page to roughly 100–150 KB, but search engines would no longer index transcript text
+
+### FIX-CRAWLER-BUDGET-001 — Crawlers that send no visitors stay off the site
+
+**Status:** ✅ Done (2026-10-21) — PR open, `batch-ready`
+
+Every crawler fetch of a cached page is an ISR read. Search engines that send visitors stay allowed, because blocking them would cost SEO.
+
+- [x] `robots.txt` disallows SEO-tool and backlink crawlers (AhrefsBot, SemrushBot, MJ12bot, DotBot, DataForSeoBot, BLEXBot, Barkrowler, serpstatbot), search engines with no US audience (PetalBot, YandexBot), and more AI training crawlers (Applebot-Extended, cohere-ai, Diffbot, ImagesiftBot, Timpibot). Googlebot, Bingbot, Applebot, DuckDuckBot and OAI-SearchBot stay allowed
+- [x] Sitemap: city and topics-index pages say `daily`, not `hourly`, and carry `lastmod` (the city's newest meeting update). Transcript `lastmod` is the meeting's `updatedAt`, not its date (future dates on scheduled meetings made it untrustworthy)
+- [ ] Vercel → Firewall: turn on the Bot Protection and AI Bots managed rules (an airandfingers team member; blocked requests never reach the ISR cache)
 
 ### FEAT-TRANSCRIPT-DOCK-PLAYER-001 — Clicking a timestamp plays the moment without dragging the reader down the page
 

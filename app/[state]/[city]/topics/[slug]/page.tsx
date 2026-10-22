@@ -78,11 +78,11 @@ export default async function TopicDetailPage({ params }: Props) {
     <main className="p-8 max-w-3xl">
       {/* Breadcrumb */}
       <nav className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-        <Link href={`/${state}/${citySlug}`} className="hover:underline">
+        <Link prefetch={false} href={`/${state}/${citySlug}`} className="hover:underline">
           {cityData.name}
         </Link>
         {" / "}
-        <Link href={`/${state}/${citySlug}/topics`} className="hover:underline">
+        <Link prefetch={false} href={`/${state}/${citySlug}/topics`} className="hover:underline">
           Topics
         </Link>
         {` / ${area.name}`}
@@ -178,6 +178,7 @@ export default async function TopicDetailPage({ params }: Props) {
 
                 <div className="flex items-center gap-2 mt-0.5 mb-1 flex-wrap">
                   <Link
+                    prefetch={false}
                     href={
                       m.startTimeSeconds != null && canAutoSeek(m.videoProvider)
                         ? buildTranscriptTimestampUrl(m.slug, m.startTimeSeconds)
@@ -223,6 +224,7 @@ export default async function TopicDetailPage({ params }: Props) {
           posted before each meeting, and public comment is open.
         </p>
         <Link
+          prefetch={false}
           href={`/${state}/${citySlug}`}
           className="mt-2 inline-block text-gray-600 dark:text-gray-400 hover:underline"
         >
