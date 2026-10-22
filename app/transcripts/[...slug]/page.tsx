@@ -26,10 +26,10 @@ import RegisterCurrentCity from "@/app/components/RegisterCurrentCity";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
 import GlossaryTerm from "@/app/components/GlossaryTerm";
-import type { GroupedLine } from "@/app/lib/transcript";
+import { displayName, type GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
-import { buildTitleByUuid, type RosterMemberRow } from "@/app/lib/roster";
+import { buildTitleByUuid, speakerLabel, type RosterMemberRow } from "@/app/lib/roster";
 import { CONTACT_EMAIL } from "@/app/lib/siteUrl";
 import { formatMeetingDate, titleIncludesDate, titleWithDate } from "@/app/lib/formatDate";
 
@@ -439,6 +439,7 @@ export default async function TranscriptPage({ params }: Props) {
       <div className="flex items-center gap-3 mb-8 flex-wrap">
         {/* City breadcrumb */}
         <Link
+          prefetch={false}
           href={`/${meeting.city.stateCode}/${meeting.city.slug}`}
           className="text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
         >
@@ -872,9 +873,17 @@ export default async function TranscriptPage({ params }: Props) {
             )}
           </summary>
           <TranscriptViewer
-            groupedLines={groupedLines}
+            groupedLines={groupedLines.map((group) => ({
+              label: speakerLabel(
+                displayName(group.speakerName, group.speaker),
+                group.globalSpeakerUuid ? (titleByUuid[group.globalSpeakerUuid] ?? null) : null,
+              ),
+              startTime: group.startTime,
+              endTime: group.endTime,
+              text: group.text,
+              firstId: group.firstId,
+            }))}
             offsetModel={offsetModel}
-            titleByUuid={titleByUuid}
           />
         </details>
       </VideoSyncProvider>

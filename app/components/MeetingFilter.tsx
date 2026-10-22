@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import MeetingCard from "./MeetingCard";
 import type { MeetingCardData, MeetingSearchResult } from "@/app/lib/cityData";
@@ -53,17 +53,20 @@ export default function MeetingFilter({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
-  // Seeded from the URL so a shared/reloaded search link (AC-4) restores
-  // the same query. `lastSyncedQRef` tracks the `q` value this component
-  // itself last wrote to the URL, so the read-side effect below (which
-  // reacts to `searchParams` changing) can tell "the URL changed because
-  // we just wrote it" apart from "the URL changed underneath us" (back/
-  // forward navigation, or a fresh link opened over an already-mounted
-  // instance) — without it, Back after typing a search reverts the URL's
-  // `q` but leaves `query`/the rendered results stuck on the old value.
-  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  // Starts empty and is seeded from the URL by <UrlQueryListener> once the
+  // page hydrates, so a shared/reloaded search link (AC-4) restores the
+  // same query. Reading `q` here directly (useSearchParams) would make
+  // this whole component client-only on the cached page, which then needed
+  // a server-rendered copy of the full list as its Suspense fallback —
+  // every meeting twice in the payload (FIX-CITY-PAGE-PAYLOAD-001).
+  // `lastSyncedQRef` tracks the `q` value this component itself last wrote
+  // to the URL, so the listener can tell "the URL changed because we just
+  // wrote it" apart from "the URL changed underneath us" (back/forward
+  // navigation, or a fresh link opened over an already-mounted instance) —
+  // without it, Back after typing a search reverts the URL's `q` but
+  // leaves `query`/the rendered results stuck on the old value.
+  const [query, setQuery] = useState("");
   const lastSyncedQRef = useRef(query);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -90,29 +93,33 @@ export default function MeetingFilter({
   // linkable/shareable. `replace` (not `push`) so typing doesn't spam
   // browser history — each keystroke would otherwise be its own back-
   // button stop.
+  const userTypedRef = useRef(false);
   useEffect(() => {
-    // Skip when the URL already says this — otherwise mounting on
-    // `?q=already-there` (a shared search link) fires a redundant replace
-    // on every load.
-    const currentQ = searchParams.get("q") ?? "";
+    // Only the visitor's own typing writes the URL. On load `query` is ""
+    // until the listener reads `q`, and writing that "" would strip `?q=`
+    // from a shared search link.
+    if (!userTypedRef.current) return;
+    // Skip when the URL already says this — otherwise loading
+    // `?q=already-there` (a shared search link) fires a redundant replace.
+    const params = new URLSearchParams(window.location.search);
+    const currentQ = params.get("q") ?? "";
     if (debouncedQuery === currentQ) return;
 
-    const params = new URLSearchParams(searchParams.toString());
     if (debouncedQuery) {
       params.set("q", debouncedQuery);
     } else {
       params.delete("q");
     }
     // Record what we're about to write *before* the navigation resolves,
-    // so the read-side effect below (which fires when `searchParams`
-    // changes) recognizes this as our own write rather than an external
-    // one and skips re-syncing `query` from it.
+    // so the listener (which fires when the URL's `q` changes) recognizes
+    // this as our own write rather than an external one and skips
+    // re-syncing `query` from it.
     lastSyncedQRef.current = debouncedQuery;
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     // Only re-run when the debounced query itself changes — including
-    // `searchParams`/`router`/`pathname` would re-fire this on the
-    // navigation it just caused.
+    // `router`/`pathname` would re-fire this on the navigation it just
+    // caused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQuery]);
 
@@ -122,13 +129,12 @@ export default function MeetingFilter({
   // a search reverts the URL but leaves `query`/the rendered results
   // stuck on the stale value — the input and the page disagree with the
   // address bar.
-  useEffect(() => {
-    const urlQ = searchParams.get("q") ?? "";
+  const onUrlQuery = useCallback((urlQ: string) => {
     if (urlQ === lastSyncedQRef.current) return; // our own write, or nothing changed
     lastSyncedQRef.current = urlQ;
     setQuery(urlQ);
     setDebouncedQuery(urlQ);
-  }, [searchParams]);
+  }, []);
 
   // Server-side search results for the current debounced query (AC-2).
   // `resolvedFor` tracks which query the current `results` answer, so a
@@ -167,10 +173,10 @@ export default function MeetingFilter({
         : null,
     [searchAnswersCurrentQuery, searchState]
   );
-  const extraSnippets = useMemo(() => {
-    const map = new Map<string, MeetingSearchResult["extraSnippet"]>();
+  const searchResults = useMemo(() => {
+    const map = new Map<string, MeetingSearchResult>();
     if (searchAnswersCurrentQuery) {
-      for (const r of searchState!.results) map.set(r.slug, r.extraSnippet);
+      for (const r of searchState!.results) map.set(r.slug, r);
     }
     return map;
   }, [searchAnswersCurrentQuery, searchState]);
@@ -232,11 +238,17 @@ export default function MeetingFilter({
 
   return (
     <div>
+      <Suspense fallback={null}>
+        <UrlQueryListener onChange={onUrlQuery} />
+      </Suspense>
       <div className="flex flex-col sm:flex-row gap-3 mb-6 max-w-3xl">
         <input
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            userTypedRef.current = true;
+            setQuery(e.target.value);
+          }}
           placeholder="Search meetings by title or topic…"
           aria-label="Search meetings"
           className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-transparent text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
@@ -286,7 +298,8 @@ export default function MeetingFilter({
               key={meeting.slug}
               meeting={meeting}
               tokens={tokens}
-              extraSnippet={extraSnippets.get(meeting.slug) ?? null}
+              extraSnippet={searchResults.get(meeting.slug)?.extraSnippet ?? null}
+              summarySnippet={searchResults.get(meeting.slug)?.summarySnippet ?? null}
             />
           ))}
           {hiddenUpcomingCount > 0 && (
@@ -317,11 +330,24 @@ export default function MeetingFilter({
               key={meeting.slug}
               meeting={meeting}
               tokens={tokens}
-              extraSnippet={extraSnippets.get(meeting.slug) ?? null}
+              extraSnippet={searchResults.get(meeting.slug)?.extraSnippet ?? null}
+              summarySnippet={searchResults.get(meeting.slug)?.summarySnippet ?? null}
             />
           ))}
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Reports the URL's `q` on hydration and whenever it changes. Kept to its
+ * own tiny component in its own Suspense boundary so that useSearchParams()
+ * makes only this (it renders nothing) client-only on the cached city page,
+ * not MeetingFilter's list (FIX-CITY-PAGE-PAYLOAD-001).
+ */
+function UrlQueryListener({ onChange }: { onChange: (q: string) => void }) {
+  const q = useSearchParams().get("q") ?? "";
+  useEffect(() => onChange(q), [q, onChange]);
+  return null;
 }

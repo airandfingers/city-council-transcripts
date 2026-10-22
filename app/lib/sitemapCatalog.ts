@@ -15,8 +15,9 @@
 export type SitemapCityEntry = {
   stateCode: string;
   slug: string;
-  /** Newest first, in the order the caller supplied them. */
-  meetings: { slug: string; date: string }[];
+  /** Newest first, in the order the caller supplied them. `updatedAt` is
+   * the sitemap's `lastmod` (FIX-CRAWLER-BUDGET-001). */
+  meetings: { slug: string; date: string; updatedAt: string }[];
   areaSlugs: string[];
 };
 
@@ -24,7 +25,7 @@ type CityKey = { stateCode: string; slug: string };
 
 export function groupSitemapCatalog(
   cities: CityKey[],
-  meetings: Array<{ slug: string; date: Date; city: CityKey }>,
+  meetings: Array<{ slug: string; date: Date; updatedAt: Date; city: CityKey }>,
   areas: Array<{ slug: string; city: CityKey }>,
 ): SitemapCityEntry[] {
   const key = (c: CityKey) => `${c.stateCode}/${c.slug}`;
@@ -33,7 +34,11 @@ export function groupSitemapCatalog(
     byCity.set(key(c), { stateCode: c.stateCode, slug: c.slug, meetings: [], areaSlugs: [] });
   }
   for (const m of meetings) {
-    byCity.get(key(m.city))?.meetings.push({ slug: m.slug, date: m.date.toISOString() });
+    byCity.get(key(m.city))?.meetings.push({
+      slug: m.slug,
+      date: m.date.toISOString(),
+      updatedAt: m.updatedAt.toISOString(),
+    });
   }
   for (const a of areas) {
     byCity.get(key(a.city))?.areaSlugs.push(a.slug);

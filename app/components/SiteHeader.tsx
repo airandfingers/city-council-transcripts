@@ -93,7 +93,7 @@ export default function SiteHeader() {
   return (
     <header className="border-b border-gray-200 dark:border-gray-800">
       <div className="flex items-center gap-3 p-4">
-        <Link href="/" className="flex items-center gap-2 font-display font-semibold text-lg tracking-tight shrink-0">
+        <Link prefetch={false} href="/" className="flex items-center gap-2 font-display font-semibold text-lg tracking-tight shrink-0">
           <Image
             src="/loris-city-skyline.png"
             alt="Counciloris logo"
@@ -124,6 +124,7 @@ export default function SiteHeader() {
                 <span aria-hidden="true" className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
               )}
               <Link
+                prefetch={false}
                 href={link.href}
                 aria-current={link.active ? "page" : undefined}
                 className={
@@ -194,6 +195,7 @@ function CitySwitcher({
           return (
             <li key={`${city.stateCode}/${city.slug}`}>
               <Link
+                prefetch={false}
                 href={`/${city.stateCode}/${city.slug}`}
                 aria-current={isCurrent ? "page" : undefined}
                 className={`block px-4 py-2 ${
@@ -209,6 +211,7 @@ function CitySwitcher({
         })}
         <li>
           <Link
+            prefetch={false}
             href="/"
             className="block px-4 py-2 border-t border-gray-100 dark:border-gray-800 mt-1 pt-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
           >

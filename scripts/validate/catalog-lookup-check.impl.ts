@@ -11,13 +11,13 @@ const catalog: SitemapCityEntry[] = [
   {
     stateCode: "wa",
     slug: "seattle",
-    meetings: [{ slug: "2026-07-08/Housing_ Arts_ and Civil Rights Committee", date: "2026-07-08T00:00:00.000Z" }],
+    meetings: [{ slug: "2026-07-08/Housing_ Arts_ and Civil Rights Committee", date: "2026-07-08T00:00:00.000Z", updatedAt: "2026-07-08T00:00:00.000Z" }],
     areaSlugs: ["jumpstart_tax"],
   },
   {
     stateCode: "ca",
     slug: "monterey-park",
-    meetings: [{ slug: "monterey-park-2026-01-27-city-council", date: "2026-01-27T00:00:00.000Z" }],
+    meetings: [{ slug: "monterey-park-2026-01-27-city-council", date: "2026-01-27T00:00:00.000Z", updatedAt: "2026-01-27T00:00:00.000Z" }],
     areaSlugs: [],
   },
 ];

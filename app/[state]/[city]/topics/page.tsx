@@ -64,7 +64,7 @@ export default async function TopicsIndexPage({ params }: Props) {
   return (
     <main className="p-8 max-w-4xl">
       <nav className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        <Link href={`/${state}/${citySlug}`} className="hover:underline">
+        <Link prefetch={false} href={`/${state}/${citySlug}`} className="hover:underline">
           {cityData.name}
         </Link>
         {" / Topics"}

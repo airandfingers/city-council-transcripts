@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   getCityByParams,
@@ -10,9 +9,7 @@ import {
 } from "@/app/lib/cityData";
 import Link from "next/link";
 import MeetingFilter from "@/app/components/MeetingFilter";
-import MeetingCard from "@/app/components/MeetingCard";
 import TopicCard from "@/app/components/TopicCard";
-import type { MeetingCardData } from "@/app/lib/cityData";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import { formatMeetingDate } from "@/app/lib/formatDate";
@@ -92,6 +89,7 @@ export default async function CityPage({ params }: Props) {
       ) : (
         latestMeeting?.logline && (
           <Link
+            prefetch={false}
             href={transcriptPath(latestMeeting.slug)}
             className="block mb-6 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:border-gray-400 dark:hover:border-gray-500 transition-colors max-w-prose"
           >
@@ -144,6 +142,7 @@ export default async function CityPage({ params }: Props) {
             ))}
           </ul>
           <Link
+            prefetch={false}
             href={`/${state}/${citySlug}/topics`}
             className="inline-block mt-3 text-xs text-blue-500 dark:text-blue-400"
           >
@@ -171,49 +170,19 @@ export default async function CityPage({ params }: Props) {
       */}
       <section>
         <h2 className="text-2xl font-semibold mb-4">Meetings</h2>
-        {/* MeetingFilter reads/writes the `q` search param (AC-4,
-            FEAT-SEARCH-SERVERSIDE-SURFACE-001) via useSearchParams(), which
-            requires a Suspense boundary around it in a statically-rendered
-            route — this page is cached (see `revalidate` above), so the
-            fallback below is literally what's in that cached HTML until a
-            visitor's browser hydrates MeetingFilter, not just a brief
-            build-time placeholder. Render the plain unfiltered list rather
-            than a spinner/skeleton, so the page's core content (the
-            meetings themselves) is present and functional without JS. */}
-        <Suspense fallback={<MeetingListFallback meetings={meetings} />}>
-          <MeetingFilter
-            meetings={meetings}
-            upcomingSlugs={upcomingSlugs}
-            stateCode={state}
-            citySlug={citySlug}
-          />
-        </Suspense>
+        {/* Rendered on the server in full (no Suspense fallback copy):
+            MeetingFilter reads `q` from the URL in a small child of its
+            own, so the cached HTML holds the list once and works without
+            JS (FIX-CITY-PAGE-PAYLOAD-001). */}
+        <MeetingFilter
+          meetings={meetings}
+          upcomingSlugs={upcomingSlugs}
+          stateCode={state}
+          citySlug={citySlug}
+        />
       </section>
 
       <AIDisclaimer />
     </main>
-  );
-}
-
-/**
- * Suspense fallback for MeetingFilter (see the comment at its call site).
- * Deliberately not a spinner/skeleton: this page is cached indefinitely
- * (`revalidate = false`), so this is what ships in that cached HTML until
- * a visitor's browser hydrates MeetingFilter — plain, newest-first, no
- * search/sort/status controls, no client JS required. Sorting matches
- * MeetingFilter's own default ("newest first"); grouping/collapsing
- * upcoming meetings is MeetingFilter-only polish, not worth duplicating
- * here for a fallback most visitors will only see for a moment.
- */
-function MeetingListFallback({ meetings }: { meetings: MeetingCardData[] }) {
-  const sorted = [...meetings].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  return (
-    <div className="flex flex-col gap-4 max-w-3xl">
-      {sorted.map((meeting) => (
-        <MeetingCard key={meeting.slug} meeting={meeting} />
-      ))}
-    </div>
   );
 }

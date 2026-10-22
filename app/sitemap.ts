@@ -39,16 +39,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/methodology`, changeFrequency: "monthly" },
   ];
 
+  // `lastModified` is when the page's data last changed, so crawlers can skip
+  // unchanged pages, and city pages say "daily", not "hourly": they are the
+  // heaviest pages on the site, and every crawler fetch is an ISR read
+  // (FIX-CRAWLER-BUDGET-001). ISO strings compare in time order.
   for (const city of catalog) {
     const cityPath = `${SITE_URL}/${city.stateCode}/${city.slug}`;
-    entries.push({ url: cityPath, changeFrequency: "hourly" });
-    entries.push({ url: `${cityPath}/topics`, changeFrequency: "hourly" });
+    const cityUpdatedAt = city.meetings.reduce<string | undefined>(
+      (latest, m) => (latest === undefined || m.updatedAt > latest ? m.updatedAt : latest),
+      undefined,
+    );
+    entries.push({ url: cityPath, lastModified: cityUpdatedAt, changeFrequency: "daily" });
+    entries.push({ url: `${cityPath}/topics`, lastModified: cityUpdatedAt, changeFrequency: "daily" });
 
     for (const meeting of city.meetings) {
       const slugPath = meeting.slug.split("/").map(encodeURIComponent).join("/");
       entries.push({
         url: `${SITE_URL}/transcripts/${slugPath}`,
-        lastModified: meeting.date,
+        lastModified: meeting.updatedAt,
         changeFrequency: "yearly",
       });
     }
