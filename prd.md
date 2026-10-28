@@ -2,7 +2,7 @@
 
 ## Implementation Status Summary
 
-- 🔄 FEAT-GLOBAL-TOPIC-GROUPING-001 — `/topics` groups areas by the transcriber's global topic tag (`InterestArea.globalTopicId`); prod migration applied by hand
+- 🔄 FEAT-GLOBAL-TOPIC-GROUPING-001 — `/topics` groups areas by the transcriber's global topic tag (`InterestArea.globalTopicId`); prod migration applied 2026-10-28; ships in the 2026-10-29 batch
 - ✅ FIX-GLOBAL-TOPICS-NAV-001 — Header shows a cross-city Topics link before a city is picked, leading to a new `/topics` page
 - ✅ FIX-ISR-PREFETCH-001, FIX-CITY-PAGE-PAYLOAD-001, FIX-TRANSCRIPT-PAGE-PAYLOAD-001, FIX-CRAWLER-BUDGET-001 — Vercel ISR reads (1M/month shared Hobby quota, ~1.8M/month pace in October): no link prefetching, city pages carry each meeting once, smaller meeting pages, non-SEO crawlers disallowed. PR open, `batch-ready`
 - 🔄 FIX-NEON-TOPIC-PAGES-CHEAP-404-001 — Topic detail pages refresh on publish instead of hourly; unknown cities/topics/meetings 404 from the cached catalog without waking Neon. Built on a branch; **deploy on or after 2026-10-01** (September's compute cap)
@@ -50,7 +50,7 @@
 
 ### FEAT-GLOBAL-TOPIC-GROUPING-001 — /topics groups a city's own areas under their global topic
 
-**Status:** 🔄 In Progress (2026-10-28) — code done; prod migration pending
+**Status:** 🔄 In Progress (2026-10-28) — prod migration applied and tags published; awaiting the 2026-10-29 batch deploy
 
 FIX-GLOBAL-TOPICS-NAV-001 grouped areas by shared slug, and that misses more than renamed areas. The transcriber drops a baseline area when the city has its own area tagged with that global topic (`_merge_baseline_areas`), so Fort Collins has no `housing` or `privacy_surveillance` slug: its `housing_affordability_zoning` and `flock_cameras` replace them. Seattle's `tenant_protections` and `encampments_homelessness` were missing for the same reason. The tag lived only in the transcriber's config.
 
@@ -60,8 +60,9 @@ FIX-GLOBAL-TOPICS-NAV-001 grouped areas by shared slug, and that misses more tha
 - [x] `getSharedTopics` falls back to slug grouping if the column is missing. It is the only reader of the column (every other `InterestArea` read has an explicit `select`), so deploying before the migration can't 500 anything. Verified locally by renaming the column: `/topics` 200, slug grouping, one logged error.
 - [x] Transcriber (`city-council-transcriber`, same story ID) publishes `global_topic_id`, but only once Neon has the column. Until then it writes the old payload and hash, so nothing rewrites daily. Once the column lands, one write per city backfills the tags.
 - [x] Verified end to end against local Postgres: published all cities' real areas locally, then `/topics` showed Fort Collins and Seattle under Housing, Privacy and Homelessness
-- [ ] **Prod step:** `npx prisma migrate deploy` against Neon (additive, nullable). Needs the user's go-ahead.
-- [ ] After the next daily publish: confirm prod rows have `globalTopicId` and `/topics` shows the grouping
+- [x] **Prod step:** `npx prisma migrate deploy` against Neon (additive, nullable). Applied 2026-10-28 after `migrate status` showed only this migration pending.
+- [x] After the next daily publish: confirm prod rows have `globalTopicId` (2026-10-28 16:57 publish: FC 7/14, Montebello 7/12, Monterey Park 9/30, Seattle 9/14 tagged; `tenant_protections`, `housing_affordability_zoning` → housing, `flock_cameras` → privacy_surveillance, `encampments_homelessness` → homelessness)
+- [ ] After the batch deploy: `/topics` shows the grouping
 
 ### FIX-GLOBAL-TOPICS-NAV-001 — Topics in the header before a city is picked
 
