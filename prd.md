@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- ✅ FIX-GLOBAL-TOPICS-NAV-001 — Header shows a cross-city Topics link before a city is picked, leading to a new `/topics` page
 - ✅ FIX-ISR-PREFETCH-001, FIX-CITY-PAGE-PAYLOAD-001, FIX-TRANSCRIPT-PAGE-PAYLOAD-001, FIX-CRAWLER-BUDGET-001 — Vercel ISR reads (1M/month shared Hobby quota, ~1.8M/month pace in October): no link prefetching, city pages carry each meeting once, smaller meeting pages, non-SEO crawlers disallowed. PR open, `batch-ready`
 - 🔄 FIX-NEON-TOPIC-PAGES-CHEAP-404-001 — Topic detail pages refresh on publish instead of hourly; unknown cities/topics/meetings 404 from the cached catalog without waking Neon. Built on a branch; **deploy on or after 2026-10-01** (September's compute cap)
 - ✅ FIX-NEON-TAG-ONLY-CACHES-001 — Shared data caches refresh only on publish (no hourly TTL wakes), one meeting query per transcript render, canonical transcript links. Shipped early (PR #82, 2026-09-23) before September's cap
@@ -45,6 +46,20 @@
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
+
+### FIX-GLOBAL-TOPICS-NAV-001 — Topics in the header before a city is picked
+
+**Status:** ✅ Done (2026-10-28) — PR open, `batch-ready`
+
+The header's Topics tab only appeared inside a city, so the home page (and Glossary/Methodology) offered no way to browse topics. There was also no cross-city topics page to link to. The transcriber gives every city the same baseline interest areas under the same slug, so the site can group them without a `globalTopicId` column.
+
+- [x] `/topics` lists every interest-area slug tracked in 2+ cities, busiest first. Each city appears as a link to its own topic page, with its meeting count.
+- [x] Header shows "Topics" → `/topics` when no city is selected; inside a city, the city's own Topics tab replaces it (never two Topics links)
+- [x] Cached data layer (`getSharedTopics`, `shared-topics` tag fired by `/api/revalidate`), force-dynamic route like the home page: no ISR read, no Neon read per view
+- [x] `/topics` in the sitemap, so warm-cache primes it after a deploy
+- [x] `shared-topics-check` gate covers the grouping
+- [x] Header wraps at phone width instead of overflowing (live was already 6px too wide on the home page and 160px on city pages at 375px)
+- [ ] Follow-up: custom areas retagged to a global topic under a different slug (e.g. Seattle `tenant_protections` → housing) aren't grouped; that needs `global_topic_id` published to Neon
 
 ### FIX-ISR-PREFETCH-001 — Page views no longer read every linked page from the ISR cache
 
