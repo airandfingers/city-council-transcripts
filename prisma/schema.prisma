@@ -324,6 +324,9 @@ model InterestArea {
   name               String                      @db.VarChar(500)
   description        String?                     @db.Text
   source             String?                     @db.VarChar(50)
+  // Cross-city topic id from the transcriber's config/global_topics.json
+  // (e.g. Seattle's "tenant_protections" → "housing"); groups /topics.
+  globalTopicId      String?                     @db.VarChar(100)
   statusSummary      String?                     @db.Text
   meetingsDiscussed  Int?
   totalMeetings      Int?

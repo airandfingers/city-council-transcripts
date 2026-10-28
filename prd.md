@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- 🔄 FEAT-GLOBAL-TOPIC-GROUPING-001 — `/topics` groups areas by the transcriber's global topic tag (`InterestArea.globalTopicId`); prod migration applied by hand
 - ✅ FIX-GLOBAL-TOPICS-NAV-001 — Header shows a cross-city Topics link before a city is picked, leading to a new `/topics` page
 - ✅ FIX-ISR-PREFETCH-001, FIX-CITY-PAGE-PAYLOAD-001, FIX-TRANSCRIPT-PAGE-PAYLOAD-001, FIX-CRAWLER-BUDGET-001 — Vercel ISR reads (1M/month shared Hobby quota, ~1.8M/month pace in October): no link prefetching, city pages carry each meeting once, smaller meeting pages, non-SEO crawlers disallowed. PR open, `batch-ready`
 - 🔄 FIX-NEON-TOPIC-PAGES-CHEAP-404-001 — Topic detail pages refresh on publish instead of hourly; unknown cities/topics/meetings 404 from the cached catalog without waking Neon. Built on a branch; **deploy on or after 2026-10-01** (September's compute cap)
@@ -47,6 +48,21 @@
 
 ## Active Stories
 
+### FEAT-GLOBAL-TOPIC-GROUPING-001 — /topics groups a city's own areas under their global topic
+
+**Status:** 🔄 In Progress (2026-10-28) — code done; prod migration pending
+
+FIX-GLOBAL-TOPICS-NAV-001 grouped areas by shared slug, and that misses more than renamed areas. The transcriber drops a baseline area when the city has its own area tagged with that global topic (`_merge_baseline_areas`), so Fort Collins has no `housing` or `privacy_surveillance` slug: its `housing_affordability_zoning` and `flock_cameras` replace them. Seattle's `tenant_protections` and `encampments_homelessness` were missing for the same reason. The tag lived only in the transcriber's config.
+
+- [x] `InterestArea.globalTopicId` (nullable `VARCHAR(100)`), migration `20261028200000_add_interest_area_global_topic_id`; contract 2.3 → 2.4
+- [x] `/topics` groups by `globalTopicId ?? slug`, counting distinct cities. A city can have several areas in one topic, and each gets a chip labelled with its own name. A never-discussed area is dropped when the same city has a discussed one in that topic.
+- [x] Topic name comes from a baseline row, then the row whose slug is the topic id, then the most common name. Description comes from baseline rows only: a city's custom description is classifier text and can contradict the grouping (Monterey Park's `housing` says it is "distinct from … Tenant Protections").
+- [x] `getSharedTopics` falls back to slug grouping if the column is missing. It is the only reader of the column (every other `InterestArea` read has an explicit `select`), so deploying before the migration can't 500 anything. Verified locally by renaming the column: `/topics` 200, slug grouping, one logged error.
+- [x] Transcriber (`city-council-transcriber`, same story ID) publishes `global_topic_id`, but only once Neon has the column. Until then it writes the old payload and hash, so nothing rewrites daily. Once the column lands, one write per city backfills the tags.
+- [x] Verified end to end against local Postgres: published all cities' real areas locally, then `/topics` showed Fort Collins and Seattle under Housing, Privacy and Homelessness
+- [ ] **Prod step:** `npx prisma migrate deploy` against Neon (additive, nullable). Needs the user's go-ahead.
+- [ ] After the next daily publish: confirm prod rows have `globalTopicId` and `/topics` shows the grouping
+
 ### FIX-GLOBAL-TOPICS-NAV-001 — Topics in the header before a city is picked
 
 **Status:** ✅ Done (2026-10-28) — PR open, `batch-ready`
@@ -59,7 +75,7 @@ The header's Topics tab only appeared inside a city, so the home page (and Gloss
 - [x] `/topics` in the sitemap, so warm-cache primes it after a deploy
 - [x] `shared-topics-check` gate covers the grouping
 - [x] Header wraps at phone width instead of overflowing (live was already 6px too wide on the home page and 160px on city pages at 375px)
-- [ ] Follow-up: custom areas retagged to a global topic under a different slug (e.g. Seattle `tenant_protections` → housing) aren't grouped; that needs `global_topic_id` published to Neon
+- [x] Follow-up: custom areas tagged with a global topic under a different slug (e.g. Seattle `tenant_protections` → housing) → FEAT-GLOBAL-TOPIC-GROUPING-001
 
 ### FIX-ISR-PREFETCH-001 — Page views no longer read every linked page from the ISR cache
 
