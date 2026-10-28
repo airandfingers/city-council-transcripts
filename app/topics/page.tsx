@@ -24,7 +24,7 @@ export default async function SharedTopicsPage() {
       </p>
 
       {topics.length === 0 ? (
-        <p className="text-gray-500 dark:text-gray-400">No topics are tracked in more than one city yet.</p>
+        <p className="text-gray-500 dark:text-gray-400">No topics shared by more than one city have come up in a meeting yet.</p>
       ) : (
         <ul className="flex flex-col gap-6">
           {topics.map((topic) => (

@@ -53,7 +53,7 @@
 
 The header's Topics tab only appeared inside a city, so the home page (and Glossary/Methodology) offered no way to browse topics. There was also no cross-city topics page to link to. The transcriber gives every city the same baseline interest areas under the same slug, so the site can group them without a `globalTopicId` column.
 
-- [x] `/topics` lists every interest-area slug tracked in 2+ cities, busiest first. Each city appears as a link to its own topic page, with its meeting count.
+- [x] `/topics` lists every interest-area slug tracked in 2+ cities and discussed in at least one, busiest first. Each city appears as a link to its own topic page, with its meeting count.
 - [x] Header shows "Topics" → `/topics` when no city is selected; inside a city, the city's own Topics tab replaces it (never two Topics links)
 - [x] Cached data layer (`getSharedTopics`, `shared-topics` tag fired by `/api/revalidate`), force-dynamic route like the home page: no ISR read, no Neon read per view
 - [x] `/topics` in the sitemap, so warm-cache primes it after a deploy

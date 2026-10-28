@@ -11,10 +11,12 @@ const topics = groupSharedTopics([
   { slug: "housing", name: "Homes", description: null, meetingsDiscussed: null, city: sea },
   { slug: "data_centers", name: "Data Centers", description: null, meetingsDiscussed: 20, city: sea },
   { slug: "data_centers", name: "Data Centers", description: "DCs", meetingsDiscussed: 0, city: fc },
+  { slug: "climate", name: "Climate", description: null, meetingsDiscussed: 0, city: fc },
+  { slug: "climate", name: "Climate", description: null, meetingsDiscussed: null, city: mp },
   { slug: "hughes_site", name: "Hughes Site", description: null, meetingsDiscussed: 50, city: fc },
 ]);
 
-// One-city areas stay off /topics; busiest topic first.
+// One-city and never-discussed areas stay off /topics; busiest topic first.
 assert.deepEqual(topics.map((t) => t.slug), ["data_centers", "housing"]);
 
 const housing = topics[1];

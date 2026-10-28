@@ -6,7 +6,7 @@
  * Centers, Finance & Budget, …) under the same slug, so "the same topic in
  * several cities" is simply "the same slug in several cities". No
  * globalTopicId column needed. A slug only one city tracks stays on that
- * city's own topics page.
+ * city's own topics page, as does a shared one no city has discussed yet.
  *
  * Pure and DB-free so it can be checked without a database. The result goes
  * through `unstable_cache` (JSON round trip), so it holds only primitives.
@@ -58,11 +58,15 @@ export function groupSharedTopics(areas: AreaRow[], minCities = 2): SharedTopic[
         meetingsDiscussed: r.meetingsDiscussed ?? 0,
       }))
       .sort((x, y) => y.meetingsDiscussed - x.meetingsDiscussed || x.cityName.localeCompare(y.cityName));
+    const meetingsDiscussed = cities.reduce((sum, c) => sum + c.meetingsDiscussed, 0);
+    // Like the city page's hot topics: a topic no city has discussed yet
+    // would be a card of "not yet discussed" chips.
+    if (meetingsDiscussed === 0) continue;
     topics.push({
       slug,
       name: mostCommon(rows.map((r) => r.name)),
       description: rows.find((r) => r.description)?.description ?? null,
-      meetingsDiscussed: cities.reduce((sum, c) => sum + c.meetingsDiscussed, 0),
+      meetingsDiscussed,
       cities,
     });
   }
