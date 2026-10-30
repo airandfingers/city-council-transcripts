@@ -19,7 +19,8 @@ const CITY_PATH_RE = /^\/([a-z]{2})\/([a-z0-9]+(?:[-_][a-z0-9]+)*)(?:\/|$)/;
  * Always shows "Counciloris"; once a city is selected (URL matches
  * /{state}/{citySlug}/...), a Craigslist-style city switcher — the
  * selected city's name, click to jump to any other city — appears next to
- * it, and Meetings/Topics tabs for that city fold into the same nav
+ * it, and Meetings/Topics tabs for that city fold into the same nav (in
+ * place of the cross-city Topics link shown before a city is picked)
  * (US-NAV-UNIFY-CITY-TABS-001, US-NAV-PERSISTENT-CITY-SWITCHER-001). All
  * site navigation lives in this one bar rather than a separate tab strip.
  *
@@ -70,6 +71,12 @@ export default function SiteHeader() {
 
   const links = [
     { label: "Cities", href: "/", active: pathname === "/", divider: false },
+    // Cross-city topics (FIX-GLOBAL-TOPICS-NAV-001) until a city is picked;
+    // then that city's own Topics tab takes its place rather than showing
+    // two "Topics" links.
+    ...(cityHref
+      ? []
+      : [{ label: "Topics", href: "/topics", active: pathname.startsWith("/topics"), divider: false }]),
     ...(cityHref
       ? [
           { label: "Meetings", href: cityHref, active: pathname === cityHref, divider: true },
@@ -92,7 +99,7 @@ export default function SiteHeader() {
 
   return (
     <header className="border-b border-gray-200 dark:border-gray-800">
-      <div className="flex items-center gap-3 p-4">
+      <div className="flex flex-wrap items-center gap-3 p-4">
         <Link prefetch={false} href="/" className="flex items-center gap-2 font-display font-semibold text-lg tracking-tight shrink-0">
           <Image
             src="/loris-city-skyline.png"
@@ -114,7 +121,7 @@ export default function SiteHeader() {
           </>
         )}
 
-        <nav className="flex items-center gap-4 text-sm ml-2">
+        <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ml-2">
           {links.map((link) => (
             <span key={link.href} className="flex items-center gap-4">
               {/* Divider between the global links (Cities) and the

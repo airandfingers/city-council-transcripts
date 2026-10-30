@@ -42,6 +42,11 @@
       "command": "node scripts/validate/link-recovery-check.mjs"
     },
     {
+      "id": "shared-topics-check",
+      "description": "Interest areas with the same slug in several cities group into one /topics entry, busiest first, and survive unstable_cache's JSON round trip",
+      "command": "node scripts/validate/shared-topics-check.mjs"
+    },
+    {
       "id": "moment-check",
       "description": "MomentCard picks the innermost agenda item covering ?t= and the topic pages covering it",
       "command": "node scripts/validate/moment-check.mjs"

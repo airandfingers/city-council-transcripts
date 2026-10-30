@@ -24,8 +24,9 @@ import {
   groupSitemapCatalog,
   type SitemapCityEntry,
 } from "@/app/lib/sitemapCatalog";
+import { groupSharedTopics, type SharedTopic } from "@/app/lib/sharedTopics";
 
-export type { City, Meeting, TranscriptLine, MeetingSearchResult, SitemapCityEntry };
+export type { City, Meeting, TranscriptLine, MeetingSearchResult, SitemapCityEntry, SharedTopic };
 
 /**
  * The Neon-backed Data Cache entries below never expire on a timer; they are
@@ -43,6 +44,7 @@ export const CACHE_TAGS = {
   cities: "cities",
   searchCorpus: "search-corpus",
   sitemap: "sitemap",
+  sharedTopics: "shared-topics",
 } as const;
 
 export type InterestAreaMeetingEntry = {
@@ -168,6 +170,28 @@ export const getSitemapCatalog = unstable_cache(
   },
   ["sitemap-catalog"],
   { revalidate: DB_CACHE_REVALIDATE, tags: [CACHE_TAGS.sitemap] },
+);
+
+/**
+ * Topics tracked in more than one city, for /topics (FIX-GLOBAL-TOPICS-NAV-001).
+ * One small query per publish: /topics is linked from the header on every
+ * page, so it must never be an uncached read.
+ */
+export const getSharedTopics = unstable_cache(
+  async (): Promise<SharedTopic[]> => {
+    const areas = await prisma.interestArea.findMany({
+      select: {
+        slug: true,
+        name: true,
+        description: true,
+        meetingsDiscussed: true,
+        city: { select: { stateCode: true, slug: true, name: true, stateName: true } },
+      },
+    });
+    return groupSharedTopics(areas);
+  },
+  ["shared-topics"],
+  { revalidate: DB_CACHE_REVALIDATE, tags: [CACHE_TAGS.sharedTopics] },
 );
 
 /**
