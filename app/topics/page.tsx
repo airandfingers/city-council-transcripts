@@ -37,17 +37,24 @@ export default async function SharedTopicsPage() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-prose">{topic.description}</p>
               )}
               <ul className="mt-3 flex flex-wrap gap-2 text-sm">
-                {topic.cities.map((city) => (
-                  <li key={`${city.stateCode}/${city.citySlug}`}>
+                {topic.areas.map((area) => (
+                  <li key={`${area.stateCode}/${area.citySlug}/${area.areaSlug}`}>
                     <Link
                       prefetch={false}
-                      href={`/${city.stateCode}/${city.citySlug}/topics/${topic.slug}`}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-700 px-3 py-1 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+                      href={`/${area.stateCode}/${area.citySlug}/topics/${area.areaSlug}`}
+                      className="inline-block rounded-2xl border border-gray-200 dark:border-gray-700 px-3 py-1 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
                     >
-                      {city.cityName}, {city.stateCode.toUpperCase()}
+                      {/* Plain text flow, not flex: a long chip wraps like a
+                          sentence on a phone instead of splitting into columns. */}
+                      <span className="whitespace-nowrap">
+                        {area.cityName}, {area.stateCode.toUpperCase()}
+                      </span>{" "}
                       <span className="text-gray-500 dark:text-gray-400">
-                        {city.meetingsDiscussed > 0
-                          ? `· ${city.meetingsDiscussed} ${city.meetingsDiscussed === 1 ? "meeting" : "meetings"}`
+                        {/* The city's own name for it, when that says more
+                            than the topic's (e.g. "Tenant Protections"). */}
+                        {area.areaName !== topic.name && `· ${area.areaName} `}
+                        {area.meetingsDiscussed > 0
+                          ? `· ${area.meetingsDiscussed} ${area.meetingsDiscussed === 1 ? "meeting" : "meetings"}`
                           : "· not yet discussed"}
                       </span>
                     </Link>
