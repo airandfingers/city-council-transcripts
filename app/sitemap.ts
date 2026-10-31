@@ -38,6 +38,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/topics`, changeFrequency: "daily" },
     { url: `${SITE_URL}/glossary`, changeFrequency: "monthly" },
     { url: `${SITE_URL}/methodology`, changeFrequency: "monthly" },
+    { url: `${SITE_URL}/privacy`, changeFrequency: "yearly" },
   ];
 
   // `lastModified` is when the page's data last changed, so crawlers can skip

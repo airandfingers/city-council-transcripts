@@ -68,6 +68,9 @@ export default function AIDisclaimer({
             </Link>{" "}
             <Link prefetch={false} href="/glossary" className="underline hover:text-gray-700 dark:hover:text-gray-300">
               Confused by a term? See the glossary.
+            </Link>{" "}
+            <Link prefetch={false} href="/privacy" className="underline hover:text-gray-700 dark:hover:text-gray-300">
+              Privacy.
             </Link>
           </p>
         </div>
