@@ -77,6 +77,17 @@ Cause: `getUpcomingMeetingSlugs` kept a SCHEDULED meeting upcoming until 2 days 
 - [x] Check: `scripts/validate/meeting-day-check`
 - [ ] Live: Monterey Park's Nov 4 special meeting under Past Meetings, "Transcript pending"
 
+### FIX-TOPIC-PURGE-CHANGED-ONLY-001 — A publish purges only the topic pages it changed
+
+**Status:** 🔄 In Progress (2026-11-05) — PR open
+
+As the operator I want each publish to purge only the topic pages whose content changed, because the transcriber re-reads every purged page right after (`warm_site`), and purging all ~70 topic pages on every call made that ~110 pages per publish, metered as Vercel ISR reads. That made a second daily publish too expensive.
+
+- [x] `/api/revalidate` city call takes `topic_slugs`; purges those plus the topics that list a meeting it refreshes. Meeting call: only the topics listing that meeting. No `topic_slugs` (older publisher, retry) purges all, as before
+- [x] Topic pages no longer read the shared catalog (`sitemap` tag fires on every call, which would have made every topic page stale anyway): `getInterestArea` checks a topic catalog under its own `topic-catalog` tag; the city comes from `getKnownCity` (no tagged read). The route refreshes the topic catalog only when the set of topics changed, and then purges every topic page
+- [x] Gates: `catalog-lookup-check` updated; all pass
+- [x] Local production build: after a call naming one topic, that page was MISS and two others stayed HIT; a meeting call purged that meeting's 9 topics and left another HIT; a call without `topic_slugs` purged all three
+- [ ] Live: the transcriber's `Warmed site (purged pages)` drops from ~110 URLs
 
 ### FEAT-GLOBAL-TOPIC-GROUPING-001 — /topics groups a city's own areas under their global topic
 

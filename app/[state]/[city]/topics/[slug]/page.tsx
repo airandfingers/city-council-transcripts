@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCityByParams, getInterestArea } from "@/app/lib/cityData";
+import { getInterestArea, getKnownCity } from "@/app/lib/cityData";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import TopicVideoCard from "@/app/components/TopicVideoCard";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
@@ -11,9 +11,11 @@ import { formatMeetingDate } from "@/app/lib/formatDate";
 import { transcriptPath } from "@/app/lib/transcriptPath";
 import { getTopicVideos } from "@/app/lib/topicVideos";
 
-// Cache indefinitely; invalidated on demand by POST /api/revalidate's
-// city-level call, which marks every topic detail page stale
-// (FIX-NEON-TOPIC-PAGES-CHEAP-404-001). This used to be a 1h window because
+// Cache indefinitely; invalidated on demand by POST /api/revalidate, which
+// purges the topics a publish changed (FIX-TOPIC-PURGE-CHANGED-ONLY-001;
+// before, every call purged every topic page — FIX-NEON-TOPIC-PAGES-CHEAP-404-001).
+// Only reads the topic catalog's tag, never CACHE_TAGS, so a publish doesn't
+// make every topic page stale through a shared tag. This used to be a 1h window because
 // nothing invalidated these pages, and each expiry meant a crawler visit
 // re-read Neon (a >=5-minute wake). Every interest-area writer in the
 // transcriber (the publish sweep, and preview-status writes inside the Neon
@@ -68,7 +70,7 @@ export default async function TopicDetailPage({ params }: Props) {
   // on a cold render.
   const area = await getInterestArea(state, citySlug, slug);
   if (!area) notFound();
-  const cityData = await getCityByParams(state, citySlug);
+  const cityData = await getKnownCity(state, citySlug);
   if (!cityData) notFound();
 
   const discussedMeetings = area.meetings.filter((m) => m.summary);
