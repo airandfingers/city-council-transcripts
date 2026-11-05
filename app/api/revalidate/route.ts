@@ -7,7 +7,12 @@ import {
   CACHE_TAGS,
   getMeetingSlugsChangedSince,
   getMeetingSlugsForCity,
+  getTopicCatalog,
+  getTopicPathsForMeetings,
   meetingTag,
+  readTopicKeys,
+  topicDetailPath,
+  TOPIC_CATALOG_TAG,
 } from "@/app/lib/cityData";
 
 /**
@@ -15,7 +20,7 @@ import {
  *
  * Body: { "meeting_id": <number> }
  *     | { "city_state_code": <string>, "city_slug": <string>, "include_transcripts"?: <boolean>,
- *         "changed_since"?: <ISO 8601 timestamp> }
+ *         "changed_since"?: <ISO 8601 timestamp>, "topic_slugs"?: <string[]> }
  * Auth: Authorization: Bearer <PUBLISH_API_KEY>
  *
  * Invalidates the ISR cache for content that the publish sweep
@@ -70,12 +75,20 @@ import {
  * write sets), defaulting to the last DEFAULT_CHANGED_LOOKBACK_MS when the
  * caller doesn't send it.
  *
- * The per-city call also marks every interest-area detail page
- * (`/[state]/[city]/topics/[slug]`) stale, via the route pattern. Those pages
- * have no TTL (FIX-NEON-TOPIC-PAGES-CHEAP-404-001), so this is their only
- * refresh trigger too. The pattern covers every city's topic pages rather
- * than just this one's: there are only a few dozen, and the publisher warms
- * the whole site right after refreshing.
+ * Topic detail pages (`/[state]/[city]/topics/[slug]`) have no TTL
+ * (FIX-NEON-TOPIC-PAGES-CHEAP-404-001), so this route is their only refresh
+ * trigger too. Which ones it purges (FIX-TOPIC-PURGE-CHANGED-ONLY-001):
+ *
+ *  - the topics that link a meeting this call refreshes (a topic page shows
+ *    each meeting's title, date and video provider), and
+ *  - on the per-city call, the `topic_slugs` the publisher says it wrote.
+ *
+ * A per-city call without `topic_slugs` (a publisher that predates it, or a
+ * retry after a failed call, which can't know what it missed) still marks
+ * every city's topic pages stale via the route pattern, as before. Purging
+ * all ~70 topic pages on every call made the publisher re-warm them after
+ * every publish, most of the ~110 pages it re-read each time, metered as
+ * Vercel ISR reads.
  */
 
 const RevalidateBody = z.union([
@@ -85,6 +98,9 @@ const RevalidateBody = z.union([
     city_slug: z.string().min(1),
     include_transcripts: z.boolean().optional(),
     changed_since: z.string().datetime({ offset: true }).optional(),
+    // Slugs only (the city comes from the call); capped well above the ~30
+    // areas a city has.
+    topic_slugs: z.array(z.string().min(1).max(200)).max(500).optional(),
   }),
 ]);
 
@@ -97,7 +113,6 @@ function revalidateDataCacheTags(): string[] {
   return tags;
 }
 
-/** Route pattern (not a URL) for every interest-area detail page. */
 const DEFAULT_CHANGED_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const MAX_CHANGED_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -119,22 +134,53 @@ async function revalidateChangedMeetings(
   stateCode: string,
   slug: string,
   changedSince: string | undefined,
-): Promise<string[]> {
+): Promise<Array<{ slug: string; path: string }>> {
   const now = Date.now();
   const requested = changedSince ? new Date(changedSince).getTime() : now - DEFAULT_CHANGED_LOOKBACK_MS;
   const since = new Date(Math.min(now, Math.max(requested, now - MAX_CHANGED_LOOKBACK_MS)));
   const meetings = await getMeetingSlugsChangedSince(stateCode, slug, since);
-  return meetings.map((m) => revalidateMeeting(m.slug));
+  return meetings.map((m) => ({ slug: m.slug, path: revalidateMeeting(m.slug) }));
 }
 
+/** Route pattern (not a URL) for every interest-area detail page. */
 const TOPIC_DETAIL_ROUTE = "/[state]/[city]/topics/[slug]";
 
+/** The city page and its topics listing. */
 function revalidateCityPaths(stateCode: string, slug: string): string[] {
   const cityPath = `/${stateCode}/${slug}`;
   const paths = [cityPath, `${cityPath}/topics`];
   for (const path of paths) revalidatePath(path);
-  revalidatePath(TOPIC_DETAIL_ROUTE, "page");
-  return [...paths, TOPIC_DETAIL_ROUTE];
+  return paths;
+}
+
+/** Topic detail pages: the given paths, or every one (route pattern) when
+ * `paths` is null. */
+function revalidateTopicPaths(paths: string[] | null): string[] {
+  if (paths === null) {
+    revalidatePath(TOPIC_DETAIL_ROUTE, "page");
+    return [TOPIC_DETAIL_ROUTE];
+  }
+  for (const path of paths) revalidatePath(path);
+  return paths;
+}
+
+/**
+ * Refreshes the topic catalog when the set of topics changed (one was added,
+ * removed or renamed). Every topic page reads that catalog, so this also
+ * makes every topic page stale; returns true so the caller reports the
+ * route pattern and the publisher re-warms them all. Rare: topics change
+ * when a city's config does. A failed comparison counts as changed.
+ */
+async function refreshTopicCatalogIfChanged(): Promise<boolean> {
+  let changed = true;
+  try {
+    const [cached, current] = await Promise.all([getTopicCatalog(), readTopicKeys()]);
+    changed = cached.length !== current.length || cached.some((k, i) => k !== current[i]);
+  } catch (err) {
+    console.error("[revalidate] topic catalog comparison failed; refreshing it", err);
+  }
+  if (changed) revalidateTag(TOPIC_CATALOG_TAG, { expire: 0 });
+  return changed;
 }
 
 /** Revalidates every transcript page for a city — see the roster-staleness
@@ -188,11 +234,14 @@ export async function POST(req: Request) {
 
     const meetingPath = revalidateMeeting(meeting.slug);
     const cityPaths = revalidateCityPaths(meeting.city.stateCode, meeting.city.slug);
+    // Topic statuses are written by the per-city call, not this one; only the
+    // topics listing this meeting show anything it changed.
+    const topicPaths = revalidateTopicPaths(await getTopicPathsForMeetings([meeting.slug]));
     const tags = revalidateDataCacheTags();
 
     return NextResponse.json({
       ok: true,
-      revalidated: [meetingPath, ...cityPaths],
+      revalidated: [meetingPath, ...cityPaths, ...topicPaths],
       tags,
     });
   }
@@ -213,7 +262,7 @@ export async function POST(req: Request) {
   // `getMeetingSlugsForCity`, whose `isValidStateCode` guard requires
   // lowercase and silently returns `[]` — zero transcript pages revalidated
   // — on anything else, rather than erroring.
-  const { city_state_code, city_slug, include_transcripts, changed_since } = parsed.data;
+  const { city_state_code, city_slug, include_transcripts, changed_since, topic_slugs } = parsed.data;
   const stateCode = city_state_code.toLowerCase();
   const city = await prisma.city.findUnique({
     where: { stateCode_slug: { stateCode, slug: city_slug } },
@@ -225,7 +274,19 @@ export async function POST(req: Request) {
   }
 
   const cityPaths = revalidateCityPaths(stateCode, city_slug);
-  const changedPaths = await revalidateChangedMeetings(stateCode, city_slug, changed_since);
+  const changed = await revalidateChangedMeetings(stateCode, city_slug, changed_since);
+  const changedPaths = changed.map((m) => m.path);
+  const topicSetChanged = await refreshTopicCatalogIfChanged();
+  const topicPaths = revalidateTopicPaths(
+    topic_slugs === undefined || topicSetChanged
+      ? null
+      : [
+          ...new Set([
+            ...topic_slugs.map((t) => topicDetailPath(stateCode, city_slug, t)),
+            ...(await getTopicPathsForMeetings(changed.map((m) => m.slug))),
+          ]),
+        ],
+  );
   // Absent means "yes" — see `include_transcripts` in the header comment.
   const transcriptPaths =
     include_transcripts === false
@@ -234,8 +295,9 @@ export async function POST(req: Request) {
   const tags = revalidateDataCacheTags();
   return NextResponse.json({
     ok: true,
-    revalidated: [...cityPaths, ...new Set([...changedPaths, ...transcriptPaths])],
+    revalidated: [...cityPaths, ...topicPaths, ...new Set([...changedPaths, ...transcriptPaths])],
     changed_meetings: changedPaths.length,
+    topics_purged: topic_slugs === undefined ? "all" : topicPaths.length,
     transcripts_purged: include_transcripts !== false,
     tags,
   });

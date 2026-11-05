@@ -18,7 +18,6 @@ import {
   type SearchCorpusMeeting,
 } from "@/app/lib/searchCorpus";
 import {
-  catalogHasArea,
   catalogHasCity,
   catalogHasMeeting,
   groupSitemapCatalog,
@@ -231,6 +230,56 @@ const getCatalogForLookup = cache(async function getCatalogForLookup(): Promise<
   }
 });
 
+/**
+ * Every topic page that exists, as `topicKey()` strings, for the topic page's
+ * "does this exist?" check (FIX-TOPIC-PURGE-CHANGED-ONLY-001). Its own tag,
+ * TOPIC_CATALOG_TAG, deliberately not in CACHE_TAGS: /api/revalidate fires it
+ * only when a city's set of topics changed, so a publish that rewrote two
+ * topics leaves the other topic pages cached.
+ */
+export const TOPIC_CATALOG_TAG = "topic-catalog";
+
+export function topicKey(stateCode: string, citySlug: string, areaSlug: string): string {
+  return `${stateCode.toLowerCase()}/${citySlug}/${areaSlug}`;
+}
+
+/** Uncached: the current topic keys, read by /api/revalidate to compare
+ * against the cached catalog. */
+export async function readTopicKeys(): Promise<string[]> {
+  const rows = await prisma.interestArea.findMany({
+    select: { slug: true, city: { select: { stateCode: true, slug: true } } },
+  });
+  return rows.map((r) => topicKey(r.city.stateCode, r.city.slug, r.slug)).sort();
+}
+
+/** Cached topic keys (an array: unstable_cache JSON round-trips its value). */
+export const getTopicCatalog = unstable_cache(readTopicKeys, ["topic-catalog"], {
+  revalidate: DB_CACHE_REVALIDATE,
+  tags: [TOPIC_CATALOG_TAG],
+});
+
+/** The topic catalog as a Set, or null when empty or unreadable (callers then
+ * query: a broken cache must never turn real pages into 404s). */
+const getTopicCatalogForLookup = cache(async function getTopicCatalogForLookup(): Promise<Set<string> | null> {
+  try {
+    const keys = await getTopicCatalog();
+    return keys.length > 0 ? new Set(keys) : null;
+  } catch (err) {
+    console.error("[cityData] topic catalog lookup failed; falling back to Neon", err);
+    return null;
+  }
+});
+
+/**
+ * A city row with no catalog check, for pages that already know the city
+ * exists (the topic page, after its topic was found). Reading the shared
+ * catalog here would tag the page with `sitemap` (FIX-TOPIC-PURGE-CHANGED-ONLY-001).
+ */
+export const getKnownCity = cache(function getKnownCity(stateCode: string, citySlug: string): Promise<City | null> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) return Promise.resolve(null);
+  return prisma.city.findUnique({ where: { stateCode_slug: { stateCode, slug: citySlug } } });
+});
+
 /** False only when the cached catalog positively says the meeting doesn't exist. */
 export async function mayBeKnownMeeting(meetingSlug: string): Promise<boolean> {
   const catalog = await getCatalogForLookup();
@@ -282,6 +331,31 @@ export function getMeetingSlugsChangedSince(
     where: { city: { stateCode, slug: citySlug }, updatedAt: { gte: since } },
     select: { slug: true },
   });
+}
+
+/**
+ * Topic pages (`/{state}/{city}/topics/{slug}`) that list any of these
+ * meetings (FIX-TOPIC-PURGE-CHANGED-ONLY-001). A topic page shows each
+ * discussed meeting's title, date, slug and video provider, so a change to
+ * one of those meetings changes the page even when the topic itself didn't.
+ * Uncached on purpose: it decides what /api/revalidate purges.
+ */
+export async function getTopicPathsForMeetings(meetingSlugs: string[]): Promise<string[]> {
+  if (meetingSlugs.length === 0) return [];
+  const rows = await prisma.interestAreaMeetingStatus.findMany({
+    where: { discussed: true, meeting: { slug: { in: meetingSlugs } } },
+    select: { interestArea: { select: { slug: true, city: { select: { stateCode: true, slug: true } } } } },
+  });
+  return [
+    ...new Set(
+      rows.map((r) => topicDetailPath(r.interestArea.city.stateCode, r.interestArea.city.slug, r.interestArea.slug)),
+    ),
+  ];
+}
+
+/** Path of one topic detail page. */
+export function topicDetailPath(stateCode: string, citySlug: string, areaSlug: string): string {
+  return `/${stateCode.toLowerCase()}/${citySlug}/topics/${encodeURIComponent(areaSlug)}`;
 }
 
 /**
@@ -811,8 +885,12 @@ export const getInterestArea = cache(async function getInterestArea(
     return null;
   }
 
-  const catalog = await getCatalogForLookup();
-  if (catalog && !catalogHasArea(catalog, stateCode, citySlug, areaSlug)) return null;
+  // The topic catalog, not the shared one (FIX-TOPIC-PURGE-CHANGED-ONLY-001):
+  // a page carries the tags of every cached read it makes, and the shared
+  // catalog's `sitemap` tag fires on every /api/revalidate call, which made
+  // every topic page stale after every publish.
+  const topics = await getTopicCatalogForLookup();
+  if (topics && !topics.has(topicKey(stateCode, citySlug, areaSlug))) return null;
 
   const area = await prisma.interestArea.findFirst({
     where: {
