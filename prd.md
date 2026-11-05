@@ -48,6 +48,36 @@
 
 ## Active Stories
 
+### FIX-GRANICUS-EMBED-SEEK-001 — Timestamps play on Granicus-only meetings
+
+**Status:** 🔄 In Progress (2026-11-05) — PR open
+
+As a reader on a meeting that only has a Granicus recording (Monterey Park's Nov 4, 2026 regular meeting the day after), I want "▶ Play from" and every timestamp to play that moment, the way they do for YouTube.
+
+Cause: Granicus was link-out only, because a 2026-09-17 test said its `entrytime` parameter doesn't seek. That test ran in headless Chromium, which can't decode Granicus's H.264 stream at all, so `currentTime` stayed 0 whatever the URL said. In Playwright's WebKit (which decodes H.264) the embedded player honors `entrytime`: 600 → 606 s, and a src swap to 3000 → 3004 s.
+
+- [x] `VideoPlayer` embeds the Granicus player (`app/lib/granicus.ts`: `entrytime`, `autostart`, `embed=1`; https `*.granicus.com` only, anything else keeps the link fallback). `?t=` opens it at that moment, paused
+- [x] Registered with `VideoSyncProvider`: a timestamp click reloads the iframe at the moment with autostart (src assignment, no remount, so the dock still works). Position can't be read across origins, so the transcript doesn't follow along; citation clicks still scroll it
+- [x] `canAutoSeek("granicus")` is true, so topic pages link Granicus meetings to `?t=` like YouTube
+- [x] Check: `scripts/validate/meeting-day-check` (embed URLs, host allowlist)
+- [x] Browser check (Playwright WebKit, local dev, Jul 1 2026 Monterey Park): `?t=600` opened at 600 paused; clicking 1:06:48 docked the player, reloaded at 4008 and played (4009 → 4022 over 12 s); clicking it again restarted at 4008
+- [ ] Live check on the preview, and on a real iPhone (Safari autoplay rules for a reloaded cross-origin iframe)
+
+### FIX-UPCOMING-PAST-DAY-001 — A meeting stops being "upcoming" when its day ends
+
+**Status:** 🔄 In Progress (2026-11-05) — PR open
+
+As a resident on Nov 5, I don't want the Nov 4 special meeting listed under "Upcoming".
+
+Cause: `getUpcomingMeetingSlugs` kept a SCHEDULED meeting upcoming until 2 days after midnight UTC of its date, and the city page is cached until the next publish (`revalidate = false`), so "now" was whenever it last rendered. MeetingCard also showed "Upcoming meeting" on every SCHEDULED row, including 93 Monterey Park rows from 2010–2011.
+
+- [x] `app/lib/upcoming.ts`: a meeting is upcoming through its calendar day in the city's time zone (CA/WA Los Angeles, CO Denver, unknown states Los Angeles, which only ever flips late)
+- [x] Recomputed in the browser after hydration (`useCityToday`, `useSyncExternalStore`, no hydration mismatch), so a cached page is right the next morning without any re-render, Neon read or ISR write
+- [x] Past SCHEDULED badge: "Transcript pending" up to 14 days after, then none. Meeting page badge and "hasn't happened yet" note switch the same way (`ByMeetingDay`). The "Pending" filter includes them
+- [x] Check: `scripts/validate/meeting-day-check`
+- [ ] Live: Monterey Park's Nov 4 special meeting under Past Meetings, "Transcript pending"
+
+
 ### FEAT-GLOBAL-TOPIC-GROUPING-001 — /topics groups a city's own areas under their global topic
 
 **Status:** 🔄 In Progress (2026-10-28) — prod migration applied and tags published; awaiting the 2026-10-29 batch deploy

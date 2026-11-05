@@ -64,7 +64,7 @@ export default async function CityPage({ params }: Props) {
   // else — MeetingFilter groups them under an "Upcoming" subheader using
   // this set rather than raw status, since status alone isn't a safe
   // signal (see getUpcomingMeetingSlugs).
-  const upcomingSlugs = getUpcomingMeetingSlugs(meetings);
+  const upcomingSlugs = getUpcomingMeetingSlugs(meetings, state);
 
   return (
     <main className="p-8">

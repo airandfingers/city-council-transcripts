@@ -5,6 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { cityTimeZone, todayIn, upcomingSlugsAsOf } from "./upcoming";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { meetingCandidates } from "@/app/lib/linkRecovery";
@@ -403,30 +404,14 @@ export type MeetingCardData = {
   tldrReferences: unknown;
 };
 
-// Same 2-day buffer, same reasoning, as the transcriber repo's own
-// SCHEDULED -> OCCURRED aging sweep (NeonWriter.age_scheduled_meetings_
-// to_occurred): `Meeting.date` stores midnight UTC of the meeting's
-// calendar day (see formatDate.ts), not a real timestamp, so a naive
-// `date >= now` goes false shortly after midnight UTC — up to ~7-8 hours
-// *before* a Pacific-timezone evening meeting even starts — demoting a
-// same-day meeting out of "Upcoming" while it's still hours away. Found
-// live: a 2026-09-02 meeting stopped showing as upcoming and appeared
-// under "Past Meetings" (with its "Upcoming meeting" badge still on,
-// since MeetingCard reads raw status) once the UTC clock ticked past
-// midnight into 2026-09-02, well before that evening's Pacific meeting.
-const UPCOMING_MEETING_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
-
 /**
- * Slugs of a city's genuinely-upcoming meetings, for MeetingFilter's
- * "Upcoming" grouping — the meetings themselves stay in one filterable
- * list (see MeetingFilter) rather than being split into a separate array,
- * so this only needs to say which ones qualify.
+ * Slugs of a city's upcoming meetings, for MeetingFilter's "Upcoming"
+ * grouping: SCHEDULED and the meeting's day hasn't ended in the city's time
+ * zone (see app/lib/upcoming.ts, FIX-UPCOMING-PAST-DAY-001). Status alone
+ * isn't enough: the source data has SCHEDULED rows from 2010.
  *
- * A meeting only counts as upcoming if it's SCHEDULED *and* still within
- * the grace window above: the source data also has SCHEDULED rows with
- * dates over a decade in the past (upstream ingestion bug — nothing in
- * this repo sets that status), so status alone isn't a safe signal
- * either way.
+ * This is the render-time answer; MeetingFilter recomputes it in the browser
+ * because the city page stays cached until the next publish.
  *
  * Lives here rather than inline in the page component so the `Date.now()`
  * call isn't flagged by the react-hooks/purity rule, which treats any
@@ -434,17 +419,10 @@ const UPCOMING_MEETING_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
  */
 export function getUpcomingMeetingSlugs(
   meetings: MeetingCardData[],
+  stateCode: string,
   now: number = Date.now()
 ): Set<string> {
-  return new Set(
-    meetings
-      .filter(
-        (m) =>
-          m.status === "SCHEDULED" &&
-          new Date(m.date).getTime() >= now - UPCOMING_MEETING_GRACE_MS
-      )
-      .map((m) => m.slug)
-  );
+  return upcomingSlugsAsOf(meetings, todayIn(cityTimeZone(stateCode), now));
 }
 
 export async function getMeetingsForCity(

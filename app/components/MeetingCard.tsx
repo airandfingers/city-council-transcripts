@@ -1,11 +1,16 @@
 import Link from "next/link";
 import type { MeetingCardData, MeetingSearchResult } from "@/app/lib/cityData";
 import { formatMeetingDate } from "@/app/lib/formatDate";
+import type { ScheduledBadge } from "@/app/lib/upcoming";
 import { annotateTextPlain } from "@/app/lib/citations";
 import HighlightedText from "./HighlightedText";
 
 export type MeetingCardProps = {
   meeting: MeetingCardData;
+  /** For a SCHEDULED meeting, which badge to show now that the day may have
+   * passed (FIX-UPCOMING-PAST-DAY-001): "upcoming", "pending" (held, no
+   * transcript yet) or null (long past, no badge). Omitted: "upcoming". */
+  scheduledBadge?: ScheduledBadge;
   /** Search tokens to highlight (FEAT-SEARCH-NORMALIZE-HIGHLIGHT-001).
    * Defaults to [] so every call site that predates search highlighting
    * renders identically to before. */
@@ -26,6 +31,7 @@ export default function MeetingCard({
   tokens = [],
   extraSnippet = null,
   summarySnippet = null,
+  scheduledBadge,
 }: MeetingCardProps) {
   const href = `/transcripts/${meeting.slug
     .split("/")
@@ -105,12 +111,12 @@ export default function MeetingCard({
       ) : (
         <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
           {dateStr}
-          {meeting.status === "SCHEDULED" && (
+          {meeting.status === "SCHEDULED" && (scheduledBadge ?? "upcoming") === "upcoming" && (
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
               Upcoming meeting
             </span>
           )}
-          {meeting.status === "OCCURRED" && (
+          {(meeting.status === "OCCURRED" || scheduledBadge === "pending") && (
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
               Transcript pending
             </span>
