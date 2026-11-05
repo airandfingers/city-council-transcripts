@@ -6,7 +6,8 @@ import MeetingCard from "./MeetingCard";
 import type { MeetingCardData, MeetingSearchResult } from "@/app/lib/cityData";
 import { tokenizeQuery } from "@/app/lib/search";
 import { searchMeetings } from "@/app/actions/searchMeetings";
-import { collapsedUpcoming } from "@/app/lib/upcoming";
+import { collapsedUpcoming, scheduledBadge, upcomingSlugsAsOf, type ScheduledBadge } from "@/app/lib/upcoming";
+import { useCityToday } from "@/app/lib/useCityToday";
 
 /**
  * Search & filter over a city's full meeting list, including upcoming
@@ -40,7 +41,7 @@ const DEBOUNCE_MS = 300;
 
 export default function MeetingFilter({
   meetings,
-  upcomingSlugs,
+  upcomingSlugs: serverUpcomingSlugs,
   stateCode,
   citySlug,
 }: {
@@ -53,6 +54,23 @@ export default function MeetingFilter({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+
+  // The page is cached until the next publish, so the server's Upcoming set
+  // was right only when it rendered. After hydration, recompute it from
+  // today's date in the city (FIX-UPCOMING-PAST-DAY-001).
+  const today = useCityToday(stateCode);
+  const upcomingSlugs = useMemo(
+    () => (today ? upcomingSlugsAsOf(meetings, today) : serverUpcomingSlugs),
+    [today, meetings, serverUpcomingSlugs]
+  );
+  const badgeFor = useCallback(
+    (m: MeetingCardData): ScheduledBadge | undefined => {
+      if (m.status !== "SCHEDULED") return undefined;
+      if (today) return scheduledBadge(m.date, today);
+      return upcomingSlugs.has(m.slug) ? "upcoming" : null;
+    },
+    [today, upcomingSlugs]
+  );
 
   // Starts empty and is seeded from the URL by <UrlQueryListener> once the
   // page hydrates, so a shared/reloaded search link (AC-4) restores the
@@ -202,11 +220,11 @@ export default function MeetingFilter({
     } else if (statusFilter === "upcoming") {
       result = result.filter((m) => upcomingSlugs.has(m.slug));
     } else if (statusFilter === "pending") {
-      result = result.filter((m) => m.status === "OCCURRED");
+      result = result.filter((m) => m.status === "OCCURRED" || badgeFor(m) === "pending");
     }
 
     return result;
-  }, [meetings, debouncedQuery, matchedSlugs, statusFilter, upcomingSlugs]);
+  }, [meetings, debouncedQuery, matchedSlugs, statusFilter, upcomingSlugs, badgeFor]);
 
   // Upcoming meetings lead under their own subheader, capped and
   // expandable (collapsed: the soonest meeting plus the next regular
@@ -297,6 +315,7 @@ export default function MeetingFilter({
             <MeetingCard
               key={meeting.slug}
               meeting={meeting}
+              scheduledBadge={badgeFor(meeting)}
               tokens={tokens}
               extraSnippet={searchResults.get(meeting.slug)?.extraSnippet ?? null}
               summarySnippet={searchResults.get(meeting.slug)?.summarySnippet ?? null}
@@ -329,6 +348,7 @@ export default function MeetingFilter({
             <MeetingCard
               key={meeting.slug}
               meeting={meeting}
+              scheduledBadge={badgeFor(meeting)}
               tokens={tokens}
               extraSnippet={searchResults.get(meeting.slug)?.extraSnippet ?? null}
               summarySnippet={searchResults.get(meeting.slug)?.summarySnippet ?? null}

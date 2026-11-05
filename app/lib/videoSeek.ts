@@ -2,13 +2,13 @@
  * Per-provider video seek capability.
  *
  * Not every video provider has a way to seek to a timestamp on page load —
- * youtube (IFrame API) and mp4 (native <video> element) do; granicus and any
- * future link-out-only provider don't expose an embeddable/controllable
- * player. Providers without a seek capability still get the timecode
+ * youtube (IFrame API), mp4 (native <video> element) and granicus (embedded
+ * player reloaded at `entrytime`; see app/lib/granicus.ts) do; a future
+ * link-out-only provider may not. Providers without a seek capability still get the timecode
  * surfaced (via a copy-to-clipboard affordance) rather than silently
  * dropping the reference.
  */
-const AUTO_SEEK_PROVIDERS = new Set(["youtube", "mp4"]);
+const AUTO_SEEK_PROVIDERS = new Set(["youtube", "mp4", "granicus"]);
 
 export function canAutoSeek(videoProvider: string | null | undefined): boolean {
   return !!videoProvider && AUTO_SEEK_PROVIDERS.has(videoProvider);
