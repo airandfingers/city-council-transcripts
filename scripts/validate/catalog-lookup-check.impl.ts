@@ -44,13 +44,23 @@ const fnBody = (name: string) => {
   assert.ok(start >= 0, `${name} not found`);
   return cityData.slice(start, cityData.indexOf("\n});", start));
 };
-for (const [name, check] of [
-  ["getCityByParams", "catalogHasCity"],
-  ["getInterestArea", "catalogHasArea"],
-] as const) {
-  const body = fnBody(name);
-  assert.ok(body.indexOf(check) >= 0 && body.indexOf(check) < body.indexOf("prisma."), `${name} must check the catalog before querying`);
-  assert.match(body, /catalog && !/, `${name} must fall back to Neon when the catalog is unavailable`);
+{
+  const body = fnBody("getCityByParams");
+  assert.ok(body.indexOf("catalogHasCity") >= 0 && body.indexOf("catalogHasCity") < body.indexOf("prisma."), "getCityByParams must check the catalog before querying");
+  assert.match(body, /catalog && !/, "getCityByParams must fall back to Neon when the catalog is unavailable");
+}
+// Topic pages use the topic catalog (own tag), never the shared one, so the
+// shared tags firing on every publish don't make every topic page stale
+// (FIX-TOPIC-PURGE-CHANGED-ONLY-001).
+{
+  const body = fnBody("getInterestArea");
+  assert.ok(body.indexOf("getTopicCatalogForLookup") >= 0 && body.indexOf("getTopicCatalogForLookup") < body.indexOf("prisma."), "getInterestArea must check the topic catalog before querying");
+  assert.match(body, /topics && !topics\.has/, "getInterestArea must fall back to Neon when the topic catalog is unavailable");
+  assert.doesNotMatch(body, /getCatalogForLookup|getSitemapCatalog/, "getInterestArea must not read the shared catalog");
+  assert.doesNotMatch(fnBody("getKnownCity"), /getCatalogForLookup|getSitemapCatalog|unstable_cache/, "getKnownCity must not read a tagged cache");
+  const topicCatalog = cityData.slice(cityData.indexOf("export const getTopicCatalog"));
+  assert.match(topicCatalog.slice(0, 300), /tags: \[TOPIC_CATALOG_TAG\]/);
+  assert.doesNotMatch(cityData.slice(cityData.indexOf("export const CACHE_TAGS"), cityData.indexOf("} as const")), /topic-catalog/, "the topic catalog tag must not be in CACHE_TAGS");
 }
 assert.match(cityData, /catalog === null \|\| catalogHasMeeting/, "mayBeKnownMeeting must fall back when the catalog is unavailable");
 assert.match(cityData, /catalog\.length > 0 \? catalog : null/, "an empty catalog must count as unavailable");
@@ -73,7 +83,12 @@ const route = readFileSync("app/api/revalidate/route.ts", "utf8");
 const pattern = route.match(/TOPIC_DETAIL_ROUTE = "([^"]+)"/)?.[1];
 assert.ok(pattern, "TOPIC_DETAIL_ROUTE missing");
 assert.ok(existsSync(`app${pattern}/page.tsx`), `TOPIC_DETAIL_ROUTE ${pattern} must match a real page`);
-const cityPaths = route.slice(route.indexOf("function revalidateCityPaths"));
-assert.match(cityPaths.slice(0, cityPaths.indexOf("\n}")), /revalidatePath\(TOPIC_DETAIL_ROUTE, "page"\)/);
+// Every topic page is still purged when the publisher doesn't say which topics
+// changed, or when the set of topics changed.
+const topicPaths = route.slice(route.indexOf("function revalidateTopicPaths"));
+assert.match(topicPaths.slice(0, topicPaths.indexOf("\n}")), /revalidatePath\(TOPIC_DETAIL_ROUTE, "page"\)/);
+assert.match(route, /topic_slugs === undefined \|\| topicSetChanged/);
+// The topic page reads no CACHE_TAGS-tagged lookup.
+assert.doesNotMatch(readFileSync(topicPage, "utf8"), /getCityByParams|getCatalogForLookup|getSitemapCatalog|getCities/);
 
 console.log("catalog-lookup-check: all checks passed");

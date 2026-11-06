@@ -57,6 +57,11 @@
       "command": "node scripts/validate/upcoming-collapse-check.mjs"
     },
     {
+      "id": "meeting-day-check",
+      "description": "A SCHEDULED meeting stops being upcoming after its day ends in the city's time zone, and Granicus embed URLs carry entrytime/autostart and only for https granicus.com hosts",
+      "command": "node scripts/validate/meeting-day-check.mjs"
+    },
+    {
       "id": "encoded-path-check",
       "description": "Percent-encoded unreserved characters (%2D, %5F, \u2026) redirect to the canonical cached URL; canonical paths, including legitimately encoded ones, never redirect",
       "command": "node scripts/validate/encoded-path-check.mjs"

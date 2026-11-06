@@ -5,6 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { cityTimeZone, todayIn, upcomingSlugsAsOf } from "./upcoming";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { meetingCandidates } from "@/app/lib/linkRecovery";
@@ -18,7 +19,6 @@ import {
   type SearchCorpusMeeting,
 } from "@/app/lib/searchCorpus";
 import {
-  catalogHasArea,
   catalogHasCity,
   catalogHasMeeting,
   groupSitemapCatalog,
@@ -231,6 +231,56 @@ const getCatalogForLookup = cache(async function getCatalogForLookup(): Promise<
   }
 });
 
+/**
+ * Every topic page that exists, as `topicKey()` strings, for the topic page's
+ * "does this exist?" check (FIX-TOPIC-PURGE-CHANGED-ONLY-001). Its own tag,
+ * TOPIC_CATALOG_TAG, deliberately not in CACHE_TAGS: /api/revalidate fires it
+ * only when a city's set of topics changed, so a publish that rewrote two
+ * topics leaves the other topic pages cached.
+ */
+export const TOPIC_CATALOG_TAG = "topic-catalog";
+
+export function topicKey(stateCode: string, citySlug: string, areaSlug: string): string {
+  return `${stateCode.toLowerCase()}/${citySlug}/${areaSlug}`;
+}
+
+/** Uncached: the current topic keys, read by /api/revalidate to compare
+ * against the cached catalog. */
+export async function readTopicKeys(): Promise<string[]> {
+  const rows = await prisma.interestArea.findMany({
+    select: { slug: true, city: { select: { stateCode: true, slug: true } } },
+  });
+  return rows.map((r) => topicKey(r.city.stateCode, r.city.slug, r.slug)).sort();
+}
+
+/** Cached topic keys (an array: unstable_cache JSON round-trips its value). */
+export const getTopicCatalog = unstable_cache(readTopicKeys, ["topic-catalog"], {
+  revalidate: DB_CACHE_REVALIDATE,
+  tags: [TOPIC_CATALOG_TAG],
+});
+
+/** The topic catalog as a Set, or null when empty or unreadable (callers then
+ * query: a broken cache must never turn real pages into 404s). */
+const getTopicCatalogForLookup = cache(async function getTopicCatalogForLookup(): Promise<Set<string> | null> {
+  try {
+    const keys = await getTopicCatalog();
+    return keys.length > 0 ? new Set(keys) : null;
+  } catch (err) {
+    console.error("[cityData] topic catalog lookup failed; falling back to Neon", err);
+    return null;
+  }
+});
+
+/**
+ * A city row with no catalog check, for pages that already know the city
+ * exists (the topic page, after its topic was found). Reading the shared
+ * catalog here would tag the page with `sitemap` (FIX-TOPIC-PURGE-CHANGED-ONLY-001).
+ */
+export const getKnownCity = cache(function getKnownCity(stateCode: string, citySlug: string): Promise<City | null> {
+  if (!isValidStateCode(stateCode) || !isValidSlug(citySlug)) return Promise.resolve(null);
+  return prisma.city.findUnique({ where: { stateCode_slug: { stateCode, slug: citySlug } } });
+});
+
 /** False only when the cached catalog positively says the meeting doesn't exist. */
 export async function mayBeKnownMeeting(meetingSlug: string): Promise<boolean> {
   const catalog = await getCatalogForLookup();
@@ -282,6 +332,31 @@ export function getMeetingSlugsChangedSince(
     where: { city: { stateCode, slug: citySlug }, updatedAt: { gte: since } },
     select: { slug: true },
   });
+}
+
+/**
+ * Topic pages (`/{state}/{city}/topics/{slug}`) that list any of these
+ * meetings (FIX-TOPIC-PURGE-CHANGED-ONLY-001). A topic page shows each
+ * discussed meeting's title, date, slug and video provider, so a change to
+ * one of those meetings changes the page even when the topic itself didn't.
+ * Uncached on purpose: it decides what /api/revalidate purges.
+ */
+export async function getTopicPathsForMeetings(meetingSlugs: string[]): Promise<string[]> {
+  if (meetingSlugs.length === 0) return [];
+  const rows = await prisma.interestAreaMeetingStatus.findMany({
+    where: { discussed: true, meeting: { slug: { in: meetingSlugs } } },
+    select: { interestArea: { select: { slug: true, city: { select: { stateCode: true, slug: true } } } } },
+  });
+  return [
+    ...new Set(
+      rows.map((r) => topicDetailPath(r.interestArea.city.stateCode, r.interestArea.city.slug, r.interestArea.slug)),
+    ),
+  ];
+}
+
+/** Path of one topic detail page. */
+export function topicDetailPath(stateCode: string, citySlug: string, areaSlug: string): string {
+  return `/${stateCode.toLowerCase()}/${citySlug}/topics/${encodeURIComponent(areaSlug)}`;
 }
 
 /**
@@ -403,30 +478,14 @@ export type MeetingCardData = {
   tldrReferences: unknown;
 };
 
-// Same 2-day buffer, same reasoning, as the transcriber repo's own
-// SCHEDULED -> OCCURRED aging sweep (NeonWriter.age_scheduled_meetings_
-// to_occurred): `Meeting.date` stores midnight UTC of the meeting's
-// calendar day (see formatDate.ts), not a real timestamp, so a naive
-// `date >= now` goes false shortly after midnight UTC — up to ~7-8 hours
-// *before* a Pacific-timezone evening meeting even starts — demoting a
-// same-day meeting out of "Upcoming" while it's still hours away. Found
-// live: a 2026-09-02 meeting stopped showing as upcoming and appeared
-// under "Past Meetings" (with its "Upcoming meeting" badge still on,
-// since MeetingCard reads raw status) once the UTC clock ticked past
-// midnight into 2026-09-02, well before that evening's Pacific meeting.
-const UPCOMING_MEETING_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
-
 /**
- * Slugs of a city's genuinely-upcoming meetings, for MeetingFilter's
- * "Upcoming" grouping — the meetings themselves stay in one filterable
- * list (see MeetingFilter) rather than being split into a separate array,
- * so this only needs to say which ones qualify.
+ * Slugs of a city's upcoming meetings, for MeetingFilter's "Upcoming"
+ * grouping: SCHEDULED and the meeting's day hasn't ended in the city's time
+ * zone (see app/lib/upcoming.ts, FIX-UPCOMING-PAST-DAY-001). Status alone
+ * isn't enough: the source data has SCHEDULED rows from 2010.
  *
- * A meeting only counts as upcoming if it's SCHEDULED *and* still within
- * the grace window above: the source data also has SCHEDULED rows with
- * dates over a decade in the past (upstream ingestion bug — nothing in
- * this repo sets that status), so status alone isn't a safe signal
- * either way.
+ * This is the render-time answer; MeetingFilter recomputes it in the browser
+ * because the city page stays cached until the next publish.
  *
  * Lives here rather than inline in the page component so the `Date.now()`
  * call isn't flagged by the react-hooks/purity rule, which treats any
@@ -434,17 +493,10 @@ const UPCOMING_MEETING_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
  */
 export function getUpcomingMeetingSlugs(
   meetings: MeetingCardData[],
+  stateCode: string,
   now: number = Date.now()
 ): Set<string> {
-  return new Set(
-    meetings
-      .filter(
-        (m) =>
-          m.status === "SCHEDULED" &&
-          new Date(m.date).getTime() >= now - UPCOMING_MEETING_GRACE_MS
-      )
-      .map((m) => m.slug)
-  );
+  return upcomingSlugsAsOf(meetings, todayIn(cityTimeZone(stateCode), now));
 }
 
 export async function getMeetingsForCity(
@@ -811,8 +863,12 @@ export const getInterestArea = cache(async function getInterestArea(
     return null;
   }
 
-  const catalog = await getCatalogForLookup();
-  if (catalog && !catalogHasArea(catalog, stateCode, citySlug, areaSlug)) return null;
+  // The topic catalog, not the shared one (FIX-TOPIC-PURGE-CHANGED-ONLY-001):
+  // a page carries the tags of every cached read it makes, and the shared
+  // catalog's `sitemap` tag fires on every /api/revalidate call, which made
+  // every topic page stale after every publish.
+  const topics = await getTopicCatalogForLookup();
+  if (topics && !topics.has(topicKey(stateCode, citySlug, areaSlug))) return null;
 
   const area = await prisma.interestArea.findFirst({
     where: {

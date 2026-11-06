@@ -32,6 +32,8 @@ import { resolveOffsetModel } from "@/app/lib/offset";
 import { buildTitleByUuid, speakerLabel, type RosterMemberRow } from "@/app/lib/roster";
 import { CONTACT_EMAIL } from "@/app/lib/siteUrl";
 import { formatMeetingDate, titleIncludesDate, titleWithDate } from "@/app/lib/formatDate";
+import { scheduledBadgeNow } from "@/app/lib/upcoming";
+import ByMeetingDay from "@/app/components/ByMeetingDay";
 
 /** Types to exclude from the tabbed panel (shown elsewhere or not useful as tabs) */
 const HIDDEN_SUMMARY_TYPES = new Set<string>(["PUBLIC_COMMENT_SUMMARY", "SUMMARY_BLOCK", "TLDR_BLOCK"]);
@@ -429,6 +431,17 @@ export default async function TranscriptPage({ params }: Props) {
     ? resolveOffsetModel(meeting.youtubeOffsetModel, meeting.youtubeOffsetSeconds)
     : null;
 
+  // FIX-UPCOMING-PAST-DAY-001: SCHEDULED copy depends on whether the
+  // meeting's day has passed in the city; ByMeetingDay rechecks in the
+  // browser because this page stays cached until the next publish.
+  const scheduledDayProps = {
+    date: meeting.date.toISOString(),
+    stateCode: meeting.city.stateCode,
+    serverBadge: meeting.status === "SCHEDULED"
+      ? scheduledBadgeNow(meeting.date, meeting.city.stateCode)
+      : null,
+  };
+
   return (
     <main className="min-h-screen p-8">
       {/* Tells the persistent header (SiteHeader) which city this page
@@ -463,9 +476,19 @@ export default async function TranscriptPage({ params }: Props) {
         )}
 
         {meeting.status === "SCHEDULED" && (
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
-            Upcoming meeting
-          </span>
+          <ByMeetingDay
+            {...scheduledDayProps}
+            upcoming={
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
+                Upcoming meeting
+              </span>
+            }
+            pending={
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 whitespace-nowrap">
+                Meeting held — transcript pending
+              </span>
+            }
+          />
         )}
         {meeting.status === "OCCURRED" && (
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 whitespace-nowrap">
@@ -714,10 +737,26 @@ export default async function TranscriptPage({ params }: Props) {
           </div>
         ) : meeting.status === "SCHEDULED" ? (
           <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
-            <p className="text-gray-700 dark:text-gray-300 mb-3">
-              This meeting hasn&apos;t happened yet, so there&apos;s nothing to summarize —
-              once it&apos;s held and transcribed, a summary will appear here.
-            </p>
+            <ByMeetingDay
+              {...scheduledDayProps}
+              upcoming={
+                <p className="text-gray-700 dark:text-gray-300 mb-3">
+                  This meeting hasn&apos;t happened yet, so there&apos;s nothing to summarize —
+                  once it&apos;s held and transcribed, a summary will appear here.
+                </p>
+              }
+              pending={
+                <p className="text-gray-700 dark:text-gray-300 mb-3">
+                  This meeting has been held, but its recording hasn&apos;t been transcribed
+                  yet — a summary will appear here once it is.
+                </p>
+              }
+              old={
+                <p className="text-gray-700 dark:text-gray-300 mb-3">
+                  There&apos;s no transcript or summary for this meeting.
+                </p>
+              }
+            />
             <SubscribeForm
               kind="CITY_UPDATES"
               cityId={meeting.city.id}
