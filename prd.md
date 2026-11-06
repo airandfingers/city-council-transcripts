@@ -48,6 +48,23 @@
 
 ## Active Stories
 
+### FIX-ISR-LAZY-PAYLOADS-001 — Meeting and city pages load bulky content only on demand
+
+**Status:** 🔄 In Progress (2026-11-05) — PR open, for the next batch deploy after the ISR window resets
+
+Covers FIX-TRANSCRIPT-LAZY-LOAD-001, FEAT-TRANSCRIPT-PLAIN-PAGE-001, FIX-MEETING-TABS-LAZY-001 and FIX-CITY-PAGE-RECENT-ONLY-001.
+
+As the operator I want each page view to cost fewer Vercel ISR read units (metered per 8 KB), because on 2026-11-05 the Hobby team had used 936,590 of its 1,000,000 units. A meeting page was ~465 KB, about 300 KB of it the collapsed transcript, sent twice (as HTML and again as React's hydration data). Rendering the text on the server doesn't remove the second copy: Next.js serializes server output into the page data as well. City pages were ~430 KB because they rendered all ~250 meetings and sent them again as MeetingFilter props.
+
+- [x] Transcript: `TranscriptViewer` fetches the turns from the meeting's plain transcript page when the `<details>` opens (reader or citation click), never on page load. A citation that arrives before the turns waits for them, then scrolls (Playwright: `?t=4008` landed at 1:01:15 in the visible box).
+- [x] Plain page `/transcript-text/<slug>`: script-free HTML with the turns as `div.t[data-s][data-e][data-i]`, linked from the meeting page and in the sitemap for published meetings, so search keeps the transcript text.
+- [x] Hidden tabs (Minutes, Agenda, Council Members & Votes) load from `/meeting-tabs/<slug>` (JSON) when opened; all of a page's tabs share one fetch. The page query no longer reads lines, segments or speaker summaries.
+- [x] City page renders upcoming meetings plus the 30 most recent past ones; "Show all", a search, a status filter or the oldest-first sort fetch `/<state>/<city>/all-meetings`.
+- [x] All three new routes are ISR-cached like the pages (`revalidate = false`, generated on first request; local `next start`: MISS then HIT). `/api/revalidate` purges a meeting's three URLs together (`meetingContentPaths`), including on roster changes, and the city list with the city page; the publisher warms whatever it reports. `robots.ts` disallows the two JSON routes; they also send `X-Robots-Tag: noindex`.
+- [x] Local production build: meeting page 465 KB → 92 KB (plain transcript 111 KB, tab data 27 KB, both only when opened); Monterey Park city page 429 KB → 86 KB (full list 90 KB, only when asked).
+- [x] Gates: new `lazy-content-check`; all pass
+- [ ] Live: ISR read units per day fall; plain transcript pages get indexed (Search Console)
+
 ### FIX-GRANICUS-EMBED-SEEK-001 — Timestamps play on Granicus-only meetings
 
 **Status:** 🔄 In Progress (2026-11-05) — PR open
