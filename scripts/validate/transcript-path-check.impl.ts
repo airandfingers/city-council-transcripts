@@ -13,20 +13,32 @@ const cases: Array<{ segments: string[]; slug: string; redirectTo: string | null
     slug: "monterey-park-2026-01-27-city-council-meeting-monday-jan-27-2026",
     redirectTo: null,
   },
-  {
-    segments: ["2026-07-08", "Housing_ Arts"],
-    slug: "2026-07-08/Housing_ Arts",
-    redirectTo: "/transcripts/2026-07-08/Housing_%20Arts",
-  },
+  // What Next 16.4+ passes for the canonical /transcripts/2026-07-08/Housing_%20Arts:
+  // already decoded. Must not redirect, or it loops (FIX-TRANSCRIPT-SLUG-DECODED-PARAMS-001).
+  { segments: ["2026-07-08", "Housing_ Arts"], slug: "2026-07-08/Housing_ Arts", redirectTo: null },
   { segments: ["a%2Fb", "c"], slug: "a/b/c", redirectTo: "/transcripts/a/b/c" },
-  { segments: ["bad%E0%A4%A"], slug: "bad%E0%A4%A", redirectTo: "/transcripts/bad%25E0%25A4%25A" },
+  { segments: ["bad%E0%A4%A"], slug: "bad%E0%A4%A", redirectTo: null },
 ];
+
+const safeDecode = (s: string) => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
 
 for (const c of cases) {
   assert.deepEqual(resolveTranscriptSlug(c.segments), { slug: c.slug, redirectTo: c.redirectTo }, c.segments.join("/"));
   if (c.redirectTo) {
     const target = c.redirectTo.slice("/transcripts/".length).split("/");
     assert.equal(resolveTranscriptSlug(target).redirectTo, null, `redirect target must be canonical: ${c.redirectTo}`);
+    // ...and still canonical when Next hands the segments over decoded.
+    assert.equal(
+      resolveTranscriptSlug(target.map(safeDecode)).redirectTo,
+      null,
+      `redirect target must not loop once decoded: ${c.redirectTo}`,
+    );
   }
 }
 
