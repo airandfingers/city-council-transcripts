@@ -45,7 +45,10 @@ const SEO_TOOL_CRAWLERS = [
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      { userAgent: "*", allow: "/" },
+      // JSON the pages fetch on demand (FIX-MEETING-TABS-LAZY-001,
+      // FIX-CITY-PAGE-RECENT-ONLY-001): nothing for search, and every fetch
+      // is an ISR read. The plain transcript pages stay crawlable.
+      { userAgent: "*", allow: "/", disallow: ["/meeting-tabs/", "/*/*/all-meetings"] },
       ...[...AI_CRAWLERS, ...SEO_TOOL_CRAWLERS].map((userAgent) => ({ userAgent, disallow: "/" })),
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

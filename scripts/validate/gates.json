@@ -62,6 +62,11 @@
       "command": "node scripts/validate/meeting-day-check.mjs"
     },
     {
+      "id": "lazy-content-check",
+      "description": "The plain transcript page escapes text and carries the turn attributes the viewer parses; a meeting's page, plain transcript and tab data purge together; the city page keeps upcoming plus the most recent past meetings",
+      "command": "node scripts/validate/lazy-content-check.mjs"
+    },
+    {
       "id": "encoded-path-check",
       "description": "Percent-encoded unreserved characters (%2D, %5F, \u2026) redirect to the canonical cached URL; canonical paths, including legitimately encoded ones, never redirect",
       "command": "node scripts/validate/encoded-path-check.mjs"

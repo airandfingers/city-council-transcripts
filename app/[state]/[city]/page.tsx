@@ -5,6 +5,7 @@ import {
   getMeetingsForCity,
   getLatestMeetingSummary,
   getUpcomingMeetingSlugs,
+  initialCityMeetings,
   getInterestAreaSummariesForCity,
 } from "@/app/lib/cityData";
 import Link from "next/link";
@@ -14,7 +15,7 @@ import SubscribeForm from "@/app/components/SubscribeForm";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import { formatMeetingDate } from "@/app/lib/formatDate";
 import { annotateTextPlain } from "@/app/lib/citations";
-import { transcriptPath } from "@/app/lib/transcriptPath";
+import { cityMeetingsPath, transcriptPath } from "@/app/lib/transcriptPath";
 
 // Cache indefinitely; invalidated on demand by POST /api/revalidate on
 // every meeting publish for this city (see app/transcripts/[...slug]/
@@ -174,8 +175,12 @@ export default async function CityPage({ params }: Props) {
             MeetingFilter reads `q` from the URL in a small child of its
             own, so the cached HTML holds the list once and works without
             JS (FIX-CITY-PAGE-PAYLOAD-001). */}
+        {/* Only upcoming + the most recent past meetings are in the page;
+            the rest load on demand (FIX-CITY-PAGE-RECENT-ONLY-001). */}
         <MeetingFilter
-          meetings={meetings}
+          meetings={initialCityMeetings(meetings, upcomingSlugs)}
+          totalCount={meetings.length}
+          allMeetingsUrl={cityMeetingsPath(state, citySlug)}
           upcomingSlugs={upcomingSlugs}
           stateCode={state}
           citySlug={citySlug}

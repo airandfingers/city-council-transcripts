@@ -40,12 +40,19 @@ type StatusFilter = "all" | "published" | "upcoming" | "pending";
 const DEBOUNCE_MS = 300;
 
 export default function MeetingFilter({
-  meetings,
+  meetings: initialMeetings,
+  totalCount,
+  allMeetingsUrl,
   upcomingSlugs: serverUpcomingSlugs,
   stateCode,
   citySlug,
 }: {
+  /** Upcoming plus the most recent past meetings; the rest load from
+   * `allMeetingsUrl` on demand (FIX-CITY-PAGE-RECENT-ONLY-001). */
   meetings: MeetingCardData[];
+  /** How many meetings the city has in all. */
+  totalCount: number;
+  allMeetingsUrl: string;
   upcomingSlugs: Set<string>;
   /** Needed to call the search server action for the right city — see
    * FEAT-SEARCH-SERVERSIDE-SURFACE-001. */
@@ -54,6 +61,33 @@ export default function MeetingFilter({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+
+  // The full list, once fetched. Searching, filtering, the oldest-first sort
+  // and "Show all" need every meeting; the page holds only the recent ones.
+  const [allMeetings, setAllMeetings] = useState<MeetingCardData[] | null>(null);
+  const [allState, setAllState] = useState<"idle" | "loading" | "error">("idle");
+  const allRequested = useRef(false);
+  const hasMore = totalCount > initialMeetings.length;
+  const loadAll = useCallback(() => {
+    if (!hasMore || allRequested.current) return;
+    allRequested.current = true;
+    setAllState("loading");
+    fetch(allMeetingsUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<MeetingCardData[]>;
+      })
+      .then((rows) => {
+        // JSON dates are strings; MeetingCard formats real Dates.
+        setAllMeetings(rows.map((m) => ({ ...m, date: new Date(m.date) })));
+        setAllState("idle");
+      })
+      .catch(() => {
+        allRequested.current = false;
+        setAllState("error");
+      });
+  }, [hasMore, allMeetingsUrl]);
+  const meetings = allMeetings ?? initialMeetings;
 
   // The page is cached until the next publish, so the server's Upcoming set
   // was right only when it rendered. After hydration, recompute it from
@@ -106,6 +140,11 @@ export default function MeetingFilter({
     const id = setTimeout(() => setDebouncedQuery(query), DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [query]);
+
+  // Anything beyond the default view needs the full list.
+  useEffect(() => {
+    if (sortOrder !== "newest" || statusFilter !== "all" || debouncedQuery.trim()) loadAll();
+  }, [sortOrder, statusFilter, debouncedQuery, loadAll]);
 
   // AC-4: keep the URL in sync with the debounced query so a search is
   // linkable/shareable. `replace` (not `push`) so typing doesn't spam
@@ -354,6 +393,31 @@ export default function MeetingFilter({
               summarySnippet={searchResults.get(meeting.slug)?.summarySnippet ?? null}
             />
           ))}
+        </div>
+      )}
+      {hasMore && !allMeetings && (
+        <div className="mt-6 max-w-3xl">
+          {allState === "error" ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400" role="status">
+              Older meetings didn&rsquo;t load.{" "}
+              <button
+                type="button"
+                onClick={loadAll}
+                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Try again
+              </button>
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={loadAll}
+              disabled={allState === "loading"}
+              className="text-sm font-medium text-blue-600 dark:text-blue-400 disabled:text-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 rounded"
+            >
+              {allState === "loading" ? "Loading meetings…" : `Show all ${totalCount} meetings`}
+            </button>
+          )}
         </div>
       )}
     </div>

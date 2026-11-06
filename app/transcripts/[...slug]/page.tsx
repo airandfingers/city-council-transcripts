@@ -4,7 +4,7 @@ import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import prisma from "@/app/lib/prisma";
 import { getCitiesForNav, isKnownMeeting, recoverMeetingLink } from "@/app/lib/cityData";
-import { resolveTranscriptSlug, transcriptPath } from "@/app/lib/transcriptPath";
+import { meetingTabsPath, resolveTranscriptSlug, transcriptPath, transcriptTextPath } from "@/app/lib/transcriptPath";
 import type { MeetingUpcomingContent } from "@/app/lib/alerts";
 import TopicsPanel from "@/app/components/TopicsPanel";
 import type { Topic, Bullet } from "@/app/components/TopicsPanel";
@@ -16,8 +16,7 @@ import MomentCard from "@/app/components/MomentCard";
 import LinkRecovery from "@/app/components/LinkRecovery";
 import TranscriptViewer from "@/app/components/TranscriptViewer";
 import EditableTitle from "@/app/components/EditableTitle";
-import SegmentsPanel from "@/app/components/SegmentsPanel";
-import SpeakerSummariesPanel from "@/app/components/SpeakerSummariesPanel";
+import LazyMeetingTab from "@/app/components/LazyMeetingTab";
 import AIDisclaimer from "@/app/components/AIDisclaimer";
 import TimestampLink from "@/app/components/TimestampLink";
 import AnnotatedText from "@/app/components/AnnotatedText";
@@ -26,10 +25,8 @@ import RegisterCurrentCity from "@/app/components/RegisterCurrentCity";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
 import GlossaryTerm from "@/app/components/GlossaryTerm";
-import { displayName, type GroupedLine } from "@/app/lib/transcript";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
-import { buildTitleByUuid, speakerLabel, type RosterMemberRow } from "@/app/lib/roster";
 import { CONTACT_EMAIL } from "@/app/lib/siteUrl";
 import { formatMeetingDate, titleIncludesDate, titleWithDate } from "@/app/lib/formatDate";
 import { scheduledBadgeNow } from "@/app/lib/upcoming";
@@ -128,18 +125,11 @@ const getMeeting = cache(async (slug: string) => {
       // here — dropping them avoids re-shipping city-wide prose on every
       // transcript-page hit.
       city: { select: { id: true, stateCode: true, slug: true, name: true, stateName: true } },
-      lines: {
-        orderBy: { lineIndex: "asc" },
-        select: {
-          id: true,
-          speaker: true,
-          speakerName: true,
-          globalSpeakerUuid: true,
-          startTime: true,
-          endTime: true,
-          text: true,
-        },
-      },
+      // Transcript lines, segments and speaker summaries aren't read here:
+      // the transcript and the hidden tabs load on demand from their own
+      // cached URLs (FIX-TRANSCRIPT-LAZY-LOAD-001, FIX-MEETING-TABS-LAZY-001).
+      // The counts decide which tabs to show.
+      _count: { select: { segments: true, speakerSummaries: true } },
       // linkStatus/confidence/endTimeSeconds/segmentIndex/segmentIndexEnd/
       // meetingId are internal generation/linking metadata never rendered
       // (see the render loop below and AnnotatedText's title reference).
@@ -169,27 +159,6 @@ const getMeeting = cache(async (slug: string) => {
           associatedAgendaItem: true,
         },
       },
-      // discrepancies/sourcesUsed/source*Available/provider/model/
-      // generatedAt are internal generation metadata never rendered.
-      segments: {
-        orderBy: { sortOrder: "asc" },
-        select: {
-          id: true,
-          itemNumber: true,
-          title: true,
-          startTime: true,
-          endTime: true,
-          durationSeconds: true,
-          skip: true,
-          skipReason: true,
-          discussionSummary: true,
-          officialAction: true,
-          tags: true,
-          speakerPositions: true,
-          keyQuotes: true,
-          publicComments: true,
-        },
-      },
       // topicId/endTime/speakerPositions/tags/provider/model/generatedAt
       // are unused by the TL;DR summary cards below.
       topicSummaries: {
@@ -213,20 +182,6 @@ const getMeeting = cache(async (slug: string) => {
           startTimeSeconds: true,
           endTimeSeconds: true,
           interestArea: { select: { slug: true, name: true } },
-        },
-      },
-      // segmentCount/provider/model/generatedAt are unused by the panel.
-      speakerSummaries: {
-        orderBy: { sortOrder: "asc" },
-        select: {
-          id: true,
-          speakerUuid: true,
-          speakerName: true,
-          speakingTime: true,
-          summaryText: true,
-          keyQuotes: true,
-          actionsOrMotions: true,
-          positionsByTopic: true,
         },
       },
       // revision/scrapedAt only drive the latest-revision-per-item
@@ -263,23 +218,6 @@ export default async function TranscriptPage({ params }: Props) {
     notFound();
   }
 
-  // Roster titles as of this meeting's date (e.g. "Mayor Jane Doe" rather
-  // than always showing the speaker's current title). See app/lib/roster.ts.
-  const rosterMembers = await prisma.rosterMember.findMany({
-    where: { cityId: meeting.cityId },
-    select: { globalSpeakerUuid: true, name: true, titles: true },
-  });
-  const titleByUuid: Record<string, string> = Object.fromEntries(
-    buildTitleByUuid(
-      rosterMembers.map((m) => ({
-        globalSpeakerUuid: m.globalSpeakerUuid,
-        name: m.name,
-        titles: m.titles as RosterMemberRow["titles"],
-      })),
-      meeting.date,
-    ),
-  );
-
   // Pre-meeting agenda content (see AgendaItemVersion — populated by the
   // transcriber's upcoming-meeting scraper before a transcript exists).
   // Keep only the latest revision per item; superseded once real
@@ -294,7 +232,7 @@ export default async function TranscriptPage({ params }: Props) {
     }
     return items.sort((a, b) => a.sourceItemId.localeCompare(b.sourceItemId));
   })();
-  const showPreMeetingAgenda = meeting.segments.length === 0 && latestAgendaItems.length > 0;
+  const showPreMeetingAgenda = meeting._count.segments === 0 && latestAgendaItems.length > 0;
 
   // Pre-meeting, agenda-based TL;DR/summary (bite/snack/meal tiers). Already
   // generated for the subscriber alert email by the transcriber's
@@ -327,28 +265,6 @@ export default async function TranscriptPage({ params }: Props) {
     // "hasn't happened yet" copy, so it's treated the same as no alert.
     return content.agendaAvailable ? content : null;
   })();
-
-  // Group consecutive lines by the same speaker.
-  // Use a double newline as separator when there is a gap of 2.5 s+.
-  const groupedLines = meeting.lines.reduce<GroupedLine[]>((groups, line) => {
-    const prev = groups[groups.length - 1];
-    if (prev && (prev.speakerName ?? prev.speaker) === (line.speakerName ?? line.speaker)) {
-      const gap = line.startTime - prev.endTime;
-      prev.text += (gap >= 2.5 ? "\n\n" : " ") + line.text;
-      prev.endTime = line.endTime;
-    } else {
-      groups.push({
-        speaker: line.speaker,
-        speakerName: line.speakerName,
-        globalSpeakerUuid: line.globalSpeakerUuid,
-        startTime: line.startTime,
-        endTime: line.endTime,
-        text: line.text,
-        firstId: line.id,
-      });
-    }
-    return groups;
-  }, []);
 
   // Build topics from summary items, grouped by type
   const topicMap = new Map<string, Bullet[]>();
@@ -434,6 +350,8 @@ export default async function TranscriptPage({ params }: Props) {
   // FIX-UPCOMING-PAST-DAY-001: SCHEDULED copy depends on whether the
   // meeting's day has passed in the city; ByMeetingDay rechecks in the
   // browser because this page stays cached until the next publish.
+  const tabsUrl = meetingTabsPath(meeting.slug);
+
   const scheduledDayProps = {
     date: meeting.date.toISOString(),
     stateCode: meeting.city.stateCode,
@@ -847,20 +765,21 @@ export default async function TranscriptPage({ params }: Props) {
               Documents &amp; <GlossaryTerm id="minutes" />
             </h2>
             <DocumentsPanel
-              minutesText={meeting.minutesText}
+              minutes={
+                meeting.minutesText ? (
+                  <LazyMeetingTab url={tabsUrl} kind="minutes" minutesUrl={meeting.minutesUrl} />
+                ) : null
+              }
               minutesUrl={meeting.minutesUrl}
               documents={meeting.documents}
               sourceUrl={meeting.sourceUrl}
               extraTabs={[
-                ...(meeting.segments.length > 0
+                ...(meeting._count.segments > 0
                   ? [
                       {
                         label: "Agenda",
                         content: (
-                          <SegmentsPanel
-                            segments={meeting.segments}
-                            offsetModel={offsetModel}
-                          />
+                          <LazyMeetingTab url={tabsUrl} kind="agenda" offsetModel={offsetModel} />
                         ),
                       },
                     ]
@@ -874,17 +793,14 @@ export default async function TranscriptPage({ params }: Props) {
                         },
                       ]
                     : []),
-                ...(meeting.speakerSummaries.length > 0
+                ...(meeting._count.speakerSummaries > 0
                   ? [
                       {
                         label: "Council Members & Votes",
                         description:
                           "Who spoke, what they proposed or voted on, and where they stood on each topic.",
                         content: (
-                          <SpeakerSummariesPanel
-                            speakers={meeting.speakerSummaries}
-                            titleByUuid={titleByUuid}
-                          />
+                          <LazyMeetingTab url={tabsUrl} kind="speakers" />
                         ),
                       },
                     ]
@@ -911,17 +827,13 @@ export default async function TranscriptPage({ params }: Props) {
               <UnreviewedTranscriptNotice meetingId={meeting.id} />
             )}
           </summary>
+          <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+            <a href={transcriptTextPath(meeting.slug)} className="text-blue-600 dark:text-blue-400 hover:underline">
+              Read the transcript as a plain page
+            </a>
+          </p>
           <TranscriptViewer
-            groupedLines={groupedLines.map((group) => ({
-              label: speakerLabel(
-                displayName(group.speakerName, group.speaker),
-                group.globalSpeakerUuid ? (titleByUuid[group.globalSpeakerUuid] ?? null) : null,
-              ),
-              startTime: group.startTime,
-              endTime: group.endTime,
-              text: group.text,
-              firstId: group.firstId,
-            }))}
+            textUrl={transcriptTextPath(meeting.slug)}
             offsetModel={offsetModel}
           />
         </details>

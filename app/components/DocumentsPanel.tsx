@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import TabbedPanel, { type Tab } from "./TabbedPanel";
 
 type DocumentItem = {
@@ -8,14 +9,17 @@ type DocumentItem = {
   associatedAgendaItem: string | null;
 };
 
+/** `minutes` is the Minutes tab's content when the meeting has minutes text,
+ * else null. The page passes a LazyMeetingTab, so the text loads only when
+ * the tab is opened (FIX-MEETING-TABS-LAZY-001). */
 export default function DocumentsPanel({
-  minutesText,
+  minutes,
   minutesUrl,
   documents,
   sourceUrl,
   extraTabs,
 }: {
-  minutesText: string | null;
+  minutes: ReactNode | null;
   minutesUrl: string | null;
   documents: DocumentItem[];
   sourceUrl?: string | null;
@@ -75,22 +79,8 @@ export default function DocumentsPanel({
 
   tabs.push({
     label: "Minutes",
-    content: minutesText ? (
-      <div>
-        <div className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 text-sm leading-relaxed max-h-96 overflow-y-auto">
-          {minutesText}
-        </div>
-        {minutesUrl && (
-          <a
-            href={minutesUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            View full minutes ↗
-          </a>
-        )}
-      </div>
+    content: minutes ? (
+      minutes
     ) : (
       <p className="text-gray-500 dark:text-gray-400">
         No minutes are available for this meeting yet.

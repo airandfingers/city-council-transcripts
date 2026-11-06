@@ -5,6 +5,9 @@ import { useRouter, usePathname } from "next/navigation";
 import { useVideoSync } from "./VideoSyncProvider";
 import { formatTimestamp, type TranscriptTurn } from "@/app/lib/transcript";
 import { applyOffset, type OffsetModel } from "@/app/lib/offset";
+import { parseTranscriptTextPage } from "@/app/lib/transcriptText";
+
+type LoadState = "idle" | "loaded" | "error";
 
 /**
  * Client component that renders grouped transcript lines with:
@@ -13,17 +16,64 @@ import { applyOffset, type OffsetModel } from "@/app/lib/offset";
  *   inside tall cards and line-height–snapped discrete steps.
  * - An "Auto Scroll" checkbox that disables on user scroll and
  *   re-syncs immediately when re-enabled.
+ *
+ * The turns aren't in the meeting page: they're fetched from the meeting's
+ * plain transcript page (`textUrl`) the first time the surrounding
+ * <details> opens, by the reader or by a citation click
+ * (FIX-TRANSCRIPT-LAZY-LOAD-001). Each fetch is a metered ISR read, so it
+ * never happens on page load or for readers who don't open the transcript.
  */
 export default function TranscriptViewer({
-  groupedLines,
+  textUrl,
   offsetModel = null,
 }: {
-  groupedLines: TranscriptTurn[];
+  textUrl: string;
   offsetModel?: OffsetModel | null;
 }) {
   const { currentTime, seekTo, scrollRequest, requestDock } = useVideoSync();
   const router = useRouter();
   const pathname = usePathname();
+
+  const [groupedLines, setGroupedLines] = useState<TranscriptTurn[]>([]);
+  const [loadState, setLoadState] = useState<LoadState>("idle");
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // A ref, not loadState, guards against a second fetch: the toggle event
+  // and a citation click can both ask before React re-renders.
+  const fetchStarted = useRef(false);
+  const load = useCallback(() => {
+    if (fetchStarted.current) return;
+    fetchStarted.current = true;
+    // loadState stays "idle" (shown as loading) until the fetch settles.
+    fetch(textUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
+      .then((html) => {
+        setGroupedLines(parseTranscriptTextPage(html));
+        setLoadState("loaded");
+      })
+      .catch(() => {
+        fetchStarted.current = false;
+        setLoadState("error");
+      });
+  }, [textUrl]);
+
+  // Load when the enclosing <details> opens (or is already open).
+  useEffect(() => {
+    const details = sectionRef.current?.closest("details");
+    if (!details) {
+      load();
+      return;
+    }
+    if (details.open) load();
+    const onToggle = () => {
+      if (details.open) load();
+    };
+    details.addEventListener("toggle", onToggle);
+    return () => details.removeEventListener("toggle", onToggle);
+  }, [load]);
 
   // Map a reference (transcript / granicus) timestamp to target (youtube)
   // time. Returns null when the ref time falls inside an unmapped gap; in
@@ -178,6 +228,10 @@ export default function TranscriptViewer({
   const handledScrollNonce = useRef<number | null>(null);
   useEffect(() => {
     if (!scrollRequest || handledScrollNonce.current === scrollRequest.nonce) return;
+    // A citation click opens the transcript and asks for the scroll in the
+    // same moment, before the turns have loaded. Leave the request pending
+    // until they arrive; this effect re-runs when groupedLines changes.
+    if (groupedLines.length === 0) return;
     handledScrollNonce.current = scrollRequest.nonce;
     const { seconds } = scrollRequest;
 
@@ -255,7 +309,7 @@ export default function TranscriptViewer({
   // Render
   // ---------------------------------------------------------------
   return (
-    <section className="flex flex-col max-h-[750px] min-h-0">
+    <section ref={sectionRef} className="flex flex-col max-h-[750px] min-h-0">
       {/* Auto-scroll toggle, left-aligned above the transcript content. */}
       <div className="mb-4 shrink-0">
         <label className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 select-none">
@@ -271,7 +325,30 @@ export default function TranscriptViewer({
 
       {/* Scrollable transcript body */}
       <div ref={containerRef} className="overflow-y-auto space-y-3 pr-2">
-        {groupedLines.length === 0 ? (
+        {loadState === "idle" ? (
+          <p className="text-gray-600 dark:text-gray-400" role="status">
+            Loading transcript…
+          </p>
+        ) : loadState === "error" ? (
+          <p className="text-gray-600 dark:text-gray-400" role="status">
+            The transcript didn&rsquo;t load.{" "}
+            <a href={textUrl} className="text-blue-600 dark:text-blue-400 hover:underline">
+              Open it as a plain page
+            </a>{" "}
+            or{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setLoadState("idle");
+                load();
+              }}
+              className="text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              try again
+            </button>
+            .
+          </p>
+        ) : groupedLines.length === 0 ? (
           <p className="text-gray-600 dark:text-gray-400">
             No transcript lines are available for this meeting yet.
           </p>
