@@ -14,6 +14,7 @@ import {
   topicDetailPath,
   TOPIC_CATALOG_TAG,
 } from "@/app/lib/cityData";
+import { cityMeetingsPath, meetingContentPaths } from "@/app/lib/transcriptPath";
 
 /**
  * POST /api/revalidate
@@ -116,39 +117,37 @@ function revalidateDataCacheTags(): string[] {
 const DEFAULT_CHANGED_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const MAX_CHANGED_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 
-function transcriptPathFor(meetingSlug: string): string {
-  return `/transcripts/${meetingSlug.split("/").map(encodeURIComponent).join("/")}`;
-}
-
-/** Refreshes one meeting's transcript page and its existence check. Expired
+/** Refreshes one meeting's cached URLs (its page, plain transcript page and
+ * hidden-tab data, see meetingContentPaths) and its existence check. Expired
  * immediately, not stale-while-revalidate: a cached "doesn't exist" served
  * once more would 404 a meeting that was just created. */
-function revalidateMeeting(meetingSlug: string): string {
-  const path = transcriptPathFor(meetingSlug);
-  revalidatePath(path);
+function revalidateMeeting(meetingSlug: string): string[] {
+  const paths = meetingContentPaths(meetingSlug);
+  for (const path of paths) revalidatePath(path);
   revalidateTag(meetingTag(meetingSlug), { expire: 0 });
-  return path;
+  return paths;
 }
 
 async function revalidateChangedMeetings(
   stateCode: string,
   slug: string,
   changedSince: string | undefined,
-): Promise<Array<{ slug: string; path: string }>> {
+): Promise<Array<{ slug: string; paths: string[] }>> {
   const now = Date.now();
   const requested = changedSince ? new Date(changedSince).getTime() : now - DEFAULT_CHANGED_LOOKBACK_MS;
   const since = new Date(Math.min(now, Math.max(requested, now - MAX_CHANGED_LOOKBACK_MS)));
   const meetings = await getMeetingSlugsChangedSince(stateCode, slug, since);
-  return meetings.map((m) => ({ slug: m.slug, path: revalidateMeeting(m.slug) }));
+  return meetings.map((m) => ({ slug: m.slug, paths: revalidateMeeting(m.slug) }));
 }
 
 /** Route pattern (not a URL) for every interest-area detail page. */
 const TOPIC_DETAIL_ROUTE = "/[state]/[city]/topics/[slug]";
 
-/** The city page and its topics listing. */
+/** The city page, its full meeting list (FIX-CITY-PAGE-RECENT-ONLY-001) and
+ * its topics listing. */
 function revalidateCityPaths(stateCode: string, slug: string): string[] {
   const cityPath = `/${stateCode}/${slug}`;
-  const paths = [cityPath, `${cityPath}/topics`];
+  const paths = [cityPath, cityMeetingsPath(stateCode, slug), `${cityPath}/topics`];
   for (const path of paths) revalidatePath(path);
   return paths;
 }
@@ -190,8 +189,10 @@ async function revalidateCityTranscriptPaths(
   stateCode: string,
   slug: string,
 ): Promise<string[]> {
+  // Roster titles show in the transcript turns and the Council Members tab
+  // too, so every cached URL of each meeting goes.
   const meetings = await getMeetingSlugsForCity(stateCode, slug);
-  const paths = meetings.map((m) => transcriptPathFor(m.slug));
+  const paths = meetings.flatMap((m) => meetingContentPaths(m.slug));
   for (const path of paths) revalidatePath(path);
   return paths;
 }
@@ -232,7 +233,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
     }
 
-    const meetingPath = revalidateMeeting(meeting.slug);
+    const meetingPaths = revalidateMeeting(meeting.slug);
     const cityPaths = revalidateCityPaths(meeting.city.stateCode, meeting.city.slug);
     // Topic statuses are written by the per-city call, not this one; only the
     // topics listing this meeting show anything it changed.
@@ -241,7 +242,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      revalidated: [meetingPath, ...cityPaths, ...topicPaths],
+      revalidated: [...meetingPaths, ...cityPaths, ...topicPaths],
       tags,
     });
   }
@@ -275,7 +276,7 @@ export async function POST(req: Request) {
 
   const cityPaths = revalidateCityPaths(stateCode, city_slug);
   const changed = await revalidateChangedMeetings(stateCode, city_slug, changed_since);
-  const changedPaths = changed.map((m) => m.path);
+  const changedPaths = changed.flatMap((m) => m.paths);
   const topicSetChanged = await refreshTopicCatalogIfChanged();
   const topicPaths = revalidateTopicPaths(
     topic_slugs === undefined || topicSetChanged
@@ -296,7 +297,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     revalidated: [...cityPaths, ...topicPaths, ...new Set([...changedPaths, ...transcriptPaths])],
-    changed_meetings: changedPaths.length,
+    changed_meetings: changed.length,
     topics_purged: topic_slugs === undefined ? "all" : topicPaths.length,
     transcripts_purged: include_transcripts !== false,
     tags,

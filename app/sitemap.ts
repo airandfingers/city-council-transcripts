@@ -61,6 +61,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         lastModified: meeting.updatedAt,
         changeFrequency: "yearly",
       });
+      if (meeting.hasTranscript) {
+        entries.push({
+          url: `${SITE_URL}/transcript-text/${slugPath}`,
+          lastModified: meeting.updatedAt,
+          changeFrequency: "yearly",
+        });
+      }
     }
 
     for (const areaSlug of city.areaSlugs) {

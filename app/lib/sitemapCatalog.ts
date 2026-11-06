@@ -17,7 +17,7 @@ export type SitemapCityEntry = {
   slug: string;
   /** Newest first, in the order the caller supplied them. `updatedAt` is
    * the sitemap's `lastmod` (FIX-CRAWLER-BUDGET-001). */
-  meetings: { slug: string; date: string; updatedAt: string }[];
+  meetings: { slug: string; date: string; updatedAt: string; hasTranscript?: true }[];
   areaSlugs: string[];
 };
 
@@ -25,7 +25,7 @@ type CityKey = { stateCode: string; slug: string };
 
 export function groupSitemapCatalog(
   cities: CityKey[],
-  meetings: Array<{ slug: string; date: Date; updatedAt: Date; city: CityKey }>,
+  meetings: Array<{ slug: string; date: Date; updatedAt: Date; status?: string; city: CityKey }>,
   areas: Array<{ slug: string; city: CityKey }>,
 ): SitemapCityEntry[] {
   const key = (c: CityKey) => `${c.stateCode}/${c.slug}`;
@@ -38,6 +38,9 @@ export function groupSitemapCatalog(
       slug: m.slug,
       date: m.date.toISOString(),
       updatedAt: m.updatedAt.toISOString(),
+      // Published meetings get a plain transcript page in the sitemap
+      // (FEAT-TRANSCRIPT-PLAIN-PAGE-001); others have no transcript yet.
+      ...(m.status === "PUBLISHED" ? { hasTranscript: true as const } : {}),
     });
   }
   for (const a of areas) {

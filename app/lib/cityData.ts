@@ -162,7 +162,7 @@ export const getSitemapCatalog = unstable_cache(
       }),
       prisma.meeting.findMany({
         orderBy: [{ date: "desc" }, { id: "desc" }],
-        select: { slug: true, date: true, updatedAt: true, city: cityRef },
+        select: { slug: true, date: true, updatedAt: true, status: true, city: cityRef },
       }),
       prisma.interestArea.findMany({ select: { slug: true, city: cityRef } }),
     ]);
@@ -497,6 +497,23 @@ export function getUpcomingMeetingSlugs(
   now: number = Date.now()
 ): Set<string> {
   return upcomingSlugsAsOf(meetings, todayIn(cityTimeZone(stateCode), now));
+}
+
+/** How many past meetings the city page renders (FIX-CITY-PAGE-RECENT-ONLY-001).
+ * Rendering all ~250 made the page ~430 KB per view, all metered as ISR
+ * reads; the rest load from cityMeetingsPath() when a reader asks. */
+export const CITY_PAGE_INITIAL_MEETINGS = 30;
+
+/** The meetings the city page renders: every upcoming one (MeetingFilter
+ * groups and collapses them itself) plus the most recent past ones.
+ * `meetings` must be newest first, as getMeetingsForCity returns them. */
+export function initialCityMeetings(
+  meetings: MeetingCardData[],
+  upcomingSlugs: Set<string>,
+  pastLimit: number = CITY_PAGE_INITIAL_MEETINGS,
+): MeetingCardData[] {
+  let past = 0;
+  return meetings.filter((m) => upcomingSlugs.has(m.slug) || past++ < pastLimit);
 }
 
 export async function getMeetingsForCity(
