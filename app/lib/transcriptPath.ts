@@ -23,6 +23,14 @@ function safeDecode(segment: string): string {
  * them separately; catching them needs the raw path in `proxy.ts`, which runs on
  * every request, so it waits on evidence that such traffic matters
  * (FIX-NEON-TAG-ONLY-CACHES-001).
+ *
+ * Since Next 16.4 (#112, merged 2026-11-02) `params` arrive already decoded:
+ * the canonical `/transcripts/2026-04-01/City%20Council` gives
+ * `["2026-04-01", "City Council"]`. Comparing that to the encoded canonical
+ * path redirected every slug with a space to itself, an endless 308 loop on
+ * 44 meetings (FIX-TRANSCRIPT-SLUG-DECODED-PARAMS-001). So segments that are
+ * already the decoded slug count as canonical too; only segments that still
+ * decode to something else (an encoded `/`) redirect.
  */
 export function resolveTranscriptSlug(segments: string[]): {
   slug: string;
@@ -30,6 +38,7 @@ export function resolveTranscriptSlug(segments: string[]): {
 } {
   const slug = segments.map(safeDecode).join("/");
   const canonical = transcriptPath(slug);
-  const requested = `/transcripts/${segments.join("/")}`;
-  return { slug, redirectTo: requested === canonical ? null : canonical };
+  const raw = segments.join("/");
+  const isCanonical = raw === slug || `/transcripts/${raw}` === canonical;
+  return { slug, redirectTo: isCanonical ? null : canonical };
 }

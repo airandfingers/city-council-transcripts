@@ -48,6 +48,17 @@
 
 ## Active Stories
 
+### FIX-TRANSCRIPT-SLUG-DECODED-PARAMS-001 — Meeting pages with a space in the slug stopped loading
+
+**Status:** 🔄 In Progress (2026-11-05) — PR open; merge alone (site broken)
+
+Since the Next 16.4.4 bump (#112, merged 2026-11-02) route `params` arrive decoded. `resolveTranscriptSlug` compared them with the encoded canonical path, so every slug with a space (44 of 479 meetings, all `%20`) redirected to itself: an endless 308 loop, for visitors and crawlers alike.
+
+- [x] Segments that already equal the decoded slug count as canonical; only ones that still decode further (an encoded `/`) redirect
+- [x] `transcript-path-check`: the decoded form of the canonical path doesn't redirect, and no redirect target loops once decoded
+- [x] Local production build: the Apr 1, 2026 Monterey Park meeting returns 200 (was 308 to itself, live)
+- [ ] Live: the 44 `%20` URLs in the sitemap return 200
+
 ### FIX-GRANICUS-EMBED-SEEK-001 — Timestamps play on Granicus-only meetings
 
 **Status:** 🔄 In Progress (2026-11-05) — PR open
