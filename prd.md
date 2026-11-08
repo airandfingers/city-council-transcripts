@@ -48,6 +48,22 @@
 
 ## Active Stories
 
+### FIX-RETIRED-MEETING-REDIRECTS-001 — Merged Montebello meetings redirect to the meeting that replaced them
+
+**Status:** 🔄 In Progress (2026-11-08)
+
+**As a** visitor following an upcoming-meeting email link
+**I want** a merged meeting's old URL to take me to the meeting page that replaced it
+**So that** the link doesn't 404 after the duplicate is removed
+
+**Origin:** transcriber FIX-MONTEBELLO-AGENDA-VIDEO-DUP-001. Montebello's agenda stub and its YouTube recording were published as two meetings for Sep 9, Sep 23, Oct 14, Oct 28 and Nov 6. The transcriber merges each agenda into the recording's meeting and deletes the agenda-only row; this must deploy first.
+
+**Acceptance Criteria:**
+- [x] `app/lib/retiredMeetings.ts`: static map of the 5 retired slugs; `proxy.ts` 308s `/transcripts/`, `/transcript-text/` and `/meeting-tabs/` for them (no DB read)
+- [x] `transcript-path-check`: every retired slug redirects on all 3 routes, targets don't redirect again, other paths untouched
+- [x] Meeting page hides the Transcript section unless the meeting is PUBLISHED (follow-up to FIX-ISR-LAZY-PAYLOADS-001: agenda-only pages showed a link to an empty plain transcript)
+- [ ] Deployed, then the transcriber cleanup runs; old URLs 308 to the kept pages in prod
+
 ### FIX-TRANSCRIPT-SLUG-DECODED-PARAMS-001 — Meeting pages with a space in the slug stopped loading
 
 **Status:** 🔄 In Progress (2026-11-05) — PR open; merge alone (site broken)
