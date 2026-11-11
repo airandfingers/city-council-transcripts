@@ -62,6 +62,7 @@
 - [x] `app/lib/retiredMeetings.ts`: static map of the 5 retired slugs; `proxy.ts` 308s `/transcripts/`, `/transcript-text/` and `/meeting-tabs/` for them (no DB read)
 - [x] `transcript-path-check`: every retired slug redirects on all 3 routes, targets don't redirect again, other paths untouched
 - [x] Meeting page hides the Transcript section unless the meeting is PUBLISHED (follow-up to FIX-ISR-LAZY-PAYLOADS-001: agenda-only pages showed a link to an empty plain transcript)
+- [x] Two Seattle duplicates added (2026-11-11, transcriber FIX-SEATTLE-AGENDA-VIDEO-DUP-001): `2026-11-04/select-budget-committee-meeting` and `2026-11-05/select-budget-committee-meeting-public-hearing-session-i` → the agenda meeting for that date
 - [ ] Deployed, then the transcriber cleanup runs; old URLs 308 to the kept pages in prod
 
 ### FIX-TRANSCRIPT-SLUG-DECODED-PARAMS-001 — Meeting pages with a space in the slug stopped loading

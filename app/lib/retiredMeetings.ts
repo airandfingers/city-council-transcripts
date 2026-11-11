@@ -6,7 +6,7 @@
  * Montebello's agenda stub and its YouTube recording were published as two
  * meetings (transcriber FIX-MONTEBELLO-AGENDA-VIDEO-DUP-001). The transcriber
  * now puts the recording in the agenda folder, so new meetings stay one row;
- * these are the five pairs from before that fix. Static on purpose: no DB read
+ * these are the five pairs from before that fix, plus two Seattle duplicates. Static on purpose: no DB read
  * in the proxy, and the list isn't expected to grow.
  */
 export const RETIRED_MEETING_SLUGS: Record<string, string> = {
@@ -15,6 +15,9 @@ export const RETIRED_MEETING_SLUGS: Record<string, string> = {
   "2026-10-14/city-council": "2026-10-14/this-is-the-city-of-montebello-city-council-meeting-10-14-26",
   "2026-10-28/city-council": "2026-10-28/this-is-the-city-of-montebello-city-council-meeting-10-28-26",
   "2026-11-06/city-council-special": "2026-11-06/this-is-the-city-of-montebello-city-council-special-meeting-11-06-26",
+  // Seattle: a recording moved into its agenda folder was re-downloaded and published twice (Nov 2026).
+  "2026-11-04/select-budget-committee-meeting": "2026-11-04/select-budget-committee",
+  "2026-11-05/select-budget-committee-meeting-public-hearing-session-i": "2026-11-05/select-budget-committee",
 };
 
 /** Per-meeting URL prefixes that carry a slug (see transcriptPath.ts). */
