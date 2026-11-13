@@ -819,6 +819,10 @@ export default async function TranscriptPage({ params }: Props) {
             sibling column left a large dead-looking gap under it, and an
             *expanded* transcript reads better at full page width than
             squeezed into a third of it. */}
+        {/* Only a published meeting has transcript lines; agenda-only and
+            upcoming meetings would get an empty viewer and a link to an
+            empty plain page (same test as the sitemap's hasTranscript). */}
+        {meeting.status === "PUBLISHED" && (
         <details id="full-transcript" className="group">
           <summary className="cursor-pointer text-2xl font-semibold mb-4 list-none flex items-center gap-2 flex-wrap">
             <span aria-hidden="true" className="text-base text-gray-400 group-open:rotate-90 transition-transform inline-block">▶</span>
@@ -837,6 +841,7 @@ export default async function TranscriptPage({ params }: Props) {
             offsetModel={offsetModel}
           />
         </details>
+        )}
       </VideoSyncProvider>
 
       <AIDisclaimer />
