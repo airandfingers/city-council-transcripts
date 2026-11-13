@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { resolveTranscriptSlug, transcriptPath } from "../../app/lib/transcriptPath";
+import { RETIRED_MEETING_SLUGS, retiredMeetingRedirect } from "../../app/lib/retiredMeetings";
 
 const cases: Array<{ segments: string[]; slug: string; redirectTo: string | null }> = [
   { segments: ["2026-08-18", "city-council"], slug: "2026-08-18/city-council", redirectTo: null },
@@ -43,5 +44,19 @@ for (const c of cases) {
 }
 
 assert.equal(transcriptPath("2026-07-08/Housing_ Arts"), "/transcripts/2026-07-08/Housing_%20Arts");
+
+// Retired (merged) meetings redirect to their replacement on every per-meeting
+// route, and a replacement is never itself retired (no chains or loops).
+for (const [oldSlug, newSlug] of Object.entries(RETIRED_MEETING_SLUGS)) {
+  assert.ok(!(newSlug in RETIRED_MEETING_SLUGS), `retired target is itself retired: ${newSlug}`);
+  for (const prefix of ["/transcripts/", "/transcript-text/", "/meeting-tabs/"]) {
+    const target = retiredMeetingRedirect(prefix + oldSlug);
+    assert.equal(target, prefix + newSlug, `retired ${prefix}${oldSlug}`);
+    assert.equal(retiredMeetingRedirect(target!), null, `redirect target must not redirect again: ${target}`);
+  }
+}
+assert.equal(retiredMeetingRedirect("/transcripts/2026-11-11/city-council"), null);
+assert.equal(retiredMeetingRedirect("/ca/montebello/2026-10-28/city-council"), null);
+assert.equal(retiredMeetingRedirect("/transcripts/2026-10-28/city-council/"), "/transcripts/" + RETIRED_MEETING_SLUGS["2026-10-28/city-council"]);
 
 console.log(`transcript-path-check: ${cases.length} cases passed`);
