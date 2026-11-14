@@ -69,9 +69,17 @@ Owner request (2026-11-13): "Timeline might well be the nested outline view we w
 - [x] `app/lib/outline.ts` is pure and does the following:
   - Nests the agenda: lettered items go under the last numbered item, and `7.A` goes under 7.
   - Attaches a bullet only on a confident match. A shared bill or resolution number counts; one shared ordinary word doesn't.
-  - Keeps follow-up motions and votes with the item being discussed.
+  - Keeps follow-on lines with the item being discussed:
+    - two shared words carry a line with no time limit
+    - one shared word carries it within 20 minutes
+    - a bare motion/vote carries it within 10 minutes
+    - a line between two of an item's lines joins that item if they're within 30 minutes
+  - Never inherits into or out of procedural moments (public comment, call to order, roll call, adjourn, proclamations), and never carries a line that names another item's bill number or "Item 10H".
   - Gives each unmatched bullet its own "＋" line in meeting order.
-  - Returns `null` (flat Timeline unchanged) when there's no agenda or nothing matched.
+  - Returns `null` (flat Timeline unchanged) when there's no agenda or under 25% of the timeline matched.
+- [x] Held-out sweep over all 81 Jul–Nov 2026 meetings with an `agenda.json` and timeline bullets (53 Seattle, 14 Fort Collins, 8 Monterey Park, 6 Montebello). None of them were used for tuning.
+  - Result: 59 get the outline, 22 keep the flat Timeline.
+  - Every carried/filled attachment was reviewed by hand. The first sweep caught Seattle's "Public Comment" soaking up the staff reports and votes after it; that's why the time bounds and the procedural guards exist.
 - [x] `app/components/MeetingOutline.tsx` (server-rendered) shows:
   - Item number, title and play link, with an outcome line clamped to 2 lines.
   - Nested sub-items.

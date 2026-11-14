@@ -125,6 +125,29 @@ const nested = nestAgenda([
 assert.deepEqual(nested.map((n) => n.key), ["1", "3", "4"]);
 assert.deepEqual(nested[0].children.map((c) => c.key), ["2", "5"]);
 
+// A timeline that mostly misses the agenda stays the plain timeline.
+assert.equal(
+  buildOutline(
+    [{ key: "1", itemNumber: "1", title: "Council Bill 121-276" }, { key: "2", itemNumber: "2", title: "Adjournment" }],
+    [{ text: "Bill 121-276 passed", startTimeSeconds: 10 }, ...[1, 2, 3, 4].map((n) => ({ text: `Unrelated thing ${n}`, startTimeSeconds: 100 * n }))],
+  ),
+  null,
+);
+
+// Public comment never absorbs the staff report and vote that follow it.
+{
+  const rows = buildOutline(
+    [{ key: "c", itemNumber: "C.", title: "Public Comment" }, { key: "1", itemNumber: "1.", title: "Council Bill 121276 tree code" }],
+    [
+      { text: "Public comment on trees", startTimeSeconds: 60 },
+      { text: "Staff briefing begins", startTimeSeconds: 600 },
+      { text: "Public comment from second speaker", startTimeSeconds: 700 },
+      { text: "Council Bill 121276 tree code passed", startTimeSeconds: 900 },
+    ],
+  )!;
+  assert.equal(placeOf(rows, "Staff briefing"), "+");
+}
+
 // Scoring floors.
 assert.equal(matchScore("Council discusses the budget", { title: "Budget Hearing" }), 0, "one ordinary word is not a match");
 assert.ok(matchScore("Bill 121-276 passed 8-0", { title: "Council Bill 121-276" }) >= 0.5, "a shared bill number is");

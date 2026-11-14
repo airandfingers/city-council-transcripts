@@ -129,17 +129,48 @@ export function matchScore(bulletText: string, item: { title: string; outcome?: 
 }
 
 /**
- * A weaker tie: the bullet shares a word with the item, or is a motion or
- * vote (which is about whatever was being discussed). Used only to keep a
- * bullet with the item just before it, never to place one on its own.
+ * A weaker tie: the bullet shares a word with the item ("word"), or is a
+ * motion or vote, which is about whatever was being discussed ("vote").
+ * Used only to keep a bullet with the item before it, never to place one.
  */
-function continues(bulletText: string, item: { title: string; outcome?: string | null }): boolean {
-  if (/\b(motion|vote[sd]?|passe[sd]|seconded|carried|failed)\b/i.test(bulletText)) return true;
+function continues(
+  bulletText: string,
+  item: { title: string; outcome?: string | null; itemNumber?: string | null },
+  /** Bill/resolution numbers that appear in other agenda items' titles. */
+  otherNumbers: Set<string> = new Set(),
+): "words" | "word" | "vote" | false {
   const itemTokens = new Set(tokens(`${item.title} ${item.outcome ?? ""}`));
-  return tokens(bulletText).some((t) => itemTokens.has(t));
+  // A line that names another item ("Motion for Item 10H", "CB 121272")
+  // or a roll call is not this item's vote.
+  const ref = /\bitems?\s+(\d+[a-z]?)\b/i.exec(bulletText);
+  if (ref && ref[1].toLowerCase() !== (item.itemNumber ?? "").toLowerCase()) return false;
+  if (tokens(bulletText).some((t) => otherNumbers.has(t) && !itemTokens.has(t))) return false;
+  if (OWN_MOMENT.test(bulletText)) return false;
+  const shared = new Set(tokens(bulletText).filter((t) => itemTokens.has(t))).size;
+  if (shared >= 2) return "words";
+  if (shared === 1) return "word";
+  if (/\b(motion|vote[sd]?|passe[sd]|seconded|carried|failed)\b/i.test(bulletText)) return "vote";
+  return false;
 }
 
 const CONFIDENT = 0.5;
+const MIN_ATTACHED = 0.25;
+
+/** Inherited lines stay close to the item's last line; a later vote is likely another item's. */
+const CARRY_SECONDS = 10 * 60;
+const FILL_SECONDS = 30 * 60;
+
+/**
+ * Items a bullet may join only by naming them directly. Public comment is
+ * followed by everything else in the meeting, so inheriting into it
+ * mis-files staff reports and votes under "Public Comment".
+ */
+const NO_INHERIT = /public\s+(comment|communication)|call\s+to\s+order|roll\s+call|flag\s+salute|pledge|adjourn|proclamation|^\s*declaring\b|approval\s+of\s+(the\s+)?(agenda|minutes)/i;
+
+/** Lines that are their own moment, never the tail of an item's discussion. */
+const OWN_MOMENT = /adjourn|public[\s‑-]+comment|roll[\s‑-]*call|recess/i;
+/** One shared word only carries a line this close to the item's last line. */
+const WORD_SECONDS = 20 * 60;
 
 /** "A", "b." → a lettered sub-item. */
 const LETTER = /^\(?([A-Za-z])[.)]?$/;
@@ -197,8 +228,7 @@ function flatten(items: OutlineItem[]): OutlineItem[] {
 
 /**
  * Build the outline, or null when there's no agenda to hang the timeline on
- * (or nothing in the timeline matched it — an agenda with every line marked
- * unlisted would say less than the plain timeline).
+ * or under a quarter of the timeline matched it.
  */
 export function buildOutline(agenda: OutlineAgendaItem[], bullets: OutlineBullet[]): OutlineRow[] | null {
   if (agenda.length < 2 || bullets.length === 0) return null;
@@ -236,10 +266,33 @@ export function buildOutline(agenda: OutlineAgendaItem[], bullets: OutlineBullet
   // 2. A later bullet stays with the item last talked about if it is a
   //    motion/vote or shares a word with it ("Motion to withdraw the
   //    Halligan permit" after "Council reviews water-storage strategy").
+  const numbersElsewhere = new Set(
+    all.flatMap((n) => tokens(`${n.title} ${n.outcome ?? ""}`).filter((t) => /\d{3,}/.test(t))),
+  );
+  // Two shared words keep a line with the item however long the discussion
+  // runs (it stops at the next directly matched item); one shared word only
+  // within WORD_SECONDS of the item's last line, a bare vote CARRY_SECONDS.
+  const continuesNow = (text: string, t: number | null, item: OutlineItem, last: number | null) => {
+    const how = continues(text, item, numbersElsewhere);
+    if (how === "words") return true;
+    const gap = t != null && last != null ? t - last : Infinity;
+    return (how === "word" && gap <= WORD_SECONDS) || (how === "vote" && gap <= CARRY_SECONDS);
+  };
   let current: OutlineItem | null = null;
+  let lastAt: number | null = null;
   for (let i = 0; i < sorted.length; i++) {
-    if (assigned[i]) current = assigned[i];
-    else if (current && continues(sorted[i].text, current)) assigned[i] = current;
+    const t = sorted[i].startTimeSeconds ?? null;
+    if (assigned[i]) {
+      current = assigned[i];
+      lastAt = t;
+    } else if (
+      current &&
+      !NO_INHERIT.test(current.title) &&
+      continuesNow(sorted[i].text, t, current, lastAt)
+    ) {
+      assigned[i] = current;
+      lastAt = t;
+    }
   }
 
   // 3. A bullet between two bullets of the same item (or of an item and
@@ -250,8 +303,17 @@ export function buildOutline(agenda: OutlineAgendaItem[], bullets: OutlineBullet
     const [i, j] = [anchors[k], anchors[k + 1]];
     const [a, b] = [assigned[i]!, assigned[j]!];
     const outer = a === b || ancestorOf(a, b) ? a : ancestorOf(b, a) ? b : null;
-    if (outer) for (let m = i + 1; m < j; m++) assigned[m] = outer;
+    const [ti, tj] = [sorted[i].startTimeSeconds, sorted[j].startTimeSeconds];
+    const close = ti != null && tj != null && tj - ti <= FILL_SECONDS;
+    if (outer && close && !NO_INHERIT.test(outer.title)) {
+      for (let m = i + 1; m < j; m++) if (!OWN_MOMENT.test(sorted[m].text)) assigned[m] = outer;
+    }
   }
+
+  // Mostly-unmatched outlines say less than the plain timeline: an agenda
+  // with a few lines under it and a column of ＋ lines. Below a quarter
+  // matched (about 1 meeting in 7 in the Jul–Nov 2026 sweep), fall back.
+  if (assigned.filter(Boolean).length < MIN_ATTACHED * sorted.length) return null;
 
   const extras: OutlineBullet[] = [];
   sorted.forEach((b, i) => {
