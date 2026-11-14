@@ -2,6 +2,7 @@
 
 ## Implementation Status Summary
 
+- ✅ FEAT-TLDR-SUMMARY-TOGGLE-001 — Meeting page: the TL;DR expands in place to the full Summary with a small icon; the full-width Summary section is gone when there's prose to show. PR open, `batch-ready`
 - 🔄 FEAT-GLOBAL-TOPIC-GROUPING-001 — `/topics` groups areas by the transcriber's global topic tag (`InterestArea.globalTopicId`); prod migration applied 2026-10-28; ships in the 2026-10-29 batch
 - ✅ FIX-GLOBAL-TOPICS-NAV-001 — Header shows a cross-city Topics link before a city is picked, leading to a new `/topics` page
 - ✅ FIX-ISR-PREFETCH-001, FIX-CITY-PAGE-PAYLOAD-001, FIX-TRANSCRIPT-PAGE-PAYLOAD-001, FIX-CRAWLER-BUDGET-001 — Vercel ISR reads (1M/month shared Hobby quota, ~1.8M/month pace in October): no link prefetching, city pages carry each meeting once, smaller meeting pages, non-SEO crawlers disallowed. PR open, `batch-ready`
@@ -47,6 +48,25 @@
 - 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
 
 ## Active Stories
+
+### FEAT-TLDR-SUMMARY-TOGGLE-001 — The TL;DR expands in place to the Summary
+
+**Status:** ✅ Done (2026-11-13) — PR open, `batch-ready` for the 2026-11-19 batch
+
+**As a** reader of a meeting page
+**I want** the TL;DR to open into the full Summary where I'm already reading
+**So that** the page doesn't spend a full-width section repeating the same story under the TL;DR/Timeline row
+
+Owner request (2026-11-13): "maybe the TLDR toggles to Summary with a clever, low profile icon that expands it to summary. that saves vertical section space." First step of the parked FEAT-MEETING-TIER-DEDUP-001 direction ("`summary` = collapsed/secondary").
+
+- [x] `app/components/TldrToggle.tsx`: the heading reads "TL;DR" (glossary term) with a small gray expand icon (arrows out); clicking swaps the cell to "Summary" with the prose and a collapse icon (arrows in). Real `<button>` with `aria-expanded`/`aria-controls`
+- [x] Both states are in the server-rendered HTML; only visibility changes, so the cached page, crawlers and find-in-page still see the summary prose. No fetch, no new DB read
+- [x] Only prose moves: `SUMMARY_BLOCK` rows, the `meeting.summary` fallback, and the pre-meeting `meal` tier (with its "based on the published agenda" caption and subscribe form)
+- [x] The Summary section still renders below for its non-prose states: topic cards (older pipeline), upcoming/held-not-transcribed copy, no-recording copy, request-a-summary link, subscribe forms
+- [x] No icon when there's nothing to expand to; a meeting with a summary but no TL;DR line opens on the Summary
+- [x] Checked locally (Docker DB, bundled Chromium) collapsed and expanded
+
+**Files:** `app/components/TldrToggle.tsx` (new), `app/transcripts/[...slug]/page.tsx`.
 
 ### FIX-RETIRED-MEETING-REDIRECTS-001 — Merged Montebello meetings redirect to the meeting that replaced them
 

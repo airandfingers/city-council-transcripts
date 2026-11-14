@@ -24,6 +24,7 @@ import UnreviewedTranscriptNotice from "@/app/components/UnreviewedTranscriptNot
 import RegisterCurrentCity from "@/app/components/RegisterCurrentCity";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
+import TldrToggle from "@/app/components/TldrToggle";
 import GlossaryTerm from "@/app/components/GlossaryTerm";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
@@ -360,6 +361,74 @@ export default async function TranscriptPage({ params }: Props) {
       : null,
   };
 
+  // FEAT-TLDR-SUMMARY-TOGGLE-001: the prose Summary lives behind the
+  // TL;DR's expand icon instead of in its own full-width section. Only
+  // prose moves; the topic-card and empty-state fallbacks stay below.
+  const summaryProse =
+    summaryBlocks.length > 0 || meeting.summary ? (
+    <div className="space-y-3 text-gray-700 dark:text-gray-300 max-w-prose">
+      {summaryBlocks.length > 0
+        ? summaryBlocks.map((block) => {
+            const hasReferences =
+              Array.isArray(block.references) && block.references.length > 0;
+            return (
+              <p key={block.id} className="flex gap-2 items-start">
+                <AnnotatedText
+                  text={block.text}
+                  references={block.references}
+                  offsetModel={offsetModel}
+                  scrollTargetId="full-transcript"
+                  openDetailsId="full-transcript"
+                  className="flex-1"
+                />
+                {!hasReferences &&
+                  (block.startTimeSeconds != null ? (
+                    <TimestampLink
+                      seconds={block.startTimeSeconds}
+                      label={block.timecodeLabel ?? undefined}
+                      openDetailsId="full-transcript"
+                      scrollTargetId="full-transcript"
+                      offsetModel={offsetModel}
+                      className="shrink-0 text-xs text-blue-500 dark:text-blue-400 hover:underline mt-1"
+                    />
+                  ) : block.position ? (
+                    <a
+                      href={block.position}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-xs text-blue-500 dark:text-blue-400 hover:underline mt-1"
+                      title={block.notes ?? undefined}
+                    >
+                      [source]
+                    </a>
+                  ) : null)}
+              </p>
+            );
+          })
+        : meeting.summary!.split(/\n\n+/).map((para, i) => (
+            <p key={i}>{para}</p>
+          ))}
+    </div>
+    ) : meeting.topicSummaries.length === 0 && meeting.status === "SCHEDULED" && preMeetingSummary ? (
+    <div className="max-w-prose">
+      <div className="space-y-3 text-gray-700 dark:text-gray-300 mb-3">
+        {preMeetingSummary.meal.split(/\n\n+/).map((para, i) => (
+          <p key={i}>{para}</p>
+        ))}
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+        Based on the published agenda, not yet reviewed against what actually happened —
+        check back after the meeting for the transcript-verified summary.
+      </p>
+      <SubscribeForm
+        kind="CITY_UPDATES"
+        cityId={meeting.city.id}
+        cityName={meeting.city.name}
+        compact
+      />
+    </div>
+    ) : null;
+
   return (
     <main className="min-h-screen p-8">
       {/* Tells the persistent header (SiteHeader) which city this page
@@ -477,48 +546,49 @@ export default async function TranscriptPage({ params }: Props) {
           PoC feedback: "we always want to put the TLDR at the top." */}
       <VideoSyncProvider>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">
-            <GlossaryTerm id="tldr" />
-          </h2>
-          {meeting.logline ? (
-            <div className="space-y-2">
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
-                <AnnotatedText
-                  text={meeting.logline ?? ""}
-                  references={tldrBlock?.references}
-                  offsetModel={offsetModel}
-                  scrollTargetId="full-transcript"
-                  openDetailsId="full-transcript"
-                />
+        <TldrToggle
+          summary={summaryProse}
+          defaultExpanded={!meeting.logline && !preMeetingSummary}
+          tldr={
+            meeting.logline ? (
+              <div className="space-y-2">
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
+                  <AnnotatedText
+                    text={meeting.logline ?? ""}
+                    references={tldrBlock?.references}
+                    offsetModel={offsetModel}
+                    scrollTargetId="full-transcript"
+                    openDetailsId="full-transcript"
+                  />
+                </p>
+                {!(Array.isArray(tldrBlock?.references) && tldrBlock.references.length > 0) &&
+                  tldrBlock?.startTimeSeconds != null && (
+                  <TimestampLink
+                    seconds={tldrBlock.startTimeSeconds}
+                    label={tldrBlock.timecodeLabel ?? undefined}
+                    openDetailsId="full-transcript"
+                    scrollTargetId="full-transcript"
+                    offsetModel={offsetModel}
+                    className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
+                  />
+                )}
+              </div>
+            ) : preMeetingSummary ? (
+              <div className="space-y-2">
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
+                  {preMeetingSummary.bite}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Based on the published agenda — check back after the meeting for the reviewed summary.
+                </p>
+              </div>
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">
+                No summary available for this meeting yet.
               </p>
-              {!(Array.isArray(tldrBlock?.references) && tldrBlock.references.length > 0) &&
-                tldrBlock?.startTimeSeconds != null && (
-                <TimestampLink
-                  seconds={tldrBlock.startTimeSeconds}
-                  label={tldrBlock.timecodeLabel ?? undefined}
-                  openDetailsId="full-transcript"
-                  scrollTargetId="full-transcript"
-                  offsetModel={offsetModel}
-                  className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
-                />
-              )}
-            </div>
-          ) : preMeetingSummary ? (
-            <div className="space-y-2">
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed max-w-prose">
-                {preMeetingSummary.bite}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Based on the published agenda — check back after the meeting for the reviewed summary.
-              </p>
-            </div>
-          ) : (
-            <p className="text-gray-500 dark:text-gray-400">
-              No summary available for this meeting yet.
-            </p>
-          )}
-        </section>
+            )
+          }
+        />
 
         <section>
           <TopicsPanel topics={topics} heading="" offsetModel={offsetModel} />
@@ -526,58 +596,15 @@ export default async function TranscriptPage({ params }: Props) {
       </div>
 
       {/* Summary: a 1-5 min read that bridges the one-line TL;DR and the
-          full transcript. Prefers the prose overview + timestamped timeline
-          bullets (most meetings have these); falls back to per-topic cards
+          full transcript. The prose version sits behind the TL;DR's
+          expand icon (TldrToggle); this section only renders the fallbacks to per-topic cards
           for the older pipeline, then to a request/subscribe prompt when
           nothing has been generated yet. Every piece links to its moment
           in the video/transcript. */}
+      {summaryProse == null && (
       <section className="mb-10">
         <h2 className="text-2xl font-semibold mb-4">Summary</h2>
-        {summaryBlocks.length > 0 || meeting.summary ? (
-          <div className="space-y-3 text-gray-700 dark:text-gray-300 max-w-prose">
-            {summaryBlocks.length > 0
-              ? summaryBlocks.map((block) => {
-                  const hasReferences =
-                    Array.isArray(block.references) && block.references.length > 0;
-                  return (
-                    <p key={block.id} className="flex gap-2 items-start">
-                      <AnnotatedText
-                        text={block.text}
-                        references={block.references}
-                        offsetModel={offsetModel}
-                        scrollTargetId="full-transcript"
-                        openDetailsId="full-transcript"
-                        className="flex-1"
-                      />
-                      {!hasReferences &&
-                        (block.startTimeSeconds != null ? (
-                          <TimestampLink
-                            seconds={block.startTimeSeconds}
-                            label={block.timecodeLabel ?? undefined}
-                            openDetailsId="full-transcript"
-                            scrollTargetId="full-transcript"
-                            offsetModel={offsetModel}
-                            className="shrink-0 text-xs text-blue-500 dark:text-blue-400 hover:underline mt-1"
-                          />
-                        ) : block.position ? (
-                          <a
-                            href={block.position}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="shrink-0 text-xs text-blue-500 dark:text-blue-400 hover:underline mt-1"
-                            title={block.notes ?? undefined}
-                          >
-                            [source]
-                          </a>
-                        ) : null)}
-                    </p>
-                  );
-                })
-              : meeting.summary!.split(/\n\n+/).map((para, i) => (
-                  <p key={i}>{para}</p>
-                ))}
-          </div>
-        ) : meeting.topicSummaries.length > 0 ? (
+        {meeting.topicSummaries.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {meeting.topicSummaries.map((topic) => {
               const keyPoints = Array.isArray(topic.keyPoints)
@@ -634,24 +661,6 @@ export default async function TranscriptPage({ params }: Props) {
                 </div>
               );
             })}
-          </div>
-        ) : meeting.status === "SCHEDULED" && preMeetingSummary ? (
-          <div className="max-w-prose">
-            <div className="space-y-3 text-gray-700 dark:text-gray-300 mb-3">
-              {preMeetingSummary.meal.split(/\n\n+/).map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-              Based on the published agenda, not yet reviewed against what actually happened —
-              check back after the meeting for the transcript-verified summary.
-            </p>
-            <SubscribeForm
-              kind="CITY_UPDATES"
-              cityId={meeting.city.id}
-              cityName={meeting.city.name}
-              compact
-            />
           </div>
         ) : meeting.status === "SCHEDULED" ? (
           <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
@@ -721,6 +730,7 @@ export default async function TranscriptPage({ params }: Props) {
           </div>
         )}
       </section>
+      )}
 
       {/* Video + Documents: the two things people actually come here for.
           lg:grid-cols-2 only when there's a video to show -- otherwise
