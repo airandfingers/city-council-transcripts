@@ -52,6 +52,11 @@
       "command": "node scripts/validate/moment-check.mjs"
     },
     {
+      "id": "outline-check",
+      "description": "The Timeline outline nests each timeline bullet under the right agenda item on real meetings, gives unmatched ones their own line, and falls back to the flat timeline without an agenda",
+      "command": "node scripts/validate/outline-check.mjs"
+    },
+    {
       "id": "upcoming-collapse-check",
       "description": "The collapsed Upcoming list shows the soonest meeting plus the next regular council meeting",
       "command": "node scripts/validate/upcoming-collapse-check.mjs"

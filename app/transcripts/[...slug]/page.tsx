@@ -25,6 +25,8 @@ import RegisterCurrentCity from "@/app/components/RegisterCurrentCity";
 import SubscribeForm from "@/app/components/SubscribeForm";
 import AgendaItemsPanel from "@/app/components/AgendaItemsPanel";
 import TldrToggle from "@/app/components/TldrToggle";
+import MeetingOutline from "@/app/components/MeetingOutline";
+import { agendaFromSectionTopics, agendaFromVersions, buildOutline } from "@/app/lib/outline";
 import GlossaryTerm from "@/app/components/GlossaryTerm";
 import { summaryTypeLabel, summaryTypeDescription } from "@/app/lib/labels";
 import { resolveOffsetModel } from "@/app/lib/offset";
@@ -166,6 +168,7 @@ const getMeeting = cache(async (slug: string) => {
         orderBy: { sortOrder: "asc" },
         select: {
           id: true,
+          topicId: true, // older meetings' "section_10_A" ids are the agenda (MeetingOutline)
           title: true,
           startTime: true,
           endTime: true, // MomentCard: which agenda item covers ?t=
@@ -231,7 +234,14 @@ export default async function TranscriptPage({ params }: Props) {
       seen.add(item.sourceItemId);
       items.push(item);
     }
-    return items.sort((a, b) => a.sourceItemId.localeCompare(b.sourceItemId));
+    // Agenda order: the publisher inserts a scrape's items in agenda order,
+    // so the first revision's row id is the position (sourceItemId, a
+    // CivicClerk id, is not: lettered sub-items sort after every heading).
+    const firstId = new Map<string, number>();
+    for (const v of meeting.agendaItemVersions) {
+      firstId.set(v.sourceItemId, Math.min(firstId.get(v.sourceItemId) ?? Infinity, v.id));
+    }
+    return items.sort((a, b) => firstId.get(a.sourceItemId)! - firstId.get(b.sourceItemId)!);
   })();
   const showPreMeetingAgenda = meeting._count.segments === 0 && latestAgendaItems.length > 0;
 
@@ -347,6 +357,18 @@ export default async function TranscriptPage({ params }: Props) {
   const offsetModel = videoProvider === "youtube"
     ? resolveOffsetModel(meeting.youtubeOffsetModel, meeting.youtubeOffsetSeconds)
     : null;
+
+  // FEAT-MEETING-OUTLINE-001: the Timeline tab drawn as the agenda, each
+  // timeline moment under its agenda item and unmatched ones on their own
+  // line. Falls back to the flat list when there's no agenda to match.
+  const timelineTopic = topics.find((t) => t.type === "TIMELINE_BULLET");
+  if (timelineTopic) {
+    const agenda = meeting.agendaItemVersions.length > 0
+      ? agendaFromVersions(meeting.agendaItemVersions)
+      : agendaFromSectionTopics(meeting.topicSummaries);
+    const outline = buildOutline(agenda, timelineTopic.bullets);
+    if (outline) timelineTopic.content = <MeetingOutline rows={outline} offsetModel={offsetModel} />;
+  }
 
   // FIX-UPCOMING-PAST-DAY-001: SCHEDULED copy depends on whether the
   // meeting's day has passed in the city; ByMeetingDay rechecks in the
