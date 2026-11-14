@@ -1,0 +1,232 @@
+{
+ "agendaItems": [
+  {
+   "order": 0,
+   "sourceItemId": "7919",
+   "itemNumber": "1",
+   "title": "Call to Order"
+  },
+  {
+   "order": 1,
+   "sourceItemId": "7920",
+   "itemNumber": "2",
+   "title": "Flag Salute"
+  },
+  {
+   "order": 2,
+   "sourceItemId": "7921",
+   "itemNumber": "3",
+   "title": "Roll Call"
+  },
+  {
+   "order": 3,
+   "sourceItemId": "7933",
+   "itemNumber": "4",
+   "title": "Telecommunications Announcement, if requested"
+  },
+  {
+   "order": 4,
+   "sourceItemId": "7922",
+   "itemNumber": "5",
+   "title": "Agenda Revisions and Additions"
+  },
+  {
+   "order": 5,
+   "sourceItemId": "7925",
+   "itemNumber": "6",
+   "title": "Presentation"
+  },
+  {
+   "order": 6,
+   "sourceItemId": "9889",
+   "itemNumber": "A",
+   "title": "E-Bike Safety"
+  },
+  {
+   "order": 7,
+   "sourceItemId": "9825",
+   "itemNumber": "B",
+   "title": "Future Lights Youth Alliance - Lion Dance Troupe"
+  },
+  {
+   "order": 8,
+   "sourceItemId": "7923",
+   "itemNumber": "7",
+   "title": "Public Comments"
+  },
+  {
+   "order": 9,
+   "sourceItemId": "7924",
+   "itemNumber": "8",
+   "title": "Staff Communications"
+  },
+  {
+   "order": 10,
+   "sourceItemId": "9829",
+   "itemNumber": "A",
+   "title": "Bruggemeyer Library"
+  },
+  {
+   "order": 11,
+   "sourceItemId": "9960",
+   "itemNumber": "B",
+   "title": "Recreation and Community Services"
+  },
+  {
+   "order": 12,
+   "sourceItemId": "9971",
+   "itemNumber": "C",
+   "title": "Public Works"
+  },
+  {
+   "order": 13,
+   "sourceItemId": "7926",
+   "itemNumber": "9",
+   "title": "Old Business"
+  },
+  {
+   "order": 14,
+   "sourceItemId": "7927",
+   "itemNumber": "10",
+   "title": "Consent Calendar"
+  },
+  {
+   "order": 15,
+   "sourceItemId": "8193",
+   "itemNumber": "A",
+   "title": "Monthly Investment Report – September 2026"
+  },
+  {
+   "order": 16,
+   "sourceItemId": "7971",
+   "itemNumber": "B",
+   "title": "Resolution Adopting the Recognized Obligation Payment Schedule and Administrative Budget for July 1, 2027 - June 30, 2028"
+  },
+  {
+   "order": 17,
+   "sourceItemId": "9972",
+   "itemNumber": "C",
+   "title": "Garvey Capacity Improvements Project – First Amendment to Mark Thomas Professional Services Agreement for Engineering Design and Construction Support Services"
+  },
+  {
+   "order": 18,
+   "sourceItemId": "9994",
+   "itemNumber": "D",
+   "title": "Award of Professional Services Agreement to Craftwater Engineering, Inc. for the Garvey Ranch Park Trail System Planning and Design Services, CIP No. 95074"
+  },
+  {
+   "order": 19,
+   "sourceItemId": "9995",
+   "itemNumber": "E",
+   "title": "Weed Abatement Agreement with the County of Los Angeles"
+  },
+  {
+   "order": 20,
+   "sourceItemId": "9808",
+   "itemNumber": "F",
+   "title": "\"Movember\" Resolution"
+  },
+  {
+   "order": 21,
+   "sourceItemId": "9958",
+   "itemNumber": "G",
+   "title": "Family Court Awareness Month Resolution, as requested by Mayor Pro Tem Sanchez"
+  },
+  {
+   "order": 22,
+   "sourceItemId": "9968",
+   "itemNumber": "H",
+   "title": "National Homeless Youth Awareness Month Resolution, as requested by Mayor Pro Tem Sanchez"
+  },
+  {
+   "order": 23,
+   "sourceItemId": "9969",
+   "itemNumber": "I",
+   "title": "Native American Heritage Month Resolution, as requested by Mayor Pro Tem Sanchez"
+  },
+  {
+   "order": 24,
+   "sourceItemId": "7928",
+   "itemNumber": "11",
+   "title": "Public Hearing"
+  },
+  {
+   "order": 25,
+   "sourceItemId": "7929",
+   "itemNumber": "12",
+   "title": "New Business"
+  },
+  {
+   "order": 26,
+   "sourceItemId": "9882",
+   "itemNumber": "A",
+   "title": "2026 Annual Report and 2027 Proposed Budget for Downtown Business Improvement District No. 1"
+  },
+  {
+   "order": 27,
+   "sourceItemId": "9996",
+   "itemNumber": "B",
+   "title": "An Ordinance Amending Monterey Park Municipal Code Section 14.12.030 and Adding Section 14.18.085 to Authorize Water Charge Adjustments for Good Cause"
+  },
+  {
+   "order": 28,
+   "sourceItemId": "7930",
+   "itemNumber": "13",
+   "title": "City Communications (City Council) / Future Agenda Items"
+  },
+  {
+   "order": 29,
+   "sourceItemId": "7931",
+   "itemNumber": "14",
+   "title": "Closed Session (if Required; City Attorney to Announce)"
+  },
+  {
+   "order": 30,
+   "sourceItemId": "7932",
+   "itemNumber": "15",
+   "title": "Adjournment"
+  }
+ ],
+ "bullets": [
+  {
+   "text": "Council approves Garvey Ranch Trail System contract.",
+   "startTimeSeconds": 4410.72,
+   "timecodeLabel": "73:30"
+  },
+  {
+   "text": "Council discusses bike‑lane network and e‑bike safety education.",
+   "startTimeSeconds": 2793.9,
+   "timecodeLabel": "46:33"
+  },
+  {
+   "text": "Public comments on food‑drive logistics.",
+   "startTimeSeconds": 3364.2,
+   "timecodeLabel": "56:04"
+  },
+  {
+   "text": "Public comments on e‑bike ordinance concerns.",
+   "startTimeSeconds": 3407.44,
+   "timecodeLabel": "56:47"
+  },
+  {
+   "text": "Council member Lo proposes camera study at City Hall intersection.",
+   "startTimeSeconds": 3498.22,
+   "timecodeLabel": "58:18"
+  },
+  {
+   "text": "Council approves Downtown BID Annual Report and 2027 budget.",
+   "startTimeSeconds": 6013.36,
+   "timecodeLabel": "100:13"
+  },
+  {
+   "text": "Council adopts ordinance for water‑charge adjustments.",
+   "startTimeSeconds": 6268.74,
+   "timecodeLabel": "104:28"
+  },
+  {
+   "text": "Council moves to adopt reporting language for water‑bill discount program.",
+   "startTimeSeconds": 6420.66,
+   "timecodeLabel": "107:00"
+  }
+ ]
+}

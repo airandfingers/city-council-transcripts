@@ -1,0 +1,84 @@
+{
+ "agendaItems": [
+  {
+   "order": 0,
+   "sourceItemId": "0",
+   "itemNumber": "1",
+   "title": "Declaring the Day of October 20, 2026, as Community Media Day."
+  },
+  {
+   "order": 1,
+   "sourceItemId": "1",
+   "itemNumber": "2",
+   "title": "Declaring the Month of October 2026 as Arts and Humanities Month."
+  },
+  {
+   "order": 2,
+   "sourceItemId": "2",
+   "itemNumber": "3",
+   "title": "Declaring the Month of October 2026 as Domestic Violence Awareness Month."
+  },
+  {
+   "order": 3,
+   "sourceItemId": "3",
+   "itemNumber": "17",
+   "title": "Public Hearing #2 on 2027-2028 Recommended Budget."
+  },
+  {
+   "order": 4,
+   "sourceItemId": "4",
+   "itemNumber": "18",
+   "title": "First Reading of Ordinance No. 147, 2026, Establishing a Temporary Moratorium on the Acceptance or Processing of Land Use Applications, Permit Applications, and Other Applications Seeking Approval to Construct or Operate Certain Data Centers."
+  },
+  {
+   "order": 5,
+   "sourceItemId": "5",
+   "itemNumber": "19",
+   "title": "Items Related to Water Storage for the City Water Utility."
+  },
+  {
+   "order": 6,
+   "sourceItemId": "6",
+   "itemNumber": "1",
+   "title": "Possible consideration of the initiation of new ordinances and/or resolutions by Councilmembers."
+  },
+  {
+   "order": 7,
+   "sourceItemId": "7",
+   "itemNumber": "2",
+   "title": "Consideration of a motion to adjourn this meeting until after the completion of the Water Utility Enterprise Board business:"
+  }
+ ],
+ "bullets": [
+  {
+   "text": "Council reviews water‑storage strategy, comparing Halligan and NISP.",
+   "startTimeSeconds": 17242.04,
+   "timecodeLabel": "287:22"
+  },
+  {
+   "text": "Motion to withdraw Halligan permit application; passed 7‑0.",
+   "startTimeSeconds": 17242.04,
+   "timecodeLabel": "287:22"
+  },
+  {
+   "text": "Motion to approve participation in NISP; passed 6‑1.",
+   "startTimeSeconds": 17268.72,
+   "timecodeLabel": "287:48"
+  },
+  {
+   "text": "Motion to adopt Ordinance 148‑2026 transferring Halligan funds; passed 6‑1.",
+   "startTimeSeconds": 17318.48,
+   "timecodeLabel": "288:38"
+  },
+  {
+   "text": "Motion to adopt six‑month data‑center moratorium; passed 7‑0.",
+   "startTimeSeconds": 7455.92,
+   "timecodeLabel": "124:15"
+  },
+  {
+   "text": "Council adjourns after approving water‑storage and data‑center decisions.",
+   "startTimeSeconds": 17359.42,
+   "timecodeLabel": "289:19"
+  }
+ ]
+}

@@ -1,0 +1,88 @@
+{
+ "agendaItems": [
+  {
+   "order": 0,
+   "sourceItemId": "23137",
+   "itemNumber": null,
+   "title": "CALL TO ORDER - 6:00 P.M."
+  },
+  {
+   "order": 1,
+   "sourceItemId": "23138",
+   "itemNumber": null,
+   "title": "ROLL CALL"
+  },
+  {
+   "order": 2,
+   "sourceItemId": "23139",
+   "itemNumber": null,
+   "title": "PUBLIC COMMENTS ON AGENDA ITEMS ONLY (30 MINUTES)"
+  },
+  {
+   "order": 3,
+   "sourceItemId": "23140",
+   "itemNumber": null,
+   "title": "CLOSED SESSION - NONE"
+  },
+  {
+   "order": 4,
+   "sourceItemId": "23153",
+   "itemNumber": null,
+   "title": "REGULAR BUSINESS"
+  },
+  {
+   "order": 5,
+   "sourceItemId": "23180",
+   "itemNumber": "1",
+   "title": "APPROVE PROFESSIONAL SERVICE AGREEMENT NO. 4689 WITH BURKE, WILLIAMS, AND SORENSEN LLP FOR INTERIM CITY ATTORNEY SERVICES"
+  },
+  {
+   "order": 6,
+   "sourceItemId": "23146",
+   "itemNumber": null,
+   "title": "ADJOURNMENT"
+  }
+ ],
+ "bullets": [
+  {
+   "text": "Council members called to order and public comment period opened",
+   "startTimeSeconds": 51.3,
+   "timecodeLabel": "0:51"
+  },
+  {
+   "text": "Public comments delivered by four residents",
+   "startTimeSeconds": 105.38,
+   "timecodeLabel": "1:45"
+  },
+  {
+   "text": "City Manager presented interim city attorney proposal",
+   "startTimeSeconds": 593.66,
+   "timecodeLabel": "9:53"
+  },
+  {
+   "text": "Council members asked questions about selection and cost",
+   "startTimeSeconds": 924.96,
+   "timecodeLabel": "15:24"
+  },
+  {
+   "text": "City Manager clarified interim role and RFP timeline",
+   "startTimeSeconds": 1345.7,
+   "timecodeLabel": "22:25"
+  },
+  {
+   "text": "Motion to approve agreement moved by Melendez, seconded by Peralta",
+   "startTimeSeconds": 1502.46,
+   "timecodeLabel": "25:02"
+  },
+  {
+   "text": "Vote taken; motion passes 4‑1 with one abstention",
+   "startTimeSeconds": 1536.62,
+   "timecodeLabel": "25:36"
+  },
+  {
+   "text": "Meeting adjourned at ",
+   "startTimeSeconds": 1553.58,
+   "timecodeLabel": "25:53"
+  }
+ ]
+}

@@ -2,6 +2,8 @@
 
 ## Implementation Status Summary
 
+- ✅ FEAT-MEETING-OUTLINE-001 — Meeting page: the Timeline tab is a nested agenda outline, each timeline moment under its agenda item, with a ＋ line for moments the agenda doesn't cover. PR open, `batch-ready`
+- ✅ FEAT-TLDR-SUMMARY-TOGGLE-001 — Meeting page: the TL;DR expands in place to the full Summary with a small icon; the full-width Summary section is gone when there's prose to show. PR open, `batch-ready`
 - 🔄 FEAT-GLOBAL-TOPIC-GROUPING-001 — `/topics` groups areas by the transcriber's global topic tag (`InterestArea.globalTopicId`); prod migration applied 2026-10-28; ships in the 2026-10-29 batch
 - ✅ FIX-GLOBAL-TOPICS-NAV-001 — Header shows a cross-city Topics link before a city is picked, leading to a new `/topics` page
 - ✅ FIX-ISR-PREFETCH-001, FIX-CITY-PAGE-PAYLOAD-001, FIX-TRANSCRIPT-PAGE-PAYLOAD-001, FIX-CRAWLER-BUDGET-001 — Vercel ISR reads (1M/month shared Hobby quota, ~1.8M/month pace in October): no link prefetching, city pages carry each meeting once, smaller meeting pages, non-SEO crawlers disallowed. PR open, `batch-ready`
@@ -44,9 +46,85 @@
 - ✅ FIX-MEETING-LAYOUT-ALIGNMENT-001 — Meeting page padding/alignment/blank-space cleanup (verified live against the real Fort Collins Sept 1, 2026 meeting page)
 - ✅ FIX-REFERENCE-HEADING-001 — "Reference" section heading doesn't match its content or its own link text
 - ✅ FIX-SUMMARY-GATE-NULL-001 — Summary blocks silently dropped when `meeting.summary` is null
-- 📋 FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content (parked, alternate view)
+- ✅ FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content — taken up 2026-11-13 by FEAT-TLDR-SUMMARY-TOGGLE-001 + FEAT-MEETING-OUTLINE-001
 
 ## Active Stories
+
+### FEAT-MEETING-OUTLINE-001 — The Timeline tab is a nested agenda outline
+
+**Status:** ✅ Done (2026-11-13) — PR open, `batch-ready` for the 2026-11-19 batch (stacked on FEAT-TLDR-SUMMARY-TOGGLE-001)
+
+**As a** reader of a meeting page
+**I want** the Timeline to read like the agenda, with what happened under each item
+**So that** I can see where each moment fits in the meeting, and what happened that the agenda didn't list
+
+Owner request (2026-11-13): "Timeline might well be the nested outline view we were thinking about. It might basically look like the agenda (but super enhanced version and including lines for things the agenda is missing)."
+
+**Data facts that shaped it:**
+- No agenda item carries a timestamp for current meetings. `TopicSummary` holds theme clusters (`tag_*`) now, and `MeetingSegment` exists only on a few old Monterey Park meetings. So each timeline bullet is attached to its item by **matching words**, not by time.
+- `AgendaItemVersion` has no order column. The publisher inserts a scrape's items in agenda order, so the **first revision's row id** gives the position. The old sort by `sourceItemId` (a CivicClerk id) scrambled it. The pre-meeting Agenda tab used that sort too and is fixed here.
+- Older Monterey Park meetings' `TopicSummary` rows *are* the agenda (`section_10_A` under `section_10`, with outcomes). Those are used when there are no agenda rows.
+
+**Acceptance criteria:**
+- [x] `app/lib/outline.ts` is pure and does the following:
+  - Nests the agenda: lettered items go under the last numbered item, and `7.A` goes under 7.
+  - Attaches a bullet only on a confident match. A shared bill or resolution number counts; one shared ordinary word doesn't.
+  - Keeps follow-on lines with the item being discussed:
+    - two shared words carry a line with no time limit
+    - one shared word carries it within 20 minutes
+    - a bare motion/vote carries it within 10 minutes
+    - a line between two of an item's lines joins that item if they're within 30 minutes
+  - Never inherits into or out of procedural moments (public comment, call to order, roll call, adjourn, proclamations), and never carries a line that names another item's bill number or "Item 10H".
+  - Gives each unmatched bullet its own "＋" line in meeting order.
+  - Returns `null` (flat Timeline unchanged) when there's no agenda or under 25% of the timeline matched.
+- [x] Held-out sweep over all 81 Jul–Nov 2026 meetings with an `agenda.json` and timeline bullets (53 Seattle, 14 Fort Collins, 8 Monterey Park, 6 Montebello). None of them were used for tuning.
+  - Result: 59 get the outline, 22 keep the flat Timeline.
+  - Every carried/filled attachment was reviewed by hand. The first sweep caught Seattle's "Public Comment" soaking up the staff reports and votes after it; that's why the time bounds and the procedural guards exist.
+- [x] `app/components/MeetingOutline.tsx` (server-rendered) shows:
+  - Item number, title and play link, with an outcome line clamped to 2 lines.
+  - Nested sub-items.
+  - A run of quiet procedural items collapsed to one dim line ("1–8 Call to Order · Flag Salute · …").
+  - A heading's quiet sub-items folded into "N more".
+  - A legend for ＋.
+- [x] No new DB read, no migration and no contract change. The page query only adds `TopicSummary.topicId`.
+- [x] New gate `outline-check` covers real meetings of each agenda shape (fixtures in `scripts/validate/fixtures/outline/`):
+  - MP 2026-11-04 (numbered + lettered)
+  - FC 2026-10-20 (partial agenda, numbering restarts)
+  - Montebello 2026-11-12 (unnumbered caps headings)
+  - Seattle 2026-11-10 (no agenda → flat)
+  - MP 2026-04-15 (section topics)
+- [x] Checked locally (Docker DB with one meeting's agenda rows seeded from its `agenda.json`, then removed) with bundled Chromium
+
+**Follow-ups, not done:**
+- Matching is heuristic. A miss shows as a ＋ line, never under the wrong item, but some ＋ lines are agenda items whose wording differs from the bullet.
+- A durable `AgendaItemVersion.sortOrder`/parent column would replace the row-id ordering. It needs a migration + contract bump, so it was deliberately left out of this batch.
+
+**Files:**
+- `app/lib/outline.ts` (new)
+- `app/components/MeetingOutline.tsx` (new)
+- `app/components/TopicsPanel.tsx` (`BulletBody` extracted; a tab can carry custom content)
+- `app/transcripts/[...slug]/page.tsx`
+- `scripts/validate/outline-check*` + fixtures
+- `scripts/validate/gates.json`
+
+### FEAT-TLDR-SUMMARY-TOGGLE-001 — The TL;DR expands in place to the Summary
+
+**Status:** ✅ Done (2026-11-13) — PR open, `batch-ready` for the 2026-11-19 batch
+
+**As a** reader of a meeting page
+**I want** the TL;DR to open into the full Summary where I'm already reading
+**So that** the page doesn't spend a full-width section repeating the same story under the TL;DR/Timeline row
+
+Owner request (2026-11-13): "maybe the TLDR toggles to Summary with a clever, low profile icon that expands it to summary. that saves vertical section space." First step of the parked FEAT-MEETING-TIER-DEDUP-001 direction ("`summary` = collapsed/secondary").
+
+- [x] `app/components/TldrToggle.tsx`: the heading reads "TL;DR" (glossary term) with a small gray expand icon (arrows out); clicking swaps the cell to "Summary" with the prose and a collapse icon (arrows in). Real `<button>` with `aria-expanded`/`aria-controls`
+- [x] Both states are in the server-rendered HTML; only visibility changes, so the cached page, crawlers and find-in-page still see the summary prose. No fetch, no new DB read
+- [x] Only prose moves: `SUMMARY_BLOCK` rows, the `meeting.summary` fallback, and the pre-meeting `meal` tier (with its "based on the published agenda" caption and subscribe form)
+- [x] The Summary section still renders below for its non-prose states: topic cards (older pipeline), upcoming/held-not-transcribed copy, no-recording copy, request-a-summary link, subscribe forms
+- [x] No icon when there's nothing to expand to; a meeting with a summary but no TL;DR line opens on the Summary
+- [x] Checked locally (Docker DB, bundled Chromium) collapsed and expanded
+
+**Files:** `app/components/TldrToggle.tsx` (new), `app/transcripts/[...slug]/page.tsx`.
 
 ### FIX-RETIRED-MEETING-REDIRECTS-001 — Merged Montebello meetings redirect to the meeting that replaced them
 
@@ -1136,7 +1214,7 @@ User-reported (2026-09-08): "layout could use polish… things are placed in wei
 
 #### FEAT-MEETING-TIER-DEDUP-001 — TL;DR / Summary / Timeline repeat the same content
 
-**Status:** 📋 Parked by decision (2026-09-08) — revisit as an alternate view, not a replacement, so the current page is never regressed.
+**Status:** ✅ Taken up (2026-11-13) by the owner's direction: FEAT-TLDR-SUMMARY-TOGGLE-001 (Summary collapses behind the TL;DR) and FEAT-MEETING-OUTLINE-001 (Timeline becomes the agenda outline). Originally parked 2026-09-08.
 
 **As a** reader of a meeting page
 **I want** the TL;DR, Summary, and Timeline to each add something new
